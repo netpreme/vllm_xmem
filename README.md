@@ -16,7 +16,7 @@ vLLM meets Netpreme's scale-up GPU memory expansion </h3>
 ---
 
 ## About
-This repository is a fork of vLLM (v0.18.0) that integrates Netpreme’s scale-up GPU memory expansion system, X-Mem, as a dedicated tier for KV cache storage. By replacing traditional CPU DRAM with X-Mem in the KV offloading module, we leverage ~10x higher bandwidth to bypass standard memory bottlenecks. This allows an inference engine to reduce Time to First Token (TTFT) and achieve higher throughput and concurrency for KV-intensive workloads, such as multi-turn coding agents.
+This repository is a fork of vLLM v0.18.0 that integrates Netpreme’s scale-up GPU memory expansion system, X-Mem, as a dedicated tier for KV cache storage. By replacing traditional CPU DRAM with X-Mem in the KV offloading module, we leverage ~10x higher bandwidth to bypass standard memory bottlenecks. This allows an inference engine to reduce Time to First Token (TTFT) and achieve higher throughput and concurrency for KV-intensive workloads, such as multi-turn coding agents.
 
 ## Getting Started
 Install vLLM+MTier from source
@@ -33,7 +33,7 @@ uv pip install -e .
 
 ## Usage
 
-To replace CPU DRAM with X-Mem
+To replace CPU DRAM with X-Mem,
 * `vllm serve` CLI API: add `--kv-offloading-mtier` flag
 * `LLM()` Python API: set the `kv_offload_mtier` argument to `True`.
   e.g.,
