@@ -728,6 +728,19 @@ TORCH_LIBRARY_EXPAND(CONCAT(TORCH_EXTENSION_NAME, _cache_ops), cache_ops) {
       "            int block_size_in_bytes, Tensor block_mapping) -> ()");
   cache_ops.impl("swap_blocks", torch::kCUDA, &swap_blocks);
 
+  // Swap cache blocks given raw src/dst pointers (as int64 memory addresses).
+  cache_ops.def(
+      "swap_blocks_ptr(int src_ptr, int dst_ptr,"
+      "                int block_size_in_bytes, Tensor block_mapping) -> ()");
+  cache_ops.impl(
+      "swap_blocks_ptr", torch::kCPU,
+      [](int64_t src_ptr, int64_t dst_ptr, int64_t block_size_in_bytes,
+         const torch::Tensor& block_mapping) {
+        swap_blocks_ptr(reinterpret_cast<char*>(src_ptr),
+                        reinterpret_cast<char*>(dst_ptr), block_size_in_bytes,
+                        block_mapping);
+      });
+
   // Reshape the key and value tensors and cache them.
   cache_ops.def(
       "reshape_and_cache(Tensor key, Tensor value,"

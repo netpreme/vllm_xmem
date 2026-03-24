@@ -72,6 +72,31 @@ void swap_blocks(torch::Tensor& src, torch::Tensor& dst,
   }
 }
 
+void swap_blocks_ptr(char *src_ptr, char *dst_ptr,
+                 int64_t block_size_in_bytes,
+                 const torch::Tensor& block_mapping) {
+
+  cudaMemcpyKind memcpy_type;
+  memcpy_type = cudaMemcpyDeviceToDevice;
+
+  // NOTE(youkaichao): keep in mind that `block_mapping` should be
+  // a cpu tensor, otherwise every `item` call will require a gpu-cpu
+  // synchronization.
+  TORCH_CHECK(block_mapping.device().is_cpu(), "block_mapping must be on CPU");
+
+  const cudaStream_t stream = at::cuda::getCurrentCUDAStream();
+  // NOTE(woosuk): This can be slow if the number of blocks is large.
+  const int64_t num_blocks = block_mapping.size(0);
+  for (size_t i = 0; i < num_blocks; i++) {
+    int64_t src_block_number = block_mapping[i][0].item<int64_t>();
+    int64_t dst_block_number = block_mapping[i][1].item<int64_t>();
+    int64_t src_offset = src_block_number * block_size_in_bytes;
+    int64_t dst_offset = dst_block_number * block_size_in_bytes;
+    cudaMemcpyAsync(dst_ptr + dst_offset, src_ptr + src_offset,
+                    block_size_in_bytes, memcpy_type, stream);
+  }
+}
+
 namespace vllm {
 
 // Grid: (num_layers, num_pairs)

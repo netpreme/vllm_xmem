@@ -2687,6 +2687,27 @@ def swap_blocks(
     torch.ops._C_cache_ops.swap_blocks(src, dst, block_size_in_bytes, block_mapping)
 
 
+def swap_blocks_ptr(
+    src_ptr: int,
+    dst_ptr: int,
+    block_size_in_bytes: int,
+    block_mapping: torch.Tensor,
+) -> None:
+    """
+    Copy specific blocks using raw src/dst memory addresses (as integers).
+
+    This is the pointer-based variant of swap_blocks. src_ptr and dst_ptr
+    are integer memory addresses (e.g. from tensor.data_ptr() or a remote
+    memory address), and block_mapping is a CPU tensor of shape
+    (num_blocks_to_copy, 2) with dtype int64, where block_mapping[i][0] is
+    the source block number and block_mapping[i][1] is the destination block
+    number.
+    """
+    torch.ops._C_cache_ops.swap_blocks_ptr(
+        src_ptr, dst_ptr, block_size_in_bytes, block_mapping
+    )
+
+
 def convert_fp8(
     output: torch.Tensor, input: torch.Tensor, scale: float = 1.0, kv_dtype: str = "fp8"
 ) -> None:
