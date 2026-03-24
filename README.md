@@ -5,7 +5,6 @@
     <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/vllm-project/vllm/main/docs/assets/logos/vllm-logo-text-dark.png">
     <img alt="vLLM" src="https://raw.githubusercontent.com/vllm-project/vllm/main/docs/assets/logos/vllm-logo-text-light.png" width=45%>
   </picture>
-  <span style="font-size: 3em; font-weight: bold; vertical-align: middle; margin: 10px; position: relative; bottom: 25px; left:-17px;">+</span>
   <img alt="Netpreme" src="assets/netpreme_logo.png" width=40%>
 </p>
 
@@ -17,7 +16,7 @@ vLLM meets Netpreme's scale-up GPU memory expansion </h3>
 ---
 
 ## About
-This repository is a fork of vLLM (v0.18.0) that integrates Netpreme’s X-Mem—a GPU memory expansion system—as a dedicated tier for KV cache storage. By replacing traditional CPU DRAM with X-Mem in the KV offloading module, we leverage ~10x higher bandwidth to bypass standard memory bottlenecks. This allows the system to reduce Time to First Token (TTFT) and achieve higher throughput and concurrency for KV-intensive workloads, such as multi-turn coding agents.
+This repository is a fork of vLLM (v0.18.0) that integrates Netpreme’s X-Mem—a scale-up GPU memory expansion system—as a dedicated tier for KV cache storage. By replacing traditional CPU DRAM with X-Mem in the KV offloading module, we leverage ~10x higher bandwidth to bypass standard memory bottlenecks. This allows the system to reduce Time to First Token (TTFT) and achieve higher throughput and concurrency for KV-intensive workloads, such as multi-turn coding agents.
 
 ## Getting Started
 Install vLLM+MTier from source
