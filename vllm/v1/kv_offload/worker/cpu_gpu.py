@@ -17,6 +17,8 @@ from vllm.v1.kv_offload.worker.worker import (
     TransferSpec,
 )
 
+import xmem
+
 logger = init_logger(__name__)
 
 
@@ -219,6 +221,177 @@ class SingleDirectionOffloadingHandler(OffloadingHandler):
             if event is not None:
                 event.synchronize()
 
+class SingleDirectionOffloadingHandlerMTier(OffloadingHandler):
+    """
+    SingleDirectionOffloadingHandler handles transfers for a single direction,
+    either CPU->GPU or GPU->CPU.
+    Transfers are guaranteed to be executed in order of their submission.
+    Each transfer uses a unique CUDA stream, and its stream will start
+    executing only after the streams of previous transfers have finished.
+    """
+
+    def __init__(
+        self,
+        src_tensors: list[torch.Tensor | xmem.XMemTensorMTier],
+        dst_tensors: list[torch.Tensor | xmem.XMemTensorMTier],
+        src_block_size_factor: int,
+        dst_block_size_factor: int,
+    ):
+        """
+        Initialize a SingleDirectionOffloadingHandler.
+
+        Args:
+            src_tensors: list of KV cache tensors to copy from.
+            dst_tensors: list of KV cache tensors to copy to.
+                Order should match src_tensors.
+            src_block_size_factor: The number of kernel blocks
+                per KV block in a source tensor.
+            dst_block_size_factor: The number of kernel blocks
+                per KV block in a destination tensor.
+        """
+        assert len(src_tensors) == len(dst_tensors)
+
+        self.src_tensors: list[torch.Tensor | xmem.XMemTensorMTier] = src_tensors
+        self.dst_tensors: list[torch.Tensor | xmem.XMemTensorMTier] = dst_tensors
+        
+        # This is acutally gpu_to_xmem
+        self.gpu_to_cpu: bool = isinstance(dst_tensors[0], xmem.XMemTensorMTier)
+        
+        min_block_size_factor = min(src_block_size_factor, dst_block_size_factor)
+        self.src_block_size_factor: int = src_block_size_factor // min_block_size_factor
+        self.dst_block_size_factor: int = dst_block_size_factor // min_block_size_factor
+
+        # Modified as XMemTensorMTier does not support stride
+        tensors = src_tensors if self.gpu_to_cpu else dst_tensors
+        self.block_size_in_bytes = [
+            tensor.element_size() * tensor.stride(0) * min_block_size_factor
+            for tensor in tensors
+        ]
+        self.total_block_size_in_bytes = sum(self.block_size_in_bytes)
+
+        assert len(src_tensors) > 0
+        
+        if self.gpu_to_cpu:
+            self.src_ptrs = [tensor.data_ptr() for tensor in self.src_tensors]
+            self.dst_ptrs = [tensor.remote_addr for tensor in self.dst_tensors]
+        else:
+            self.src_ptrs = [tensor.remote_addr for tensor in self.src_tensors]
+            self.dst_ptrs = [tensor.data_ptr() for tensor in self.dst_tensors]
+        
+        # Note(JM): might have to change this to ("GPU", "GPU")
+        self.transfer_type = ("GPU", "CPU") if self.gpu_to_cpu else ("CPU", "GPU")
+        # job_id -> event
+        self._transfer_events: dict[int, torch.Event] = {}
+        # queue of transfers (job_id, stream, event)
+        self._transfers: deque[Transfer] = deque()
+        # list of CUDA streams available for re-use
+        self._stream_pool: list[torch.cuda.Stream] = []
+        # list of CUDA events available for re-use
+        self._event_pool: list[torch.Event] = []
+
+    def transfer_async(self, job_id: int, transfer_spec: TransferSpec) -> bool:
+        src_spec, dst_spec = transfer_spec
+        assert isinstance(src_spec, BlockIDsLoadStoreSpec)
+        assert isinstance(dst_spec, BlockIDsLoadStoreSpec)
+
+        src_blocks = src_spec.block_ids
+        dst_blocks = dst_spec.block_ids
+        assert src_blocks.ndim == 1
+        assert dst_blocks.ndim == 1
+
+        src_sub_block_count = src_blocks.size * self.src_block_size_factor
+        dst_sub_block_count = dst_blocks.size * self.dst_block_size_factor
+        src_sub_blocks_to_skip = -dst_blocks.size % self.src_block_size_factor
+
+        assert dst_sub_block_count == src_sub_block_count - src_sub_blocks_to_skip
+
+        src_to_dst = np.empty((dst_sub_block_count, 2), dtype=np.int64)
+        expand_block_ids(
+            src_blocks,
+            self.src_block_size_factor,
+            src_to_dst[:, 0],
+            skip_count=src_sub_blocks_to_skip,
+        )
+        expand_block_ids(dst_blocks, self.dst_block_size_factor, src_to_dst[:, 1])
+        src_to_dst_tensor = torch.from_numpy(src_to_dst)
+
+        stream = self._stream_pool.pop() if self._stream_pool else torch.cuda.Stream()
+        start_event = (
+            self._event_pool.pop()
+            if self._event_pool
+            else torch.Event(enable_timing=True)
+        )
+        end_event = (
+            self._event_pool.pop()
+            if self._event_pool
+            else torch.Event(enable_timing=True)
+        )
+
+        if self.gpu_to_cpu:
+            # wait for model computation to finish before offloading
+            stream.wait_stream(torch.cuda.current_stream())
+        if self._transfers:
+            last_transfer: Transfer = self._transfers[-1]
+            last_event = last_transfer.end_event
+            # assure job will start only after the previous one completes
+            stream.wait_event(last_event)
+        
+        with torch.cuda.stream(stream):
+            start_event.record(stream)
+            for src_ptr, dst_ptr, block_size_in_bytes in zip(
+                self.src_ptrs,
+                self.dst_ptrs,
+                self.block_size_in_bytes,
+            ):
+                ops.swap_blocks_ptr(
+                    src_ptr,
+                    dst_ptr,
+                    block_size_in_bytes,
+                    src_to_dst_tensor,
+                )
+            end_event.record(stream)
+
+        self._transfer_events[job_id] = end_event
+        self._transfers.append(
+            Transfer(
+                job_id=job_id,
+                stream=stream,
+                start_event=start_event,
+                end_event=end_event,
+                num_bytes=dst_sub_block_count * self.total_block_size_in_bytes,
+            )
+        )
+
+        # success
+        return True
+
+    def get_finished(self) -> list[TransferResult]:
+        results: list[TransferResult] = []
+        while self._transfers and self._transfers[0].end_event.query():
+            transfer = self._transfers.popleft()
+            transfer_time = (
+                transfer.start_event.elapsed_time(transfer.end_event) * 1e-3
+            )  # elapsed_time is in milliseconds
+            result = TransferResult(
+                job_id=transfer.job_id,
+                success=True,
+                transfer_size=transfer.num_bytes,
+                transfer_time=transfer_time,
+                transfer_type=self.transfer_type,
+            )
+
+            results.append(result)
+            self._stream_pool.append(transfer.stream)
+            self._event_pool.append(transfer.end_event)
+            self._event_pool.append(transfer.start_event)
+            del self._transfer_events[transfer.job_id]
+        return results
+
+    def wait(self, job_ids: set[int]):
+        for job_id in job_ids:
+            event = self._transfer_events.get(job_id)
+            if event is not None:
+                event.synchronize()
 
 class CpuGpuOffloadingHandlers:
     def __init__(
@@ -231,7 +404,11 @@ class CpuGpuOffloadingHandlers:
     ):
         assert gpu_caches
         assert cpu_block_size % gpu_block_size == 0
-
+        
+        is_mtier = False
+        if (is_mtier):
+            logger.info("Using XMemTensorMTier for CPU tensors.")
+            
         # find kernel block size and determine layout per each gpu tensor
         kernel_block_size: int | None = None
         # list of (gpu_tensor, split_k_and_v)
@@ -240,7 +417,7 @@ class CpuGpuOffloadingHandlers:
             gpu_shape = gpu_tensor.shape
             attn_backend = attn_backends[layer_name]
             test_shape = attn_backend.get_kv_cache_shape(
-                num_blocks=1234, block_size=16, num_kv_heads=1, head_size=256
+                num_blocks=1234, block_size=16, num_kv_heads=8, head_size=256
             )
 
             has_layers_dim = False
@@ -285,6 +462,7 @@ class CpuGpuOffloadingHandlers:
             parsed_gpu_tensors.append((gpu_tensor, split_k_and_v))
 
         assert kernel_block_size is not None
+        logger.info("Determined kernel block size: %d", kernel_block_size)
         cpu_block_size_factor = cpu_block_size // kernel_block_size
         gpu_block_size_factor = gpu_block_size // kernel_block_size
         num_cpu_kernel_blocks = num_cpu_blocks * cpu_block_size_factor
@@ -293,30 +471,45 @@ class CpuGpuOffloadingHandlers:
         pin_memory = is_pin_memory_available()
         logger.info("Allocating %d CPU tensors...", len(parsed_gpu_tensors))
         gpu_tensors: list[torch.Tensor] = []
-        cpu_tensors: list[torch.Tensor] = []
+        cpu_tensors: list[torch.Tensor | xmem.XMemTensorMTier] = []
+        
         for gpu_tensor, split_k_and_v in parsed_gpu_tensors:
             cpu_shape = list(gpu_tensor.shape)
             cpu_shape[1 if split_k_and_v else 0] = num_cpu_kernel_blocks
 
             logger.debug("Allocating CPU tensor of shape %r", cpu_shape)
-            cpu_tensor = torch.zeros(
-                cpu_shape,
-                dtype=gpu_tensor.dtype,
-                device="cpu",
-                pin_memory=pin_memory,
-            )
+            if is_mtier:
+                cpu_tensor = xmem.allocate(
+                    dims=tuple(cpu_shape),
+                    dtype=gpu_tensor.dtype,
+                    bank_id=0, # fixed to bank 0 for now
+                )
+                # NOTE(JM): This could be wrong
+                cpu_tensors.extend([cpu_tensor[0], cpu_tensor[1]] if split_k_and_v else [cpu_tensor])
+            else:
+                cpu_tensor = torch.zeros(
+                    cpu_shape,
+                    dtype=gpu_tensor.dtype,
+                    device="cpu",
+                    pin_memory=pin_memory,
+                )
+                cpu_tensors.extend(cpu_tensor.unbind(0) if split_k_and_v else [cpu_tensor])
 
             gpu_tensors.extend(gpu_tensor.unbind(0) if split_k_and_v else [gpu_tensor])
-            cpu_tensors.extend(cpu_tensor.unbind(0) if split_k_and_v else [cpu_tensor])
 
-        self.gpu_to_cpu_handler = SingleDirectionOffloadingHandler(
+        if is_mtier:
+            handler_class = SingleDirectionOffloadingHandlerMTier
+        else:
+            handler_class = SingleDirectionOffloadingHandler
+
+        self.gpu_to_cpu_handler = handler_class(
             src_tensors=gpu_tensors,
             dst_tensors=cpu_tensors,
             src_block_size_factor=gpu_block_size_factor,
             dst_block_size_factor=cpu_block_size_factor,
         )
 
-        self.cpu_to_gpu_handler = SingleDirectionOffloadingHandler(
+        self.cpu_to_gpu_handler = handler_class(
             src_tensors=cpu_tensors,
             dst_tensors=gpu_tensors,
             src_block_size_factor=cpu_block_size_factor,
