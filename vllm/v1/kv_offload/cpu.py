@@ -121,6 +121,7 @@ class CPUOffloadingSpec(OffloadingSpec):
                 cpu_block_size=gpu_block_size * self.block_size_factor,
                 num_cpu_blocks=self.num_blocks,
                 gpu_caches=kv_caches,
+                is_mtier=self.vllm_config.cache_config.kv_offload_mtier,
             )
 
         assert self._handlers is not None

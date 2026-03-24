@@ -401,11 +401,10 @@ class CpuGpuOffloadingHandlers:
         num_cpu_blocks: int,
         gpu_caches: dict[str, torch.Tensor],
         attn_backends: dict[str, type[AttentionBackend]],
+        is_mtier: bool = False,
     ):
         assert gpu_caches
         assert cpu_block_size % gpu_block_size == 0
-        
-        is_mtier = False
         if (is_mtier):
             logger.info("Using XMemTensorMTier for CPU tensors.")
             
@@ -484,7 +483,6 @@ class CpuGpuOffloadingHandlers:
                     dtype=gpu_tensor.dtype,
                     bank_id=0, # fixed to bank 0 for now
                 )
-                # NOTE(JM): This could be wrong
                 cpu_tensors.extend([cpu_tensor[0], cpu_tensor[1]] if split_k_and_v else [cpu_tensor])
             else:
                 cpu_tensor = torch.zeros(

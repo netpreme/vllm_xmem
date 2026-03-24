@@ -617,6 +617,7 @@ class EngineArgs:
 
     kv_offloading_size: float | None = CacheConfig.kv_offloading_size
     kv_offloading_backend: KVOffloadingBackend = CacheConfig.kv_offloading_backend
+    kv_offload_mtier: bool = CacheConfig.kv_offload_mtier
     tokens_only: bool = False
 
     shutdown_timeout: int = 0
@@ -1014,6 +1015,9 @@ class EngineArgs:
         )
         cache_group.add_argument(
             "--kv-offloading-backend", **cache_kwargs["kv_offloading_backend"]
+        )
+        cache_group.add_argument(
+            "--kv-offloading-mtier", **cache_kwargs["kv_offload_mtier"]
         )
 
         # Model weight offload related configs
@@ -1569,6 +1573,7 @@ class EngineArgs:
             mamba_cache_mode=self.mamba_cache_mode,
             kv_offloading_size=self.kv_offloading_size,
             kv_offloading_backend=self.kv_offloading_backend,
+            kv_offload_mtier=self.kv_offload_mtier,
         )
 
         ray_runtime_env = None

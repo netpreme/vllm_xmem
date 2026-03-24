@@ -150,6 +150,12 @@ class CacheConfig:
     'native' (vLLM native CPU offloading), 'lmcache'.
     KV offloading is only activated when kv_offloading_size is set."""
 
+    kv_offload_mtier: bool = False
+    """Whether to use XMemTensorMTier for CPU KV cache tensors. When enabled,
+    CPU tensors are allocated via xmem.allocate() using the MTier memory
+    backend instead of standard pinned PyTorch tensors. Only applies to the
+    'native' KV offloading backend."""
+
     def compute_hash(self) -> str:
         """
         WARNING: Whenever a new field is added to this config,
