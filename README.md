@@ -19,7 +19,7 @@ vLLM meets Netpreme's scale-up GPU memory expansion </h3>
 This repository is a fork of vLLM that integrates Netpreme’s scale-up GPU memory expansion system, X-Mem, as a dedicated tier for KV cache storage. By replacing traditional CPU DRAM with X-Mem in the KV offloading module, we leverage ~10x higher bandwidth to bypass standard memory bottlenecks. This allows an inference engine to reduce Time to First Token (TTFT) and achieve higher throughput and concurrency for KV-intensive workloads, such as multi-turn coding agents.
 
 ## Getting Started
-Install vLLM+XMem from source
+Install vLLM+X-Mem from source
 
 ```bash
 uv venv --python 3.12
@@ -29,7 +29,7 @@ uv pip install -e .
 ```
 
 > [!NOTE]
-> vLLM+XMem will only work on Netpreme's X-Mem VMs. Please [contact](https://netpreme.com/developer) us to get access to it.
+> vLLM+X-Mem will only work on Netpreme's X-Mem VMs. Please [contact](https://netpreme.com/developer) us to get access to it.
 
 ## Usage
 
@@ -61,7 +61,7 @@ To replace CPU DRAM with X-Mem,
 ---
 ## 📊 Performance Benchmarks
 
-We evaluated the integration of XMem into vLLM's KV offload connector, comparing it against a CPU DRAM baseline. We used the benchmark code used in the vLLM blog post on KV offloading ([blog](https://vllm.ai/blog/kv-offloading-connector), [code](https://github.com/orozery/playground/blob/kv-offloading-blog-dec-2025/kvcache/kv_offload_benchmark.py)). 
+We evaluated the integration of X-Mem into vLLM's KV offload connector, comparing it against a CPU DRAM baseline. We used the benchmark code used in the vLLM blog post on KV offloading ([blog](https://vllm.ai/blog/kv-offloading-connector), [code](https://github.com/orozery/playground/blob/kv-offloading-blog-dec-2025/kvcache/kv_offload_benchmark.py)). 
 
 ### Setup
   * Hardware: Single H200 GPU with 128GB of dedicated KV offloading memory (either Host DRAM or X-Mem).
@@ -70,7 +70,7 @@ We evaluated the integration of XMem into vLLM's KV offload connector, comparing
 
 ### Key Results
 
-XMem MTier shows significant gains over CPU DRAM for high cache-hit rate workloads, where data copying dominates computation:
+X-Mem shows significant gains over CPU DRAM for high cache-hit rate workloads, where data copying dominates computation:
 
 * 🚀 Time to First Token (TTFT): ~4× faster than CPU DRAM.
 <img src="assets/ttft_plot.png" width="70%" alt="TTFT Benchmark Plot" />
