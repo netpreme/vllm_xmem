@@ -7,7 +7,7 @@ set -euo pipefail
 
 API_BASE="${API_BASE:-http://127.0.0.1:8000}"
 MODEL="${MODEL:-Qwen/Qwen2.5-Coder-32B-Instruct}"
-PROMPT="${PROMPT:-Give me 3 concise bullet points on why quantization helps LLM inference.}"
+PROMPT="${PROMPT:-Please tell me a summary on how attention mechanism works in LLMs.}"
 
 curl -s "$API_BASE/v1/messages" \
   -H "Content-Type: application/json" \
