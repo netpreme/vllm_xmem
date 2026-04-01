@@ -1,39 +1,66 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Start a vLLM OpenAI-compatible server from this local checkout.
-# Override with env vars if needed:
-#   MODEL="Qwen/Qwen3.5-0.8B" HOST="0.0.0.0" PORT="8000" ./api.sh
+# Usage:
+#   ./launch_vllm.sh
+#   MODEL="Qwen/Qwen2.5-Coder-7B-Instruct" PORT=9000 ./launch_vllm.sh
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-VLLM_ROOT="${VLLM_ROOT:-$SCRIPT_DIR/vllm_xmem}"
+ENV_FILE="${SCRIPT_DIR}/.env"
+VLLM_ROOT="${VLLM_ROOT:-}"
 
-if [[ ! -d "$VLLM_ROOT" ]]; then
-  echo "Error: vllm_xmem directory not found at: $VLLM_ROOT"
-  echo "Set VLLM_ROOT to your vllm_xmem path and retry."
-  exit 1
+# Load .env (skip blank lines and comments); env vars already set take precedence
+if [[ -f "$ENV_FILE" ]]; then
+    while IFS='=' read -r key value; do
+        [[ -z "$key" || "$key" == \#* ]] && continue
+        [[ -v "$key" ]] || export "$key=$value"
+    done < "$ENV_FILE"
+else
+    echo "WARNING: .env not found at $ENV_FILE, using built-in defaults." >&2
 fi
 
-MODEL="${MODEL:-Qwen/Qwen3.5-0.8B}"
+MODEL="${MODEL:-Qwen/Qwen2.5-Coder-32B-Instruct}"
 HOST="${HOST:-0.0.0.0}"
 PORT="${PORT:-8000}"
+TENSOR_PARALLEL_SIZE="${TENSOR_PARALLEL_SIZE:-1}"
 DTYPE="${DTYPE:-auto}"
 MAX_MODEL_LEN="${MAX_MODEL_LEN:-4096}"
 GPU_MEMORY_UTILIZATION="${GPU_MEMORY_UTILIZATION:-0.90}"
-CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-7}"
-REASONING_PARSER="${REASONING_PARSER:-qwen3}"
-# Qwen3 reasoning is on by default, but keep this explicit.
-DEFAULT_CHAT_TEMPLATE_KWARGS="${DEFAULT_CHAT_TEMPLATE_KWARGS:-{\"enable_thinking\": true}}"
+CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0}"
 
-cd "$VLLM_ROOT"
+echo "Starting vLLM server (Anthropic-compatible)"
+echo "  model                  : $MODEL"
+echo "  host:port              : $HOST:$PORT"
+echo "  tensor-parallel-size   : $TENSOR_PARALLEL_SIZE"
+echo "  dtype                  : $DTYPE"
+echo "  max-model-len          : $MAX_MODEL_LEN"
+echo "  gpu-memory-utilization : $GPU_MEMORY_UTILIZATION"
+echo "  CUDA_VISIBLE_DEVICES   : $CUDA_VISIBLE_DEVICES"
+
+# Optional: run from a local vLLM checkout
+if [[ -n "$VLLM_ROOT" ]]; then
+    if [[ ! -d "$VLLM_ROOT" ]]; then
+        echo "Error: VLLM_ROOT directory not found: $VLLM_ROOT" >&2
+        exit 1
+    fi
+    cd "$VLLM_ROOT"
+fi
 
 exec env CUDA_VISIBLE_DEVICES="$CUDA_VISIBLE_DEVICES" \
-  python -m vllm.entrypoints.openai.api_server \
-  --model "$MODEL" \
-  --reasoning-parser "$REASONING_PARSER" \
-  --default-chat-template-kwargs "$DEFAULT_CHAT_TEMPLATE_KWARGS" \
-  --host "$HOST" \
-  --port "$PORT" \
-  --dtype "$DTYPE" \
-  --max-model-len "$MAX_MODEL_LEN" \
-  --gpu-memory-utilization "$GPU_MEMORY_UTILIZATION"
+    VLLM_ALLOW_LONG_MAX_MODEL_LEN=1 \
+    python -m vllm.entrypoints.openai.api_server \
+    --model "$MODEL" \
+    --served-model-name "$MODEL" \
+        "claude-opus-4-6" \
+        "claude-sonnet-4-6" \
+        "claude-haiku-4-5-20251001" \
+        "claude-3-5-sonnet-20241022" \
+        "claude-3-5-haiku-20241022" \
+    --host "$HOST" \
+    --port "$PORT" \
+    --tensor-parallel-size "$TENSOR_PARALLEL_SIZE" \
+    --dtype "$DTYPE" \
+    --max-model-len "$MAX_MODEL_LEN" \
+    --gpu-memory-utilization "$GPU_MEMORY_UTILIZATION" \
+    --enable-auto-tool-choice \
+    --tool-call-parser hermes
