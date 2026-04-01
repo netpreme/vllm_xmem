@@ -126,3 +126,77 @@ CUDA_VISIBLE_DEVICES=6,7
 `./watch_cache.sh 1`
 
 ![Claude Code running against local vLLM server](claude_local.png)
+
+### Notes
+
+- Anthropic uses the `/messages` API, not the OpenAI `/chat/completions` for Claude Code
+- vLLM pre-allocates the entire KV cache pool at startup (`--gpu-memory-utilization`), so `nvidia-smi` memory stays constant
+- `GPU KV cache usage` in vLLM logs only counts blocks actively held by running requests (`ref_cnt > 0`), not idle cached blocks
+- Prefix-cached blocks sit in the free queue with their KV data intact until evicted; they are reused on hash match
+
+### KV Cache Sizing (Qwen2.5-32B, BF16)
+
+```
+Per token = 64 layers x 8 KV heads x 128 head dim x 2 (K+V) x 2 bytes = 256 KB
+Per block = 16 tokens x 256 KB = 4 MB
+Total pool = 18,562 blocks x 4 MB = ~72.5 GB  (capacity: 296,992 tokens)
+```
+
+### GPU Memory Breakdown (2x H100, 90% utilization)
+
+| | Per GPU | 2x H100 |
+|---|---|---|
+| Total HBM | 81,559 MiB | ~160 GB |
+| 90% allocation | ~73,400 MiB | ~143 GB |
+| Model weights (32B, BF16) | ~32 GB | ~64 GB |
+| Remaining for KV cache | | ~79 GB |
+| Actual KV cache allocated | | ~72.5 GB |
+
+### Verifying KV Cache Usage
+
+On one turn, vLLM reported `GPU KV cache usage: 8.4%` and `Prefix cache hit rate: 74.9%`:
+
+```
+(APIServer pid=1618555) INFO 04-01 15:42:26 [loggers.py:259] Engine 000: Avg prompt throughput: 2.5 tokens/s,
+Avg generation throughput: 3.2 tokens/s, Running: 1 reqs, Waiting: 0 reqs,
+GPU KV cache usage: 8.4%, Prefix cache hit rate: 74.9%
+```
+
+`watch_cache.sh` metrics (from Prometheus) for that same turn:
+
+```
+┌─ This Turn ───────────────────────────────────────────────
+│ Input tokens queried:          24,761
+│ KV cache reads  (from cache):  24,736 tokens
+│ KV cache writes (to cache):    25 tokens
+│ Turn hit rate:                 99.9%
+├─ Cumulative (all requests) ───────────────────────────────
+│ Total queried tokens:          97,680
+│ Total cache hit tokens:        73,184
+│ Total cache write tokens:      24,496
+│ Overall hit rate:              74.9%
+├─ KV Cache Pool ───────────────────────────────────────────
+│ Total GPU blocks:              18,562 (block_size=16 tokens)
+│ Max token capacity:            296,992
+└──────────────────────────────────────────────────────────
+```
+
+The 74.9% overall hit rate matches the vLLM log. The 8.4% KV cache usage verified two ways:
+
+**Byte-level:**
+```
+24,000 active tokens x 256 KB/token = 6 GB used
+72.5 GB total pool
+6 / 72.5 = 8.3%
+```
+
+**Token-level:**
+```
+~24K active tokens / 296,992 max capacity = 8.1%
+```
+
+Both confirm the 8.4% reported by vLLM.
+
+Claude Code sends ~24K tokens per request (system prompt + CLAUDE.md + conversation history).
+Each turn gets 99.9% hit rate — only ~25-30 new tokens need compute.
+The overall hit rate (74.9%) is lower because it includes the cold-start first request where nothing was cached, and asymptotically approaches 99.9% over more turns.
