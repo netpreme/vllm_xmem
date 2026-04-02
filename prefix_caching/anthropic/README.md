@@ -220,6 +220,44 @@ Claude Code CLI
 
 The frontend speaks Anthropic's `/v1/messages` API directly, so Claude Code does not need LiteLLM or any other translation layer. The worker uses file-based discovery, which keeps this setup single-node and self-contained.
 
+Claude Code also injects a per-request attribution header into the system prompt by default. That header changes a small part of the prompt on every request, and prefix caching only works when the token prefix is identical. So even if the conversation history is the same, the prompt no longer starts with the same token blocks, and the cache misses. For this Dynamo setup, we disable that header with `CLAUDE_CODE_ATTRIBUTION_HEADER=0`. When only vLLM is used with claude code, this header is automatically removed. However, when using Dynamo, claude code sends the info to dynamo, and the information is kept. This header changes per request. 
+
+Example:
+
+Without the env var:
+
+```text
+Turn 1:
+system: "You are a helpful assistant."
+system: "x-anthropic-billing-header: cc_version=...; cc_entrypoint=cli;"
+user: "hello"
+
+Turn 2:
+system: "You are a helpful assistant."
+system: "x-anthropic-billing-header: cc_version=...different...; cc_entrypoint=cli;"
+user: "hello"
+assistant: "Hi"
+user: "hello again"
+```
+
+The second turn does not begin with the same tokens, so the prefix cache cannot reuse the earlier blocks.
+
+With the env var:
+
+```text
+Turn 1:
+system: "You are a helpful assistant."
+user: "hello"
+
+Turn 2:
+system: "You are a helpful assistant."
+user: "hello"
+assistant: "Hi"
+user: "hello again"
+```
+
+Now the shared prefix is stable, so vLLM can match the same cached token blocks again.
+
 ## What It Uses
 
 - Model: `Qwen/Qwen2.5-Coder-32B-Instruct`
@@ -242,7 +280,7 @@ The frontend speaks Anthropic's `/v1/messages` API directly, so Claude Code does
 2. In a second terminal, launch Claude Code against the local endpoint:
 
    ```bash
-   ./run_claude_local.sh
+   CLAUDE_CODE_ATTRIBUTION_HEADER=0 ./run_claude_local.sh
    ```
 
 3. Optional: watch prefix-cache metrics while you chat:
@@ -263,6 +301,7 @@ DTYPE=auto
 MAX_MODEL_LEN=65536
 GPU_MEMORY_UTILIZATION=0.90
 CUDA_VISIBLE_DEVICES=6,7
+CLAUDE_CODE_ATTRIBUTION_HEADER=0
 ```
 
 You can override any of them with environment variables before launching.
@@ -272,5 +311,6 @@ You can override any of them with environment variables before launching.
 - `launch_dynamo.sh` starts both the Dynamo frontend and the vLLM worker.
 - `run_claude_local.sh` waits for `/health`, checks `/v1/models`, and then starts `claude --model ...`.
 - `ANTHROPIC_API_KEY=dummy` is intentional for this local setup.
+- `CLAUDE_CODE_ATTRIBUTION_HEADER=0` removes Claude Code's per-request billing header from the system prompt, which keeps the prompt prefix stable enough for prefix caching to hit.
 - Logs are written to `/tmp/dynamo_worker.log` and `/tmp/dynamo_frontend.log`.
 - Prefix caching is enabled on the worker, but the observed hit rate depends on how the request prefix is tokenized across turns.
