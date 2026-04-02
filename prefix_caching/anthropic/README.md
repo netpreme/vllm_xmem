@@ -200,3 +200,77 @@ Both confirm the 8.4% reported by vLLM.
 Claude Code sends ~24K tokens per request (system prompt + CLAUDE.md + conversation history).
 Each turn gets 99.9% hit rate — only ~25-30 new tokens need compute.
 The overall hit rate (74.9%) is lower because it includes the cold-start first request where nothing was cached, and asymptotically approaches 99.9% over more turns.
+
+---
+
+Appendix: Claude Code with local Dynamo + vLLM
+
+This adds a second path for running Claude Code against the local open-source model stack in `./_dynamo/`.
+
+## System Design
+
+```text
+Claude Code CLI
+  -> ANTHROPIC_BASE_URL=http://localhost:8000
+  -> Dynamo frontend (`python3 -m dynamo.frontend`)
+  -> vLLM worker (`python3 -m dynamo.vllm`)
+  -> vLLM EngineCore
+  -> KV cache on GPUs 6 and 7
+```
+
+The frontend speaks Anthropic's `/v1/messages` API directly, so Claude Code does not need LiteLLM or any other translation layer. The worker uses file-based discovery, which keeps this setup single-node and self-contained.
+
+## What It Uses
+
+- Model: `Qwen/Qwen2.5-Coder-32B-Instruct`
+- GPUs: `CUDA_VISIBLE_DEVICES=6,7`
+- Tensor parallel size: `2`
+- Max model length: `65536`
+- GPU memory utilization: `0.90`
+- Port: `8000`
+- Prefix caching: enabled on the vLLM worker
+
+## Claude Code Run
+
+1. Start the stack:
+
+   ```bash
+   cd /home/cloud-user/george/vllm_xmem/prefix_caching/anthropic/_dynamo
+   ./launch_dynamo.sh
+   ```
+
+2. In a second terminal, launch Claude Code against the local endpoint:
+
+   ```bash
+   ./run_claude_local.sh
+   ```
+
+3. Optional: watch prefix-cache metrics while you chat:
+
+   ```bash
+   ./watch_cache.sh 1
+   ```
+
+## Environment
+
+Both Dynamo scripts load `./_dynamo/.env` first. The default values are:
+
+```bash
+MODEL=Qwen/Qwen2.5-Coder-32B-Instruct
+DYNAMO_PORT=8000
+TENSOR_PARALLEL_SIZE=2
+DTYPE=auto
+MAX_MODEL_LEN=65536
+GPU_MEMORY_UTILIZATION=0.90
+CUDA_VISIBLE_DEVICES=6,7
+```
+
+You can override any of them with environment variables before launching.
+
+## Notes
+
+- `launch_dynamo.sh` starts both the Dynamo frontend and the vLLM worker.
+- `run_claude_local.sh` waits for `/health`, checks `/v1/models`, and then starts `claude --model ...`.
+- `ANTHROPIC_API_KEY=dummy` is intentional for this local setup.
+- Logs are written to `/tmp/dynamo_worker.log` and `/tmp/dynamo_frontend.log`.
+- Prefix caching is enabled on the worker, but the observed hit rate depends on how the request prefix is tokenized across turns.
