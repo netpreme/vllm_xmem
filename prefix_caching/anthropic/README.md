@@ -205,6 +205,15 @@ The overall hit rate (74.9%) is lower because it includes the cold-start first r
 
 Appendix: Claude Code with local Dynamo + vLLM
 
+### Installation 
+```                                                                                                                                                                                  
+uv venv --python 3.12                                                                                                                     
+source .venv/bin/activate                                                                                                                 
+uv pip install -e .               # vLLM from source FIRST                                                                                
+uv pip install "ai-dynamo[vllm]"  # Dynamo SECOND 
+
+```
+
 This adds a second path for running Claude Code against the local open-source model stack in `./_dynamo/`.
 
 ## System Design

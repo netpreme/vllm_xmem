@@ -5,7 +5,16 @@ import torch
 from vllm import LLM, SamplingParams, TokensPrompt
 from vllm.config import KVTransferConfig
 
-CPU_CACHE_SIZE_GB = 128
+def _get_mtier_bank0_bytes() -> int:
+    try:
+        import xmem.mtier_sdk as sdk
+        status = sdk.get_sdk().get_bank_status(0)
+        return int(status.available_memory)
+    except Exception:
+        return 0
+
+_mtier_bytes = print(_get_mtier_bank0_bytes())
+CPU_CACHE_SIZE_GB = (_mtier_bytes >> 30) if _mtier_bytes else 128
 CPU_BLOCK_SIZE = 128
 GPU_BLOCK_SIZE = 128
 NUM_DECODED_TOKENS_PER_PROMPT = 1
@@ -24,7 +33,7 @@ NUM_PROMPTS = 1000
 HIT_PERCENTS_TO_TEST = tuple(range(0, 101, 10))
 
 # for latency test
-PROMPT_SIZES_IN_K_TO_TEST = (1,) + tuple(range(10, 101, 10))
+PROMPT_SIZES_IN_K_TO_TEST = (1,) + tuple(range(10, 101, 20))
 
 def main(run_ttft: bool, run_tput: bool):
     sampling_params = SamplingParams(
@@ -42,13 +51,16 @@ def main(run_ttft: bool, run_tput: bool):
             "num_cpu_blocks": num_cpu_blocks, # required in older versions (0.12.0)
         }
     )
-    for use_xmem in (False, True):
+    # for use_xmem in (False, True):
+    for use_xmem in ( True,):
+
         llm = LLM(
             model=MODEL,
             block_size=GPU_BLOCK_SIZE,
             enable_prefix_caching=False,
             kv_transfer_config=ktc,
-            kv_offload_mtier=use_xmem
+            kv_offload_mtier=use_xmem,
+            max_model_len=118784 // 2,
         )
 
         # run latency test
