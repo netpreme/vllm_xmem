@@ -101,6 +101,10 @@ class EngineCoreRequest(
 
     reasoning_ended: bool | None = None
 
+    # eos_token_id: kept for backward compatibility with Dynamo frontend
+    # which accesses vllm_preproc.eos_token_id after process_inputs().
+    eos_token_id: int | None = None
+
     @property
     def params(self) -> SamplingParams | PoolingParams:
         """Return the processed params (sampling or pooling)."""

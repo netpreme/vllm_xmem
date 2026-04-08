@@ -1017,7 +1017,8 @@ class EngineArgs:
             "--kv-offloading-backend", **cache_kwargs["kv_offloading_backend"]
         )
         cache_group.add_argument(
-            "--kv-offloading-mtier", **cache_kwargs["kv_offload_mtier"]
+            "--kv-offloading-mtier", dest="kv_offload_mtier",
+            **cache_kwargs["kv_offload_mtier"]
         )
 
         # Model weight offload related configs

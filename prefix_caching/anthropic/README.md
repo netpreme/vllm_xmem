@@ -323,3 +323,24 @@ You can override any of them with environment variables before launching.
 - `CLAUDE_CODE_ATTRIBUTION_HEADER=0` removes Claude Code's per-request billing header from the system prompt, which keeps the prompt prefix stable enough for prefix caching to hit.
 - Logs are written to `/tmp/dynamo_worker.log` and `/tmp/dynamo_frontend.log`.
 - Prefix caching is enabled on the worker, but the observed hit rate depends on how the request prefix is tokenized across turns.
+
+
+---
+
+# Terminal 1 — Dynamo stack
+  ./launch_dynamo.sh                                             
+                                                            
+  # Terminal 2 — TTFT proxy                                      
+  python3 ttft_proxy.py --log results/cpu_run.jsonl
+                                                                 
+  # Terminal 3 — SWE-bench tasks (CPU tier)                 
+  pip install swebench datasets                                  
+  python3 run_swebench.py --n 10 --tag cpu                       
+        
+  # Restart Dynamo with --kv-offload-mtier, rerun proxy with new 
+  log                                                       
+  python3 run_swebench.py --n 10 --tag chip                      
+                                                            
+  # Compare
+  python3 analyze_results.py --compare results/cpu_run.jsonl
+  results/chip_run.jsonl --labels cpu chip    

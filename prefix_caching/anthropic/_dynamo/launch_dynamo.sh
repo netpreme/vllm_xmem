@@ -38,15 +38,9 @@
 #      KV cache (sourced from vLLM's num_cached_tokens per request)
 #    dynamo_frontend_model_total_kv_blocks      — GPU block count
 #
-#  --dyn-chat-processor dynamo (default, Rust tokenizer): works with
-#    this vLLM version. Prefix cache hit rate is near 0% because the
-#    Rust tokenizer produces non-matching block hashes across turns.
-#    NOTE: --dyn-chat-processor vllm (Python tokenizer, would fix
-#    cache hits) is broken against the installed vLLM — two API
-#    mismatches: eos_token_id read-only property, and
-#    InputProcessor.process_inputs() missing supported_tasks arg.
 #
-#  Usage:  ./launch_dynamo.sh
+#  Usage:  ./launch_dynamo.sh           # CPU tier (pinned RAM)
+#          ./launch_dynamo.sh --mtier   # xmem chip tier
 #  Stop:   Ctrl-C
 #  Logs:   tail -f /tmp/dynamo_worker.log /tmp/dynamo_frontend.log
 # ═══════════════════════════════════════════════════════════════
@@ -76,14 +70,34 @@ else
     echo "WARNING: .env not found, using built-in defaults." >&2
 fi
 
+# ── Parse flags ─────────────────────────────────────────────────
+USE_MTIER=0
+for arg in "$@"; do
+    case "$arg" in
+        --mtier) USE_MTIER=1 ;;
+        *) echo "Unknown argument: $arg" >&2; exit 1 ;;
+    esac
+done
+
 MODEL="${MODEL:-Qwen/Qwen2.5-Coder-32B-Instruct}"
 HOST="${HOST:-0.0.0.0}"
 PORT="${DYNAMO_PORT:-8000}"
-TP="${TENSOR_PARALLEL_SIZE:-2}"
+TP="${TENSOR_PARALLEL_SIZE:-1}"
 DTYPE="${DTYPE:-auto}"
 MAX_MODEL_LEN="${MAX_MODEL_LEN:-65536}"
 GPU_MEM_UTIL="${GPU_MEMORY_UTILIZATION:-0.90}"
-CVD="${CUDA_VISIBLE_DEVICES:-6,7}"
+
+KV_TIER="cpu"
+MTIER_FLAG=""
+KV_OFFLOAD_SIZE="72"
+if [[ "$USE_MTIER" == "1" ]]; then
+    KV_TIER="chip"
+    MTIER_FLAG="--kv-offloading-mtier"
+    KV_OFFLOAD_SIZE="68"   # chip has 77.3 GB total; 68 -> ~73 GB actual, 4 GB headroom
+fi
+
+# Use CUDA_VISIBLE_DEVICES from environment or .env; default to 0 if unset
+CVD="${CUDA_VISIBLE_DEVICES:-0}"
 
 echo ""
 echo "═══════════════════════════════════════════════════════"
@@ -93,6 +107,7 @@ echo "  Port    : $PORT  (/v1/messages + /v1/chat/completions)"
 echo "  GPUs    : $CVD"
 echo "  TP      : $TP"
 echo "  Max len : $MAX_MODEL_LEN"
+echo "  KV tier : $KV_TIER"
 echo "═══════════════════════════════════════════════════════"
 echo ""
 
@@ -117,7 +132,6 @@ trap cleanup INT TERM
 echo "[1/3] Starting vLLM worker on GPUs $CVD ..."
 CUDA_VISIBLE_DEVICES="$CVD" \
 PYTHONHASHSEED=0 \
-VLLM_ALLOW_LONG_MAX_MODEL_LEN=1 \
     "$PYTHON_BIN" -m dynamo.vllm \
         --model "$MODEL" \
         --served-model-name "$MODEL" \
@@ -126,6 +140,8 @@ VLLM_ALLOW_LONG_MAX_MODEL_LEN=1 \
         --max-model-len "$MAX_MODEL_LEN" \
         --gpu-memory-utilization "$GPU_MEM_UTIL" \
         --enable-prefix-caching \
+        --kv-offloading-size "$KV_OFFLOAD_SIZE" \
+        ${MTIER_FLAG:+$MTIER_FLAG} \
         --discovery-backend file \
         --kv-events-config '{"enable_kv_cache_events": false}' \
         > /tmp/dynamo_worker.log 2>&1 &
@@ -134,6 +150,7 @@ echo "      PID $WORKER_PID  (log: /tmp/dynamo_worker.log)"
 
 # ── Step 2: Dynamo frontend with Anthropic API ──────────────────
 echo "[2/3] Starting Dynamo frontend on :$PORT ..."
+CUDA_VISIBLE_DEVICES="$CVD" \
 "$PYTHON_BIN" -m dynamo.frontend \
     --http-port "$PORT" \
     --http-host "$HOST" \

@@ -77,7 +77,7 @@ def main(run_ttft: bool, run_tput: bool):
 
     llm = None
     # for use_xmem in (False, True):
-    for use_xmem in (True,):
+    for use_xmem in (False,):
 
         # Clean-up things.
         if llm is not None:

@@ -189,7 +189,7 @@ class InputProcessor:
         request_id: str,
         prompt: PromptType | ProcessorInputs,
         params: SamplingParams | PoolingParams,
-        supported_tasks: tuple[SupportedTask, ...],
+        supported_tasks: tuple[SupportedTask, ...] | None = None,
         arrival_time: float | None = None,
         lora_request: LoRARequest | None = None,
         tokenization_kwargs: dict[str, Any] | None = None,
@@ -198,6 +198,8 @@ class InputProcessor:
         data_parallel_rank: int | None = None,
         resumable: bool = False,
     ) -> EngineCoreRequest:
+        if supported_tasks is None:
+            supported_tasks = GENERATION_TASKS
         self._validate_params(params, supported_tasks)
         self._validate_lora(lora_request)
 
@@ -324,6 +326,7 @@ class InputProcessor:
             data_parallel_rank=data_parallel_rank,
             trace_headers=trace_headers,
             resumable=resumable,
+            eos_token_id=self.renderer.get_eos_token_id(),
         )
 
     def _validate_prompt_len(
