@@ -25,8 +25,7 @@ NUM_PROMPTS = 1000
 HIT_PERCENTS_TO_TEST = tuple(range(0, 101, 10))
 
 # for latency test
-# PROMPT_SIZES_IN_K_TO_TEST = (1,) + tuple(range(10, 71, 10))
-PROMPT_SIZES_IN_K_TO_TEST = (10,)# + tuple(range(10, 71, 10))
+PROMPT_SIZES_IN_K_TO_TEST = (1,) + tuple(range(10, 71, 10))
 
 
 def _print_ttft_table(prompt_sizes_k, prefill_ms, cpu_ms, mtier_ms):
@@ -76,8 +75,7 @@ def main(run_ttft: bool, run_tput: bool):
     ttft_results: dict[int, dict] = {s: {} for s in PROMPT_SIZES_IN_K_TO_TEST}
 
     llm = None
-    # for use_xmem in (False, True):
-    for use_xmem in (False,):
+    for use_xmem in (False, True):
 
         # Clean-up things.
         if llm is not None:

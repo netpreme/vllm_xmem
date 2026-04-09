@@ -1,0 +1,171 @@
+{
+  "title": "vLLM KV Offload — Live",
+  "uid": "vllm-kv-offload",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "5s",
+  "time": { "from": "now-15m", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "CPU→GPU Recall Bandwidth (GB/s)",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "gbytes",
+          "custom": { "lineWidth": 2 },
+          "color": { "mode": "fixed", "fixedColor": "green" }
+        }
+      },
+      "targets": [
+        {
+          "expr": "vllm_kv_cpu_to_gpu_bandwidth_gbps",
+          "legendFormat": "CPU→GPU GB/s"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "GPU→CPU Offload Bandwidth (GB/s)",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "gbytes",
+          "custom": { "lineWidth": 2 },
+          "color": { "mode": "fixed", "fixedColor": "blue" }
+        }
+      },
+      "targets": [
+        {
+          "expr": "vllm_kv_gpu_to_cpu_bandwidth_gbps",
+          "legendFormat": "GPU→CPU GB/s"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Cumulative KV Bytes Transferred",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
+      "fieldConfig": {
+        "defaults": { "unit": "bytes" }
+      },
+      "targets": [
+        {
+          "expr": "vllm_kv_cpu_to_gpu_bytes_total",
+          "legendFormat": "CPU→GPU total"
+        },
+        {
+          "expr": "vllm_kv_gpu_to_cpu_bytes_total",
+          "legendFormat": "GPU→CPU total"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "KV Transfer Rate (bytes/s)",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 },
+      "fieldConfig": {
+        "defaults": { "unit": "Bps" }
+      },
+      "targets": [
+        {
+          "expr": "rate(vllm_kv_cpu_to_gpu_bytes_total[30s])",
+          "legendFormat": "CPU→GPU rate"
+        },
+        {
+          "expr": "rate(vllm_kv_gpu_to_cpu_bytes_total[30s])",
+          "legendFormat": "GPU→CPU rate"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Time to First Token (p50 / p95)",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 16, "w": 12, "h": 8 },
+      "fieldConfig": {
+        "defaults": { "unit": "s" }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, rate(dynamo_component_router_time_to_first_token_seconds_bucket[1m]))",
+          "legendFormat": "TTFT p50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, rate(dynamo_component_router_time_to_first_token_seconds_bucket[1m]))",
+          "legendFormat": "TTFT p95"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "KV Cache Hit Rate",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 16, "w": 12, "h": 8 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1
+        }
+      },
+      "targets": [
+        {
+          "expr": "dynamo_component_router_kv_hit_rate",
+          "legendFormat": "KV hit rate"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Request Throughput (req/s)",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 24, "w": 8, "h": 6 },
+      "fieldConfig": {
+        "defaults": { "unit": "reqps" }
+      },
+      "targets": [
+        {
+          "expr": "rate(dynamo_component_router_requests_total[1m])",
+          "legendFormat": "req/s"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "Input Token Rate",
+      "type": "timeseries",
+      "gridPos": { "x": 8, "y": 24, "w": 8, "h": 6 },
+      "fieldConfig": {
+        "defaults": { "unit": "short" }
+      },
+      "targets": [
+        {
+          "expr": "rate(dynamo_component_router_input_sequence_tokens_sum[1m])",
+          "legendFormat": "tokens/s"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "title": "GPU KV Blocks",
+      "type": "stat",
+      "gridPos": { "x": 16, "y": 24, "w": 8, "h": 6 },
+      "fieldConfig": {
+        "defaults": { "unit": "short" }
+      },
+      "targets": [
+        {
+          "expr": "dynamo_frontend_model_total_kv_blocks",
+          "legendFormat": "GPU blocks"
+        }
+      ]
+    }
+  ],
+  "templating": { "list": [] },
+  "annotations": { "list": [] }
+}

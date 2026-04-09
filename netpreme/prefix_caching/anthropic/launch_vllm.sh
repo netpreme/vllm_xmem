@@ -26,7 +26,7 @@ TENSOR_PARALLEL_SIZE="${TENSOR_PARALLEL_SIZE:-1}"
 DTYPE="${DTYPE:-auto}"
 MAX_MODEL_LEN="${MAX_MODEL_LEN:-4096}"
 GPU_MEMORY_UTILIZATION="${GPU_MEMORY_UTILIZATION:-0.90}"
-CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0}"
+KV_OFFLOAD_MTIER="${KV_OFFLOAD_MTIER:-0}"
 
 echo "Starting vLLM server (Anthropic-compatible)"
 echo "  model                  : $MODEL"
@@ -35,7 +35,10 @@ echo "  tensor-parallel-size   : $TENSOR_PARALLEL_SIZE"
 echo "  dtype                  : $DTYPE"
 echo "  max-model-len          : $MAX_MODEL_LEN"
 echo "  gpu-memory-utilization : $GPU_MEMORY_UTILIZATION"
-echo "  CUDA_VISIBLE_DEVICES   : $CUDA_VISIBLE_DEVICES"
+echo "  kv-offload-mtier       : $KV_OFFLOAD_MTIER"
+if [[ -n "${CUDA_VISIBLE_DEVICES:-}" ]]; then
+    echo "  CUDA_VISIBLE_DEVICES   : $CUDA_VISIBLE_DEVICES"
+fi
 
 # Optional: run from a local vLLM checkout
 if [[ -n "$VLLM_ROOT" ]]; then
@@ -46,8 +49,19 @@ if [[ -n "$VLLM_ROOT" ]]; then
     cd "$VLLM_ROOT"
 fi
 
-exec env CUDA_VISIBLE_DEVICES="$CUDA_VISIBLE_DEVICES" \
-    VLLM_ALLOW_LONG_MAX_MODEL_LEN=1 \
+# Build the env prefix — only set CUDA_VISIBLE_DEVICES if the caller provided it
+ENV_PREFIX="VLLM_ALLOW_LONG_MAX_MODEL_LEN=1"
+if [[ -n "${CUDA_VISIBLE_DEVICES:-}" ]]; then
+    ENV_PREFIX="CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES $ENV_PREFIX"
+fi
+
+# Build optional flags
+EXTRA_FLAGS=""
+if [[ "$KV_OFFLOAD_MTIER" == "1" || "$KV_OFFLOAD_MTIER" == "true" ]]; then
+    EXTRA_FLAGS="--kv-offloading-mtier"
+fi
+
+exec env $ENV_PREFIX \
     python -m vllm.entrypoints.openai.api_server \
     --model "$MODEL" \
     --served-model-name "$MODEL" \
@@ -63,4 +77,5 @@ exec env CUDA_VISIBLE_DEVICES="$CUDA_VISIBLE_DEVICES" \
     --max-model-len "$MAX_MODEL_LEN" \
     --gpu-memory-utilization "$GPU_MEMORY_UTILIZATION" \
     --enable-auto-tool-choice \
-    --tool-call-parser hermes
+    --tool-call-parser hermes \
+    $EXTRA_FLAGS

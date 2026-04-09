@@ -2,22 +2,38 @@
 """
 KV cache CPU offload stress test using Claude Code as the client.
 
-Claude Code's large system prompt (~10K tokens) is consistent across
+Claude Code's large system prompt (~22K tokens) is consistent across
 runs, so prefix hashes are stable and the cache works correctly.
 
   Phase 1 — FILL:   run N multi-turn sessions → fills GPU + writes all
                      blocks to CPU/chip tier via write-through
   Phase 2 — EVICT:  run M different sessions → pushes Phase 1 blocks
-                     out of GPU into CPU/chip tier
+                     out of GPU → CPU offload manager
   Phase 3 — RECALL: re-run Phase 1 sessions from scratch → loads blocks
-                     back from CPU/chip tier into GPU
+                     back from CPU/chip tier into GPU via DMA
 
-With --turns T, each session is T turns deep. More turns = more unique
-blocks per session = faster chip saturation.
+HOW EVICTION WORKS
+  The GPU block pool (2387 blocks × 16 tokens = ~38K token capacity) must
+  be SATURATED before fill blocks can be evicted to the offload tier.
 
-  Single-turn (T=1):  ~16 unique blocks/session → need ~1,088 sessions to fill 73GB chip
-  Multi-turn  (T=5):  ~80 unique blocks/session → need ~218 sessions to fill chip
-  Multi-turn  (T=10): ~160 unique blocks/session → need ~109 sessions to fill chip
+  - Claude Code's system prompt uses ~1431 shared blocks (identical every
+    session, so only allocated once and LRU-refreshed by each session).
+  - Each session-turn contributes ~21 UNIQUE blocks (user msg + response).
+  - Free GPU blocks after shared prefix: 2387 - 1431 ≈ 956 blocks.
+
+  GPU saturation requirement:
+    (fill + evict) × turns × 21 > 956
+    → fill=10, evict=10, turns=1:  420 < 956  ✗  NO GPU eviction
+    → fill=10, evict=10, turns=3: 1260 > 956  ✓  ~304 fill blocks evicted
+    → fill=10, evict=10, turns=5: 2100 > 956  ✓  ~1144 fill blocks evicted
+
+  Without GPU eviction the RECALL phase finds everything in the GPU prefix
+  cache, so CPU→GPU = 0.  Use --turns 3 or more (the default).
+
+  Chip (CPU DRAM or xmem) saturation for bandwidth benchmarking:
+    Single-turn (T=1):  ~21 unique blocks/session → need ~879 sessions to fill 73 GB chip
+    Multi-turn  (T=5):  ~105 unique blocks/session → need ~176 sessions to fill chip
+    Multi-turn  (T=10): ~210 unique blocks/session → need ~88 sessions to fill chip
 
 Prerequisites:
     ./launch_dynamo.sh              # Dynamo + vLLM must be running
@@ -42,12 +58,13 @@ from pathlib import Path
 
 # ── config ────────────────────────────────────────────────────────
 
-PROXY_URL  = "http://localhost:8001"
-DYNAMO_URL = "http://localhost:8000"
-MODEL      = "Qwen/Qwen2.5-Coder-32B-Instruct"
-LOG_FILE   = Path("ttft_log.jsonl")
-WORKER_LOG = "/tmp/dynamo_worker.log"
-SESSION_FILE = Path("fill_sessions.json")  # stores session IDs for recall
+PROXY_URL      = "http://localhost:8001"
+DYNAMO_URL     = "http://localhost:8000"
+MODEL          = "Qwen/Qwen2.5-Coder-32B-Instruct"
+LOG_FILE       = Path("ttft_log.jsonl")
+WORKER_LOG     = "/tmp/dynamo_worker.log"
+SESSION_FILE   = Path("fill_sessions.json")  # stores session IDs for recall
+KV_OFFLOAD_GB  = 72   # --kv-offloading-size passed to launch_dynamo.sh
 
 # Turn 1: initial coding question
 # Turns 2+: follow-up prompts that build on the previous response,
@@ -282,7 +299,7 @@ def run_fill_phase(tasks: list[str], num_turns: int,
     """
     print(f"\n{'─'*55}")
     print(f"  PHASE 1 — FILL  ({len(tasks)} tasks × {num_turns} turn{'s' if num_turns>1 else ''})")
-    print(f"  Each session builds {num_turns * 16:.0f}+ unique KV blocks")
+    print(f"  Each session builds ~{num_turns * 21} unique KV blocks")
     print(f"{'─'*55}")
 
     _, log_offset = read_log_delta(WORKER_LOG, log_offset)
@@ -441,8 +458,8 @@ def main():
                         help="Number of evict sessions (default 10)")
     parser.add_argument("--recall",   type=int, default=8,
                         help="Number of fill sessions to replay in recall (default 8)")
-    parser.add_argument("--turns",    type=int, default=1,
-                        help="Turns per session (default 1). More turns = more unique blocks per session")
+    parser.add_argument("--turns",    type=int, default=3,
+                        help="Turns per session (default 3). More turns = more unique blocks per session")
     parser.add_argument("--no-proxy", action="store_true",
                         help="Skip TTFT proxy, go direct to Dynamo")
     parser.add_argument("--no-evict", action="store_true")
@@ -455,22 +472,43 @@ def main():
     base_url  = DYNAMO_URL if args.no_proxy else PROXY_URL
     use_proxy = not args.no_proxy
 
-    # Estimate unique blocks this run will generate
-    blocks_per_session = args.turns * 16
+    # Saturation check:
+    #   GPU must be saturated first (fill blocks evicted to CPU) before
+    #   the RECALL phase can demonstrate CPU→GPU bandwidth.
+    #
+    #   GPU block budget (2387 blocks total, ~1431 consumed by the shared
+    #   system-prompt prefix that every session touches).
+    #   Each session-turn contributes ~21 unique blocks (user msg + response).
+    GPU_BLOCKS          = 2387   # from dynamo_frontend_model_total_kv_blocks
+    GPU_SHARED_BLOCKS   = 1431   # Claude Code system-prompt prefix (~22.9K tok)
+    UNIQUE_BLOCKS_TURN  = 21     # unique blocks per session-turn
+    gpu_free_blocks     = GPU_BLOCKS - GPU_SHARED_BLOCKS  # 956
+    evict_count         = 0 if args.no_evict else args.evict
+    total_sessions      = args.fill + evict_count
+    unique_total        = total_sessions * args.turns * UNIQUE_BLOCKS_TURN
+    gpu_saturated       = unique_total > gpu_free_blocks
+
+    chip_blocks        = int(KV_OFFLOAD_GB * 1024 / 4)  # 72 GB / 4 MB per block
+    blocks_per_session = args.turns * UNIQUE_BLOCKS_TURN
     total_fill_blocks  = args.fill * blocks_per_session
-    chip_blocks        = 17408  # ~73 GB / 4 MB per block
-    saturation_pct     = total_fill_blocks / chip_blocks * 100
+    chip_saturation_pct = total_fill_blocks / chip_blocks * 100
 
     label_str = f"  [{args.label}]" if args.label else ""
     print(f"\nClaude Code KV Offload Stress Test{label_str}")
     print(f"  base_url : {base_url}")
     print(f"  model    : {MODEL}")
-    print(f"  fill={args.fill}  evict={0 if args.no_evict else args.evict}  recall={args.recall}  turns={args.turns}")
+    print(f"  fill={args.fill}  evict={evict_count}  recall={args.recall}  turns={args.turns}")
     print(f"  proxy    : {'yes — TTFT measured' if use_proxy else 'no'}")
-    print(f"  unique blocks (fill): ~{total_fill_blocks}  ({saturation_pct:.1f}% of chip capacity)")
-    if saturation_pct < 50:
-        print(f"  NOTE: to saturate chip, increase --fill or --turns")
-        print(f"        e.g. --fill {int(chip_blocks/2/blocks_per_session)+1} --turns {args.turns}  → 50% chip fill")
+    print(f"  unique blocks (fill+evict): ~{unique_total}  GPU free budget: {gpu_free_blocks}")
+    if not gpu_saturated:
+        min_turns = (gpu_free_blocks // (total_sessions * UNIQUE_BLOCKS_TURN)) + 1
+        min_sessions = (gpu_free_blocks // (args.turns * UNIQUE_BLOCKS_TURN)) + 1
+        print(f"  WARNING: GPU not saturated — fill blocks stay in GPU, RECALL will show CPU→GPU = 0!")
+        print(f"           Fix: use --turns {min_turns}  OR  --fill {min_sessions//2} --evict {min_sessions//2}")
+    else:
+        evicted = unique_total - gpu_free_blocks
+        print(f"  GPU saturated: ~{evicted} fill blocks evicted to offload tier during evict phase")
+    print(f"  chip fill (fill only): ~{chip_saturation_pct:.1f}% of {KV_OFFLOAD_GB} GB tier")
 
     try:
         urllib.request.urlopen(f"{DYNAMO_URL}/health", timeout=5)
