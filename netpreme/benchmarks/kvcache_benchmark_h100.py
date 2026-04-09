@@ -12,6 +12,7 @@ GPU_BLOCK_SIZE = 128
 NUM_DECODED_TOKENS_PER_PROMPT = 1
 
 MODEL = "Qwen/Qwen3-30B-A3B-Instruct-2507-FP8"
+MODEL = "Qwen/Qwen2.5-Coder-32B"
 # sizeof(element) * head_size * num_heads * |{k,v}| * layer_count
 KV_SIZE_PER_TOKEN = 2 * 128 * 4 * 2 * 48
 
