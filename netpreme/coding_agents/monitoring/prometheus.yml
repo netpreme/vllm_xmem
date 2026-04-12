@@ -1,0 +1,15 @@
+global:
+  scrape_interval: 1s
+  evaluation_interval: 1s
+
+scrape_configs:
+  # Dynamo frontend metrics (TTFT, KV hit rate, request rate, token counts)
+  - job_name: dynamo_frontend
+    static_configs:
+      - targets: ["localhost:8000"]
+    metrics_path: /metrics
+
+  # Custom KV transfer exporter (CPU↔GPU bytes, bandwidth)
+  - job_name: vllm_kv_exporter
+    static_configs:
+      - targets: ["localhost:9091"]

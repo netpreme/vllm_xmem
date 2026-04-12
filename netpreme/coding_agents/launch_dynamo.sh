@@ -43,6 +43,9 @@
 #          ./launch_dynamo.sh --mtier   # xmem chip tier
 #  Stop:   Ctrl-C
 #  Logs:   tail -f /tmp/dynamo_worker_<PORT>.log /tmp/dynamo_frontend_<PORT>.log
+
+# mtier_service reset
+# nvidia-smi --query-compute-apps=pid --format=csv,noheader --id=0 | xargs -r kill -9
 # ═══════════════════════════════════════════════════════════════
 set -euo pipefail
 
@@ -148,6 +151,8 @@ CUDA_VISIBLE_DEVICES="$CVD" \
 PYTHONHASHSEED=0 \
 VLLM_ALLOW_LONG_MAX_MODEL_LEN=1 \
 HF_HUB_OFFLINE=1 \
+
+# --dyn-chat-processor vllm \
 DYN_FILE_KV="$STORE_PATH" \
     "$PYTHON_BIN" -m dynamo.vllm \
         --model "$MODEL" \
@@ -174,6 +179,7 @@ DYN_FILE_KV="$STORE_PATH" \
     --http-host "$HOST" \
     --discovery-backend file \
     --enable-anthropic-api \
+    --dyn-chat-processor vllm \
     > "$FRONTEND_LOG" 2>&1 &
 FRONTEND_PID=$!
 echo "      PID $FRONTEND_PID  (log: $FRONTEND_LOG)"

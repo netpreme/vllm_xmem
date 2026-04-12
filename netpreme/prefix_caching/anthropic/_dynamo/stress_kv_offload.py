@@ -44,23 +44,22 @@ from pathlib import Path
 
 # ── defaults ──────────────────────────────────────────────────────
 
-DEFAULT_URL = "http://127.0.0.1:8000"
-DEFAULT_MODEL = "Qwen/Qwen2.5-Coder-32B-Instruct"
+DEFAULT_URL        = "http://127.0.0.1:8000"
+DEFAULT_MODEL      = "Qwen/Qwen2.5-Coder-32B-Instruct"
 DEFAULT_WORKER_LOG = "/tmp/dynamo_worker_8000.log"
 
 # Claude Code sends a ~8-10K token system prompt.  We approximate with
 # a ~600-token constant block that every session shares.
 SYSTEM_PROMPT_TOKENS = 600
 # Per-session unique context per turn (simulates user messages + code snippets)
-TOKENS_PER_TURN = 400
-NUM_TURNS = 4  # turns per fill session
-FOLLOWUP = "Summarise the above in one sentence."
+TOKENS_PER_TURN  = 400
+NUM_TURNS        = 4       # turns per fill session
+FOLLOWUP         = "Summarise the above in one sentence."
 
 # Legacy mode (original test)
-TOKENS_PER_PREFIX = 1500
+TOKENS_PER_PREFIX  = 1500
 
 # ── helpers ───────────────────────────────────────────────────────
-
 
 def _words(seed: int, n: int) -> str:
     return " ".join(f"w{seed}_{i}" for i in range(n))
@@ -105,25 +104,17 @@ def make_prefix(seed: int, target_tokens: int = TOKENS_PER_PREFIX) -> str:
     return (sentence + " ") * repeats
 
 
-def ttft_request(
-    url: str, model: str, messages: list[dict], timeout: int = 120
-) -> float | None:
-    payload = json.dumps(
-        {
-            "model": model,
-            "messages": messages,
-            "max_tokens": 32,
-            "stream": True,
-        }
-    ).encode()
+def ttft_request(url: str, model: str, messages: list[dict],
+                 timeout: int = 120) -> float | None:
+    payload = json.dumps({
+        "model": model, "messages": messages,
+        "max_tokens": 32, "stream": True,
+    }).encode()
     req = urllib.request.Request(
-        f"{url}/v1/messages",
-        data=payload,
-        headers={
-            "Content-Type": "application/json",
-            "x-api-key": "dummy",
-            "anthropic-version": "2023-06-01",
-        },
+        f"{url}/v1/messages", data=payload,
+        headers={"Content-Type": "application/json",
+                 "x-api-key": "dummy",
+                 "anthropic-version": "2023-06-01"},
         method="POST",
     )
     t0 = time.perf_counter()
@@ -168,18 +159,14 @@ def _last_lru_size_from_log(log_path: str) -> int:
     return 0
 
 
-def read_log_delta(
-    log_path: str, offset: int, wait: bool = False, timeout: float = 60.0
-) -> tuple[dict, int]:
+def read_log_delta(log_path: str, offset: int,
+                   wait_secs: float = 0.0) -> tuple[dict, int]:
     """Read KV transfer metrics from log since offset.
 
-    If wait=True, blocks until a metric line appears or the worker looks dead
-    (timeout seconds with no new log activity). timeout is a safety net only —
-    under normal operation the function returns as soon as vLLM writes its next
-    10-second metric line.
+    If wait_secs > 0, polls until at least one metric line appears
+    (handles the 10-second cadence of vLLM's metric reporter).
     """
-    deadline = time.time() + timeout
-    last_eof = -1
+    deadline = time.time() + wait_secs
     while True:
         delta: dict[str, float] = {}
         try:
@@ -202,14 +189,8 @@ def read_log_delta(
                         delta[k.strip()] = delta.get(k.strip(), 0.0) + float(v.strip())
                     except ValueError:
                         pass
-        if delta:
+        if delta or time.time() >= deadline:
             return delta, new_offset
-        if not wait or time.time() >= deadline:
-            return delta, new_offset
-        # reset deadline if log is still growing (worker is alive)
-        if eof != last_eof:
-            deadline = time.time() + timeout
-            last_eof = eof
         time.sleep(1.0)
 
 
@@ -217,34 +198,27 @@ def fmt(values: list[float]) -> str:
     if not values:
         return "no data"
     sv = sorted(values)
-    n = len(sv)
-    return (
-        f"mean={statistics.mean(sv):.0f}ms  "
-        f"p50={sv[n//2]:.0f}ms  "
-        f"p95={sv[int(n*0.95)]:.0f}ms  "
-        f"n={n}"
-    )
+    n  = len(sv)
+    return (f"mean={statistics.mean(sv):.0f}ms  "
+            f"p50={sv[n//2]:.0f}ms  "
+            f"p95={sv[int(n*0.95)]:.0f}ms  "
+            f"n={n}")
 
 
 def fmt_bytes(b: float) -> str:
-    if b >= 1e9:
-        return f"{b/1e9:.2f} GB"
-    if b >= 1e6:
-        return f"{b/1e6:.1f} MB"
-    if b >= 1e3:
-        return f"{b/1e3:.1f} KB"
+    if b >= 1e9: return f"{b/1e9:.2f} GB"
+    if b >= 1e6: return f"{b/1e6:.1f} MB"
+    if b >= 1e3: return f"{b/1e3:.1f} KB"
     return f"{b:.0f} B"
 
 
 # ── Claude Code simulation helpers ────────────────────────────────
 
-
-def build_claude_code_session(
-    session_id: int,
-    system_prompt: str,
-    num_turns: int,
-    history: list[dict] | None = None,
-) -> tuple[list[dict], list[dict]]:
+def build_claude_code_session(session_id: int,
+                               system_prompt: str,
+                               num_turns: int,
+                               history: list[dict] | None = None
+                               ) -> tuple[list[dict], list[dict]]:
     """
     Build the full message list for a new turn in a Claude Code-like session.
 
@@ -264,7 +238,6 @@ def build_claude_code_session(
 
 
 # ── phase runners ──────────────────────────────────────────────────
-
 
 def run_phase_claude_code(
     name: str,
@@ -286,10 +259,8 @@ def run_phase_claude_code(
     """
     print(f"\n{'─'*60}")
     print(f"  {name}")
-    print(
-        f"  ({len(session_ids)} sessions × {num_turns} turns each = "
-        f"{len(session_ids)*num_turns} total requests)"
-    )
+    print(f"  ({len(session_ids)} sessions × {num_turns} turns each = "
+          f"{len(session_ids)*num_turns} total requests)")
     print(f"  System prompt: ~{SYSTEM_PROMPT_TOKENS} tokens (shared prefix)")
     print(f"{'─'*60}")
 
@@ -298,8 +269,7 @@ def run_phase_claude_code(
 
     histories: dict[int, list[dict]] = (
         {sid: list(h) for sid, h in existing_histories.items()}
-        if existing_histories
-        else {}
+        if existing_histories else {}
     )
 
     ttfts = []
@@ -309,32 +279,21 @@ def run_phase_claude_code(
         history = histories.get(sid, [])
         for turn in range(num_turns):
             idx += 1
-            messages, _ = build_claude_code_session(
-                sid, system_prompt, num_turns, history
-            )
+            messages, _ = build_claude_code_session(sid, system_prompt, num_turns, history)
 
-            # temperature=0 + seed → greedy decoding → same input always produces
-            # the same response text and token count, making block counts
-            # reproducible across runs without capping response length.
-            payload = json.dumps(
-                {
-                    "model": model,
-                    "system": system_prompt,
-                    "messages": messages,
-                    "max_tokens": 32,
-                    "temperature": 0,
-                    "seed": 42,
-                    "stream": True,
-                }
-            ).encode()
+            # system prompt goes in the "system" field (Anthropic API)
+            payload = json.dumps({
+                "model": model,
+                "system": system_prompt,
+                "messages": messages,
+                "max_tokens": 32,
+                "stream": True,
+            }).encode()
             req = urllib.request.Request(
-                f"{url}/v1/messages",
-                data=payload,
-                headers={
-                    "Content-Type": "application/json",
-                    "x-api-key": "dummy",
-                    "anthropic-version": "2023-06-01",
-                },
+                f"{url}/v1/messages", data=payload,
+                headers={"Content-Type": "application/json",
+                         "x-api-key": "dummy",
+                         "anthropic-version": "2023-06-01"},
                 method="POST",
             )
             t0 = time.perf_counter()
@@ -354,10 +313,7 @@ def run_phase_claude_code(
                         except json.JSONDecodeError:
                             continue
                         etype = ev.get("type")
-                        if ttft is None and etype in (
-                            "content_block_delta",
-                            "message_delta",
-                        ):
+                        if ttft is None and etype in ("content_block_delta", "message_delta"):
                             ttft = (time.perf_counter() - t0) * 1000
                         if etype == "content_block_delta":
                             delta_ev = ev.get("delta", {})
@@ -368,24 +324,17 @@ def run_phase_claude_code(
 
             if ttft is not None:
                 ttfts.append(ttft)
-                print(
-                    f"  [{idx:3d}/{total}] session={sid:3d} turn={turn}  TTFT {ttft:6.0f} ms"
-                    f"  context={len(messages)} msgs"
-                )
+                print(f"  [{idx:3d}/{total}] session={sid:3d} turn={turn}  TTFT {ttft:6.0f} ms"
+                      f"  context={len(messages)} msgs")
             else:
                 print(f"  [{idx:3d}/{total}] session={sid:3d} turn={turn}  ERROR")
 
-            # Only update history on success — failed turns (e.g. context-too-long
-            # HTTP 500) must not be appended, or the oversized history will cause
-            # every subsequent recall request to fail too.
-            if ttft is not None:
-                history = messages + [
-                    {"role": "assistant", "content": response_text or "..."}
-                ]
+            # Update history for next turn (include assistant response)
+            history = messages + [{"role": "assistant", "content": response_text or "OK."}]
         histories[sid] = history
 
     # Wait up to 15s for the 10-second metric cadence to fire
-    cpu_delta, log_offset = read_log_delta(log_path, log_offset, wait=True)
+    cpu_delta, log_offset = read_log_delta(log_path, log_offset, wait_secs=15.0)
     g2c = cpu_delta.get("GPU_to_CPU_total_bytes", 0.0)
     c2g = cpu_delta.get("CPU_to_GPU_total_bytes", 0.0)
 
@@ -408,25 +357,13 @@ def run_phase_claude_code_recall(
     model: str,
     log_path: str,
     log_offset: int,
-    pure_bw: bool = False,
 ) -> tuple[list[float], dict, int]:
     """
     Send one new turn to existing sessions to trigger CPU→GPU recall.
-
-    pure_bw=True: re-send the exact last fill prompt with a 1-token continuation
-    and max_tokens=1.  TTFT then equals KV-load time + 1 decode step, matching
-    kvcache_benchmark_h100.py methodology (no new-token prefill overhead).
     """
-    mode_label = (
-        "pure-BW mode: 1-token continuation, max_tokens=1"
-        if pure_bw
-        else "1 new turn each"
-    )
     print(f"\n{'─'*60}")
     print(f"  {name}")
-    print(
-        f"  ({len(session_ids)} sessions, {mode_label} = {len(session_ids)} requests)"
-    )
+    print(f"  ({len(session_ids)} sessions, 1 new turn each = {len(session_ids)} requests)")
     print(f"{'─'*60}")
 
     _, log_offset = read_log_delta(log_path, log_offset)
@@ -435,38 +372,21 @@ def run_phase_claude_code_recall(
     for i, sid in enumerate(session_ids):
         history = histories.get(sid, [])
         turn = len(history) // 2
+        user_content = make_turn_content(sid, turn)
+        messages = history + [{"role": "user", "content": user_content}]
 
-        if pure_bw:
-            # Re-send the exact same context as the last fill turn, with a
-            # minimal 1-token new message.  This forces vLLM to reload all
-            # cached KV blocks from CPU without any significant new-token
-            # prefill, making TTFT ≈ KV-load time + 1 decode step.
-            messages = history + [{"role": "user", "content": "x"}]
-            max_tokens = 1
-        else:
-            user_content = make_turn_content(sid, turn)
-            messages = history + [{"role": "user", "content": user_content}]
-            max_tokens = 32
-
-        payload = json.dumps(
-            {
-                "model": model,
-                "system": system_prompt,
-                "messages": messages,
-                "max_tokens": max_tokens,
-                "temperature": 0,
-                "seed": 42,
-                "stream": True,
-            }
-        ).encode()
+        payload = json.dumps({
+            "model": model,
+            "system": system_prompt,
+            "messages": messages,
+            "max_tokens": 32,
+            "stream": True,
+        }).encode()
         req = urllib.request.Request(
-            f"{url}/v1/messages",
-            data=payload,
-            headers={
-                "Content-Type": "application/json",
-                "x-api-key": "dummy",
-                "anthropic-version": "2023-06-01",
-            },
+            f"{url}/v1/messages", data=payload,
+            headers={"Content-Type": "application/json",
+                     "x-api-key": "dummy",
+                     "anthropic-version": "2023-06-01"},
             method="POST",
         )
         t0 = time.perf_counter()
@@ -485,25 +405,20 @@ def run_phase_claude_code_recall(
                     except json.JSONDecodeError:
                         continue
                     etype = ev.get("type")
-                    if ttft is None and etype in (
-                        "content_block_delta",
-                        "message_delta",
-                    ):
+                    if ttft is None and etype in ("content_block_delta", "message_delta"):
                         ttft = (time.perf_counter() - t0) * 1000
         except (urllib.error.URLError, TimeoutError) as e:
             print(f"  [request error: {e}]", file=sys.stderr)
 
         if ttft is not None:
             ttfts.append(ttft)
-            print(
-                f"  [{i+1:3d}/{len(session_ids)}] session={sid:3d}  TTFT {ttft:6.0f} ms"
-                f"  context_turns={turn}"
-            )
+            print(f"  [{i+1:3d}/{len(session_ids)}] session={sid:3d}  TTFT {ttft:6.0f} ms"
+                  f"  context_turns={turn}")
         else:
             print(f"  [{i+1:3d}/{len(session_ids)}] session={sid:3d}  ERROR")
 
-    # Wait up to 60s for the metric cadence
-    cpu_delta, log_offset = read_log_delta(log_path, log_offset, wait=True)
+    # Wait up to 15s for the metric cadence
+    cpu_delta, log_offset = read_log_delta(log_path, log_offset, wait_secs=15.0)
     g2c = cpu_delta.get("GPU_to_CPU_total_bytes", 0.0)
     c2g = cpu_delta.get("CPU_to_GPU_total_bytes", 0.0)
 
@@ -511,8 +426,6 @@ def run_phase_claude_code_recall(
     if g2c > 0 or c2g > 0:
         print(f"  GPU→CPU  : {fmt_bytes(g2c)}")
         print(f"  CPU→GPU  : {fmt_bytes(c2g)}")
-        if pure_bw and c2g > 0:
-            print(f"  [note] bandwidth printed in SUMMARY once baseline is measured")
     else:
         print(f"  CPU offload: none detected this phase")
 
@@ -521,10 +434,8 @@ def run_phase_claude_code_recall(
 
 # ── legacy independent-mode phase runner ──────────────────────────
 
-
-def run_phase_independent(
-    name: str, seeds: list[int], url: str, model: str, log_path: str, log_offset: int
-) -> tuple[list[float], dict, int]:
+def run_phase_independent(name: str, seeds: list[int], url: str, model: str,
+              log_path: str, log_offset: int) -> tuple[list[float], dict, int]:
     print(f"\n{'─'*55}")
     print(f"  {name}  ({len(seeds)} requests)")
     print(f"{'─'*55}")
@@ -535,9 +446,9 @@ def run_phase_independent(
     for i, seed in enumerate(seeds):
         prefix = make_prefix(seed)
         msgs = [
-            {"role": "user", "content": prefix},
+            {"role": "user",      "content": prefix},
             {"role": "assistant", "content": "Understood."},
-            {"role": "user", "content": FOLLOWUP},
+            {"role": "user",      "content": FOLLOWUP},
         ]
         t, _ = ttft_request(url, model, msgs)
         if t is not None:
@@ -546,7 +457,7 @@ def run_phase_independent(
         else:
             print(f"  [{i+1:3d}/{len(seeds)}] seed={seed:5d}  ERROR")
 
-    cpu_delta, log_offset = read_log_delta(log_path, log_offset, wait=True)
+    cpu_delta, log_offset = read_log_delta(log_path, log_offset, wait_secs=15.0)
     g2c = cpu_delta.get("GPU_to_CPU_total_bytes", 0.0)
     c2g = cpu_delta.get("CPU_to_GPU_total_bytes", 0.0)
 
@@ -562,65 +473,27 @@ def run_phase_independent(
 
 # ── main ──────────────────────────────────────────────────────────
 
-
 def main():
-    parser = argparse.ArgumentParser(
-        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
-    )
-    parser.add_argument("--url", default=DEFAULT_URL)
-    parser.add_argument("--model", default=DEFAULT_MODEL)
-    parser.add_argument("--log", default=DEFAULT_WORKER_LOG)
-    parser.add_argument(
-        "--mode",
-        choices=["claude-code", "independent"],
-        default="claude-code",
-        help="claude-code: multi-turn sessions (default); "
-        "independent: single-turn per seed (legacy)",
-    )
-    parser.add_argument(
-        "--fill",
-        type=int,
-        default=12,
-        help="sessions in Fill phase (claude-code) or "
-        "requests in Fill phase (independent) [default 12/20]",
-    )
-    parser.add_argument(
-        "--turns",
-        type=int,
-        default=NUM_TURNS,
-        help=f"turns per session in claude-code mode [default {NUM_TURNS}]",
-    )
-    parser.add_argument(
-        "--evict",
-        type=int,
-        default=15,
-        help="sessions/requests in Evict phase [default 15/25]",
-    )
-    parser.add_argument(
-        "--recall",
-        type=int,
-        default=6,
-        help="Fill sessions/requests to replay in Recall [default 6/15]",
-    )
-    parser.add_argument(
-        "--evict-turns",
-        type=int,
-        default=4,
-        help="turns per session in the Evict phase [default 4]. "
-        "Evict only needs enough blocks to overflow the GPU; it does not "
-        "need the same large context as fill.  Keeping this small speeds up "
-        "the test without affecting recall bandwidth.",
-    )
-    parser.add_argument(
-        "--no-evict", action="store_true", help="Skip eviction — GPU-hit baseline only"
-    )
-    parser.add_argument(
-        "--pure-bw",
-        action="store_true",
-        help="Recall phase: re-send last fill prompt + 1-token continuation "
-        "with max_tokens=1.  TTFT ≈ KV-load time + 1 decode step, "
-        "matching kvcache_benchmark_h100.py methodology.",
-    )
+    parser = argparse.ArgumentParser(description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--url",      default=DEFAULT_URL)
+    parser.add_argument("--model",    default=DEFAULT_MODEL)
+    parser.add_argument("--log",      default=DEFAULT_WORKER_LOG)
+    parser.add_argument("--mode",     choices=["claude-code", "independent"],
+                        default="claude-code",
+                        help="claude-code: multi-turn sessions (default); "
+                             "independent: single-turn per seed (legacy)")
+    parser.add_argument("--fill",     type=int, default=12,
+                        help="sessions in Fill phase (claude-code) or "
+                             "requests in Fill phase (independent) [default 12/20]")
+    parser.add_argument("--turns",    type=int, default=NUM_TURNS,
+                        help=f"turns per session in claude-code mode [default {NUM_TURNS}]")
+    parser.add_argument("--evict",    type=int, default=15,
+                        help="sessions/requests in Evict phase [default 15/25]")
+    parser.add_argument("--recall",   type=int, default=6,
+                        help="Fill sessions/requests to replay in Recall [default 6/15]")
+    parser.add_argument("--no-evict", action="store_true",
+                        help="Skip eviction — GPU-hit baseline only")
     args = parser.parse_args()
 
     print(f"\nKV Offload Stress Test  [{args.mode} mode]")
@@ -628,18 +501,14 @@ def main():
     print(f"  model    : {args.model}")
     print(f"  log      : {args.log}")
     if args.mode == "claude-code":
-        print(
-            f"  fill={args.fill} sessions × {args.turns} turns  "
-            f"evict={0 if args.no_evict else args.evict} sessions  "
-            f"recall={args.recall} sessions"
-        )
+        print(f"  fill={args.fill} sessions × {args.turns} turns  "
+              f"evict={0 if args.no_evict else args.evict} sessions  "
+              f"recall={args.recall} sessions")
         print(f"  system_prompt: ~{SYSTEM_PROMPT_TOKENS} tokens (shared)")
         print(f"  per_turn_tokens: ~{TOKENS_PER_TURN} tokens")
     else:
-        print(
-            f"  fill={args.fill}  evict={0 if args.no_evict else args.evict}  "
-            f"recall={args.recall}"
-        )
+        print(f"  fill={args.fill}  evict={0 if args.no_evict else args.evict}  "
+              f"recall={args.recall}")
 
     try:
         urllib.request.urlopen(f"{args.url}/health", timeout=5)
@@ -659,116 +528,61 @@ def main():
 
     if args.mode == "claude-code":
         system_prompt = make_system_prompt()
-        fill_sessions = list(range(args.fill))
+        fill_sessions  = list(range(args.fill))
         evict_sessions = list(range(100, 100 + args.evict))
-        recall_sessions = fill_sessions[: args.recall]
+        recall_sessions = fill_sessions[:args.recall]
 
         fill_ttfts, fill_delta, log_offset, fill_histories = run_phase_claude_code(
             "PHASE 1 — FILL (multi-turn sessions, blocks enter GPU + CPU)",
-            fill_sessions,
-            system_prompt,
-            args.turns,
-            args.url,
-            args.model,
-            args.log,
-            log_offset,
+            fill_sessions, system_prompt, args.turns,
+            args.url, args.model, args.log, log_offset,
         )
         results["fill"] = fill_ttfts
         # Snapshot LRU size after fill for overflow diagnostics
         fill_lru = _last_lru_size_from_log(args.log)
         results["fill_lru_size"] = fill_lru
-        if fill_lru:
-            blocks_per_session = fill_lru // max(1, args.fill)
-            max_safe = (17408 - fill_lru) // max(1, blocks_per_session)
-            print(
-                f"  [LRU after fill: {fill_lru} / 17408 blocks  "
-                f"free={17408-fill_lru}  "
-                f"max_safe_evict≈{max_safe} sessions]"
-            )
-        else:
-            print(f"  [LRU diagnostic unavailable: no lru_size= entries in log]")
+        print(f"  [LRU after fill: {fill_lru} / 17408 blocks  "
+              f"free={17408-fill_lru}  "
+              f"max_safe_evict≈{(17408-fill_lru)//(fill_lru//max(1,args.fill))} sessions]")
 
         if not args.no_evict:
             evict_ttfts, _, log_offset, _ = run_phase_claude_code(
                 "PHASE 2 — EVICT (new sessions push Fill blocks to CPU)",
-                evict_sessions,
-                system_prompt,
-                args.evict_turns,   # separate turn count — only needs to overflow GPU
-                args.url,
-                args.model,
-                args.log,
-                log_offset,
+                evict_sessions, system_prompt, args.turns,
+                args.url, args.model, args.log, log_offset,
             )
             results["evict"] = evict_ttfts
 
         recall_ttfts, recall_delta, log_offset = run_phase_claude_code_recall(
             "PHASE 3 — RECALL (resume Fill sessions — loads blocks from CPU)",
-            recall_sessions,
-            system_prompt,
-            fill_histories,
-            args.url,
-            args.model,
-            args.log,
-            log_offset,
-            pure_bw=args.pure_bw,
+            recall_sessions, system_prompt, fill_histories,
+            args.url, args.model, args.log, log_offset,
         )
         results["recall"] = recall_ttfts
         results["recall_c2g_bytes"] = recall_delta.get("CPU_to_GPU_total_bytes", 0.0)
 
-        # Baseline runs AFTER recall — fill blocks are back in GPU from recall,
-        # so re-sending the same prompt is a GPU hit.  TTFT = pure decode overhead.
-        # Running baseline BEFORE evict would warm up fill blocks in LRU and
-        # prevent them from being evicted, so the order matters.
-        if args.pure_bw:
-            baseline_ttfts, _, log_offset = run_phase_claude_code_recall(
-                "PHASE 4 — DECODE BASELINE (GPU hit after recall — pure decode overhead)",
-                recall_sessions,
-                system_prompt,
-                fill_histories,
-                args.url,
-                args.model,
-                args.log,
-                log_offset,
-                pure_bw=True,
-            )
-            results["decode_baseline"] = baseline_ttfts
-            print(f"  [baseline] GPU-hit TTFT = {statistics.mean(baseline_ttfts):.0f} ms "
-                  f"(pure decode overhead, no transfer)")
-
     else:
         # Legacy independent mode
-        fill_seeds = list(range(args.fill))
-        evict_seeds = list(range(10000, 10000 + args.evict))
-        recall_seeds = fill_seeds[: args.recall]
+        fill_seeds   = list(range(args.fill))
+        evict_seeds  = list(range(10000, 10000 + args.evict))
+        recall_seeds = fill_seeds[:args.recall]
 
         fill_ttfts, _, log_offset = run_phase_independent(
             "PHASE 1 — FILL (cold prefill, blocks enter GPU)",
-            fill_seeds,
-            args.url,
-            args.model,
-            args.log,
-            log_offset,
+            fill_seeds, args.url, args.model, args.log, log_offset,
         )
         results["fill"] = fill_ttfts
 
         if not args.no_evict:
             evict_ttfts, _, log_offset = run_phase_independent(
                 "PHASE 2 — EVICT (new prefixes push Fill blocks to CPU)",
-                evict_seeds,
-                args.url,
-                args.model,
-                args.log,
-                log_offset,
+                evict_seeds, args.url, args.model, args.log, log_offset,
             )
             results["evict"] = evict_ttfts
 
         recall_ttfts, recall_delta, log_offset = run_phase_independent(
             "PHASE 3 — RECALL (re-request Fill prefixes — loads from CPU)",
-            recall_seeds,
-            args.url,
-            args.model,
-            args.log,
-            log_offset,
+            recall_seeds, args.url, args.model, args.log, log_offset,
         )
         results["recall"] = recall_ttfts
         results["recall_c2g_bytes"] = recall_delta.get("CPU_to_GPU_total_bytes", 0.0)
@@ -782,51 +596,30 @@ def main():
             print(f"  {name:8s} : {fmt(ttfts)}")
 
     if results.get("fill") and results.get("recall"):
+        overhead = statistics.mean(results["recall"]) - statistics.mean(results["fill"])
+        sign = "+" if overhead >= 0 else ""
         recall_c2g = results.get("recall_c2g_bytes", 0.0)
-        recall_ms = statistics.mean(results["recall"])
-
-        if hasattr(args, "pure_bw") and args.pure_bw and results.get("decode_baseline"):
-            baseline_ms = statistics.mean(results["decode_baseline"])
-            transfer_ms = recall_ms - baseline_ms
-            print(f"\n  [pure-bw] recall TTFT (CPU load):      {recall_ms:.0f} ms")
-            print(f"  [pure-bw] baseline TTFT (GPU hit):      {baseline_ms:.0f} ms")
-            print(f"  [pure-bw] net transfer time:            {transfer_ms:.0f} ms")
-            print(f"  CPU→GPU bytes in recall: {fmt_bytes(recall_c2g)}")
-            if recall_c2g > 0 and transfer_ms > 0:
-                bw_gbs = recall_c2g / 1e9 / (transfer_ms / 1e3)
-                print(f"  [pure-bw] effective CPU→GPU bandwidth:  {bw_gbs:.1f} GB/s")
-                print(f"  ✓ CPU offloading confirmed — blocks loaded from CPU tier")
-            elif recall_c2g > 0:
-                print(f"  ✓ CPU offloading confirmed (transfer_ms ≤ 0, check baseline ordering)")
+        print(f"\n  TTFT overhead (recall - fill mean): {sign}{overhead:.0f} ms")
+        print(f"  CPU→GPU bytes in recall: {fmt_bytes(recall_c2g)}")
+        if recall_c2g > 0:
+            print(f"  ✓ CPU offloading confirmed — blocks loaded from CPU tier")
+        elif overhead > 200:
+            print(f"  ✗ Recall is slow but CPU→GPU = 0 B")
+            print(f"    Likely cause: evict phase overflowed the CPU LRU, evicting fill blocks")
+            print(f"    Overhead is recompute penalty, NOT CPU load")
+            print(f"    Fix: reduce --evict so fill blocks stay in LRU")
+            # Estimate max safe evict sessions
+            fill_lru = results.get("fill_lru_size", 0)
+            if fill_lru:
+                free = 17408 - fill_lru
+                blocks_per_session = fill_lru // max(1, args.fill if hasattr(args, 'fill') else 15)
+                max_evict = free // max(1, blocks_per_session)
+                print(f"    LRU after fill: {fill_lru} / 17408 blocks")
+                print(f"    Free slots: {free}  →  max safe evict ≈ {max_evict} sessions")
         else:
-            overhead = recall_ms - statistics.mean(results["fill"])
-            sign = "+" if overhead >= 0 else ""
-            print(f"\n  TTFT overhead (recall - fill mean): {sign}{overhead:.0f} ms")
-            print(f"  CPU→GPU bytes in recall: {fmt_bytes(recall_c2g)}")
-            if recall_c2g > 0:
-                print(f"  ✓ CPU offloading confirmed — blocks loaded from CPU tier")
-            elif overhead > 200:
-                print(f"  ✗ Recall is slow but CPU→GPU = 0 B")
-                print(
-                    f"    Likely cause: evict phase overflowed the CPU LRU, evicting fill blocks"
-                )
-                print(f"    Overhead is recompute penalty, NOT CPU load")
-                print(f"    Fix: reduce --evict so fill blocks stay in LRU")
-                fill_lru = results.get("fill_lru_size", 0)
-                if fill_lru:
-                    free = 17408 - fill_lru
-                    blocks_per_session = fill_lru // max(
-                        1, args.fill if hasattr(args, "fill") else 15
-                    )
-                    max_evict = free // max(1, blocks_per_session)
-                    print(f"    LRU after fill: {fill_lru} / 17408 blocks")
-                    print(
-                        f"    Free slots: {free}  →  max safe evict ≈ {max_evict} sessions"
-                    )
-            else:
-                print(f"  ✗ No clear overhead detected")
-                print(f"    Check worker log for 'External prefix cache hit rate'")
-                print(f"    If 0.0%: prefix hash mismatch (tokenizer/config issue)")
+            print(f"  ✗ No clear overhead detected")
+            print(f"    Check worker log for 'External prefix cache hit rate'")
+            print(f"    If 0.0%: prefix hash mismatch (tokenizer/config issue)")
     print(f"{'═'*60}\n")
 
 

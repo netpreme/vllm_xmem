@@ -8,13 +8,19 @@ from vllm.config import KVTransferConfig
 
 CPU_CACHE_SIZE_GB = 64
 CPU_BLOCK_SIZE = 128
-GPU_BLOCK_SIZE = 128
+GPU_BLOCK_SIZE = 16
 NUM_DECODED_TOKENS_PER_PROMPT = 1
 
 MODEL = "Qwen/Qwen3-30B-A3B-Instruct-2507-FP8"
-MODEL = "Qwen/Qwen2.5-Coder-32B"
-# sizeof(element) * head_size * num_heads * |{k,v}| * layer_count
 KV_SIZE_PER_TOKEN = 2 * 128 * 4 * 2 * 48
+MAX_MODEL_LEN = 262144
+
+# MODEL = "Qwen/Qwen2.5-Coder-32B"
+# KV_SIZE_PER_TOKEN = 2 * 128 * 8 * 2 * 64
+# MAX_MODEL_LEN = 21000
+
+
+# sizeof(element) * head_size * num_heads * |{k,v}| * layer_count
 
 cpu_bytes_to_use = CPU_CACHE_SIZE_GB << 30
 cache_tokens_capacity = cpu_bytes_to_use // KV_SIZE_PER_TOKEN
@@ -88,6 +94,7 @@ def main(run_ttft: bool, run_tput: bool):
         llm = LLM(
             model=MODEL,
             block_size=GPU_BLOCK_SIZE,
+            max_model_len=MAX_MODEL_LEN,
             enable_prefix_caching=False,
             kv_transfer_config=ktc,
             kv_offload_mtier=use_xmem
@@ -112,6 +119,7 @@ def main(run_ttft: bool, run_tput: bool):
                     start_time = time.perf_counter()
                     outputs = llm.generate(prompt, sampling_params, use_tqdm=False)
                     total_prefill_time += time.perf_counter() - start_time
+                    llm.llm_engine.model_executor.driver_worker.wait_for_kv_offload()
 
                 average_prefill_time_ms = int(
                     1000 * (total_prefill_time / iterations_count)
