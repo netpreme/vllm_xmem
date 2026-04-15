@@ -39,13 +39,15 @@
 #    dynamo_frontend_model_total_kv_blocks      — GPU block count
 #
 #
-#  Usage:  ./launch_dynamo.sh           # CPU tier (pinned RAM)
-#          ./launch_dynamo.sh --mtier   # xmem chip tier
+#  Usage:  ./launch_dynamo.sh                         # scenario 3: hybrid CPU offload (default)
+#          ./launch_dynamo.sh --no-offload            # scenario 1: all KV stays in HBM
+#          ./launch_dynamo.sh --force-offload         # scenario 2: always evict → CPU
+#          ./launch_dynamo.sh --mtier                 # scenario 3: hybrid xmem chip offload
+#          ./launch_dynamo.sh --mtier --force-offload # scenario 2: always evict → xmem chip
 #  Stop:   Ctrl-C
+#  Env:    FORCE_OFFLOAD_GPU_BLOCKS=256  — GPU KV block cap for --force-offload
 #  Logs:   tail -f /tmp/dynamo_worker_<PORT>.log /tmp/dynamo_frontend_<PORT>.log
 
-# mtier_service reset
-# nvidia-smi --query-compute-apps=pid --format=csv,noheader --id=0 | xargs -r kill -9
 # ═══════════════════════════════════════════════════════════════
 set -euo pipefail
 
@@ -75,9 +77,13 @@ fi
 
 # ── Parse flags ─────────────────────────────────────────────────
 USE_MTIER=0
+FORCE_OFFLOAD=0
+NO_OFFLOAD=0
 for arg in "$@"; do
     case "$arg" in
-        --mtier) USE_MTIER=1 ;;
+        --mtier)         USE_MTIER=1 ;;
+        --force-offload) FORCE_OFFLOAD=1 ;;
+        --no-offload)    NO_OFFLOAD=1 ;;
         *) echo "Unknown argument: $arg" >&2; exit 1 ;;
     esac
 done
@@ -93,10 +99,30 @@ GPU_MEM_UTIL="${GPU_MEMORY_UTILIZATION:-0.92}"
 KV_TIER="cpu"
 MTIER_FLAG=""
 KV_OFFLOAD_SIZE="72"
+KV_OFFLOAD_FLAG="--kv-offloading-size"
 if [[ "$USE_MTIER" == "1" ]]; then
     KV_TIER="chip"
     MTIER_FLAG="--kv-offloading-mtier"
     KV_OFFLOAD_SIZE="68"   # chip has 77.3 GB total; 68 -> ~73 GB actual, 4 GB headroom
+fi
+
+# --no-offload: disable KV offloading entirely — all KV blocks stay in HBM
+if [[ "$NO_OFFLOAD" == "1" ]]; then
+    KV_TIER="hbm-only"
+    KV_OFFLOAD_FLAG=""
+    KV_OFFLOAD_SIZE=""
+    MTIER_FLAG=""
+fi
+
+# --force-offload: cap GPU KV blocks to a small number so the GPU cache fills
+# immediately even at low load, forcing every block through the evict→CPU/MTier→
+# fetch cycle. store_threshold=0 (default) ensures eager store on every eviction.
+# Tune FORCE_OFFLOAD_GPU_BLOCKS to trade off perf vs. transfer pressure.
+FORCE_OFFLOAD_FLAG=""
+FORCE_OFFLOAD_GPU_BLOCKS="${FORCE_OFFLOAD_GPU_BLOCKS:-256}"
+if [[ "$FORCE_OFFLOAD" == "1" ]]; then
+    FORCE_OFFLOAD_FLAG="--num-gpu-blocks-override $FORCE_OFFLOAD_GPU_BLOCKS"
+    KV_TIER="${KV_TIER}+forced-evict(${FORCE_OFFLOAD_GPU_BLOCKS} GPU blocks)"
 fi
 
 # Use CUDA_VISIBLE_DEVICES from environment or .env; default to 0 if unset
@@ -136,10 +162,24 @@ TAIL_PID=""
 cleanup() {
     echo ""
     echo "Stopping Dynamo..."
-    [[ -n "$TAIL_PID" ]] && kill $TAIL_PID 2>/dev/null
-    [[ -n "$FRONTEND_PID" ]] && kill $FRONTEND_PID 2>/dev/null
-    [[ -n "$WORKER_PID" ]] && kill $WORKER_PID 2>/dev/null
-    wait 2>/dev/null
+    [[ -n "$TAIL_PID"     ]] && kill "$TAIL_PID"     2>/dev/null || true
+    [[ -n "$FRONTEND_PID" ]] && kill "$FRONTEND_PID" 2>/dev/null || true
+    [[ -n "$WORKER_PID"   ]] && kill "$WORKER_PID"   2>/dev/null || true
+    wait 2>/dev/null || true
+
+    # Kill any remaining processes still holding GPU memory on our devices
+    echo "Freeing GPU memory on device(s): $CVD ..."
+    for gpu_id in ${CVD//,/ }; do
+        nvidia-smi --query-compute-apps=pid --format=csv,noheader --id="$gpu_id" 2>/dev/null \
+            | xargs -r kill -9 2>/dev/null || true
+    done
+
+    # Reset MTier chip memory if we used it
+    if [[ "$USE_MTIER" == "1" ]]; then
+        echo "Resetting MTier memory..."
+        echo "yes" | mtier_service reset 2>/dev/null || true
+    fi
+
     echo "Done."
     exit 0
 }
@@ -151,8 +191,7 @@ CUDA_VISIBLE_DEVICES="$CVD" \
 PYTHONHASHSEED=0 \
 VLLM_ALLOW_LONG_MAX_MODEL_LEN=1 \
 HF_HUB_OFFLINE=1 \
-
-# --dyn-chat-processor vllm \
+DYN_SYSTEM_PORT=8081 \
 DYN_FILE_KV="$STORE_PATH" \
     "$PYTHON_BIN" -m dynamo.vllm \
         --model "$MODEL" \
@@ -162,8 +201,9 @@ DYN_FILE_KV="$STORE_PATH" \
         --max-model-len "$MAX_MODEL_LEN" \
         --gpu-memory-utilization "$GPU_MEM_UTIL" \
         --enable-prefix-caching \
-        --kv-offloading-size "$KV_OFFLOAD_SIZE" \
+        ${KV_OFFLOAD_FLAG:+$KV_OFFLOAD_FLAG "$KV_OFFLOAD_SIZE"} \
         ${MTIER_FLAG:+$MTIER_FLAG} \
+        ${FORCE_OFFLOAD_FLAG:+$FORCE_OFFLOAD_FLAG} \
         --discovery-backend file \
         --kv-events-config '{"enable_kv_cache_events": false}' \
         > "$WORKER_LOG" 2>&1 &
@@ -180,6 +220,10 @@ DYN_FILE_KV="$STORE_PATH" \
     --discovery-backend file \
     --enable-anthropic-api \
     --dyn-chat-processor vllm \
+    --router-mode kv \
+    --no-router-kv-events \
+    --enable-auto-tool-choice \
+    --tool-call-parser hermes \
     > "$FRONTEND_LOG" 2>&1 &
 FRONTEND_PID=$!
 echo "      PID $FRONTEND_PID  (log: $FRONTEND_LOG)"

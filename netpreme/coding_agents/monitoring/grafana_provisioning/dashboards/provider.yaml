@@ -1,0 +1,10 @@
+apiVersion: 1
+
+providers:
+  - name: vllm-xmem
+    type: file
+    disableDeletion: true
+    updateIntervalSeconds: 10
+    options:
+      path: /home/ubuntu/vllm_xmem/netpreme/coding_agents/monitoring/grafana_provisioning/dashboards
+      foldersFromFilesStructure: false

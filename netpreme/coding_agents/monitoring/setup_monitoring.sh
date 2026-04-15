@@ -16,9 +16,7 @@ sudo systemctl disable prometheus 2>/dev/null || true
 # ── 2. Install prometheus_client Python package ──────────────
 echo "Installing prometheus_client Python package..."
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
-PYTHON_BIN="${PYTHON_BIN:-${REPO_ROOT}/.venv/bin/python}"
-[[ ! -x "$PYTHON_BIN" ]] && PYTHON_BIN="$(command -v python3)"
-"$PYTHON_BIN" -m pip install prometheus_client --quiet
+uv pip install prometheus_client --quiet --python "${REPO_ROOT}/.venv"
 
 # ── 3. Download Grafana standalone binary ────────────────────
 GRAFANA_DIR="$HOME/grafana"

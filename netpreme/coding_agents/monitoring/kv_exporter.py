@@ -4,14 +4,18 @@ Prometheus exporter for vLLM KV transfer metrics.
 
 Tails the dynamo worker log and exposes KV offload metrics
 (bytes transferred CPU↔GPU, request TTFT) on port 9091.
+Also scrapes the vLLM worker metrics endpoint to expose a
+prefix cache hit rate gauge (vLLM's ground truth).
 
 Usage:
     python3 kv_exporter.py [--log /tmp/dynamo_worker_8000.log] [--port 9091]
+                           [--vllm-url http://localhost:8081]
 """
 import argparse
 import glob
 import re
 import time
+import urllib.request
 from threading import Thread
 
 from prometheus_client import Counter, Gauge, Histogram, start_http_server
@@ -52,6 +56,12 @@ ttft_histogram = Histogram(
     buckets=[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.8, 1.0, 1.5, 2.0, 3.0, 5.0],
 )
 
+# Prefix cache hit rate — vLLM ground truth (delta of counters per poll)
+prefix_cache_hit_rate = Gauge(
+    "vllm_prefix_cache_hit_rate",
+    "Prefix cache hit rate: delta(hits_total) / delta(queries_total) over last poll interval",
+)
+
 # Log parse health
 log_parse_errors = Counter(
     "vllm_kv_exporter_parse_errors_total",
@@ -65,6 +75,12 @@ log_bytes_read = Counter(
 # ── Log pattern ───────────────────────────────────────────────────
 KV_PATTERN = re.compile(r"KV Transfer metrics:\s+(.+?)(?:\n|$)")
 KV_KV_PATTERN = re.compile(r"(\w+)\s*=\s*([0-9.eE+\-]+)")
+
+# ── vLLM metrics scrape patterns ──────────────────────────────────
+# Match metric lines with optional labels, e.g.:
+#   vllm:prefix_cache_hits_total{model_name="Qwen/..."} 12345.0
+_HITS_RE    = re.compile(r'^vllm:prefix_cache_hits_total(?:\{[^}]*\})?\s+(\S+)')
+_QUERIES_RE = re.compile(r'^vllm:prefix_cache_queries_total(?:\{[^}]*\})?\s+(\S+)')
 
 
 def parse_kv_line(line: str) -> dict[str, float]:

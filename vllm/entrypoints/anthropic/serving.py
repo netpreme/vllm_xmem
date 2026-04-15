@@ -168,6 +168,14 @@ class AnthropicServingMessages(OpenAIServingChat):
             else:
                 cls._convert_message_content(msg, openai_msg, openai_messages)
 
+            # Skip the wrapper if _convert_message_content consumed all blocks
+            # directly into openai_messages (e.g. tool_result blocks become
+            # role="tool" messages). In that case openai_msg has only "role"
+            # and no "content"/"tool_calls" — appending it would produce an
+            # empty user/assistant message that breaks chat-template rendering.
+            if "content" not in openai_msg and "tool_calls" not in openai_msg:
+                continue
+
             openai_messages.append(openai_msg)
 
     @classmethod
@@ -417,6 +425,28 @@ class AnthropicServingMessages(OpenAIServingChat):
         """
         if logger.isEnabledFor(logging.DEBUG):
             logger.debug("Received messages request %s", request.model_dump_json())
+
+        # Claude Code fires a background title-generation request concurrently
+        # identified by "sentence-case title" in the system prompt.
+        # This request has nothing to do with the actual conversation — it only
+        # sets the sidebar label. We short-circuit it here and return a hardcoded
+        # {"title": "Chat"} so it never touches the vLLM engine or wastes a GPU slot.
+        if request.system and not isinstance(request.system, str) and any(
+            block.type == "text" and block.text and "sentence-case title" in block.text
+            for block in request.system
+        ):
+            logger.warning(
+                "Intercepted Claude Code title-generation request — returning canned "
+                'response {"title": "Chat"} without hitting vLLM. This is expected '
+                "behaviour: Claude Code fires this once per conversation."
+            )
+            return AnthropicMessagesResponse(
+                id=f"msg_{uuid.uuid4().hex[:24]}",
+                content=[AnthropicContentBlock(type="text", text='{"title": "Chat"}')],
+                model=request.model,
+                stop_reason="end_turn",
+                usage=AnthropicUsage(input_tokens=5, output_tokens=1),
+            )
         chat_req = self._convert_anthropic_to_openai_request(request)
         if logger.isEnabledFor(logging.DEBUG):
             logger.debug("Convert to OpenAI request %s", chat_req.model_dump_json())

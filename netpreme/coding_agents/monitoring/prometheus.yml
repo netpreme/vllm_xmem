@@ -3,13 +3,21 @@ global:
   evaluation_interval: 1s
 
 scrape_configs:
-  # Dynamo frontend metrics (TTFT, KV hit rate, request rate, token counts)
-  - job_name: dynamo_frontend
+  # vLLM + Dynamo frontend metrics: TTFT, ITL, e2e latency, scheduler, cache, token throughput
+  # Exposes both vllm:* and dynamo_component_router_* metrics
+  - job_name: vllm_frontend
     static_configs:
       - targets: ["localhost:8000"]
     metrics_path: /metrics
 
-  # Custom KV transfer exporter (CPU↔GPU bytes, bandwidth)
+  # vLLM worker metrics: vllm:* and dynamo_component_* from the backend process
+  # Requires DYN_SYSTEM_PORT=8081 set on the dynamo.vllm worker (see launch_dynamo.sh)
+  - job_name: vllm_worker
+    static_configs:
+      - targets: ["localhost:8081"]
+    metrics_path: /metrics
+
+  # Custom KV transfer exporter: CPU↔GPU bandwidth and byte counters (xmem/MTier)
   - job_name: vllm_kv_exporter
     static_configs:
       - targets: ["localhost:9091"]

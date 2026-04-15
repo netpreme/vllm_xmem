@@ -1,0 +1,5 @@
+hello
+can you code me standard dot product attention in pytorch
+now in cpp
+now in rust
+code me flash attetion in CUDA, very short version
