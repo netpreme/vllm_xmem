@@ -121,12 +121,12 @@ for arg in "$@"; do
 done
 
 # ── Core settings ────────────────────────────────────────────────
-MODEL="${MODEL:-Qwen/Qwen2.5-Coder-32B-Instruct}"
+MODEL="${MODEL:-qwen/qwen3-coder-30b-a3b-instruct-fp8}"
 HOST="${HOST:-0.0.0.0}"
 PORT="${PORT:-8000}"          # also used by run_claude_local.sh
-TP="${TENSOR_PARALLEL_SIZE:-1}"
+TP="${TENSOR_PARALLEL_SIZE:-2}"
 DTYPE="${DTYPE:-auto}"
-MAX_MODEL_LEN="${MAX_MODEL_LEN:-65536}"
+MAX_MODEL_LEN="${MAX_MODEL_LEN:-262144}"
 # fp8 KV cache halves per-token KV memory (131 KB vs 262 KB in bf16), allowing
 # the startup check to pass with 9.33 GiB GPU KV for up to ~76K tokens.
 # At MAX_MODEL_LEN=65536 the check needs 8.0 GiB < 9.33 GiB available.
@@ -134,7 +134,7 @@ KV_CACHE_DTYPE="${KV_CACHE_DTYPE:-fp8}"
 GPU_MEM_UTIL="${GPU_MEMORY_UTILIZATION:-0.92}"
 
 # Use CUDA_VISIBLE_DEVICES from env or .env; default to 0 if unset
-CVD="${CUDA_VISIBLE_DEVICES:-0}"
+CVD="${CUDA_VISIBLE_DEVICES:-0,1}"
 
 VLLM_LOG="${VLLM_LOG:-/tmp/vllm_server_${PORT}.log}"
 
@@ -149,10 +149,12 @@ KV_OFFLOAD_FLAG=""
 KV_OFFLOAD_SIZE=""
 KV_TRANSFER_CONFIG=""
 MTIER_FLAG=""
+DISABLE_HMA_FLAG=""
 
 case "$MODE" in
     hbm-only)
         # GPU HBM prefix cache only. No OffloadingConnector.
+        # HMA left enabled — no connector conflict.
         PREFIX_CACHE_FLAG="--enable-prefix-caching"
         ;;
 
@@ -163,6 +165,7 @@ case "$MODE" in
         KV_OFFLOAD_FLAG="--kv-offloading-size"
         KV_OFFLOAD_SIZE="72"
         KV_TRANSFER_CONFIG='{"kv_connector":"OffloadingConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":77309411328,"store_threshold":0,"eviction_policy":"lru"}}'
+        DISABLE_HMA_FLAG="--disable-hybrid-kv-cache-manager"
         ;;
 
     mtier-only)
@@ -172,6 +175,7 @@ case "$MODE" in
         KV_OFFLOAD_SIZE="68"
         MTIER_FLAG="--kv-offloading-mtier"
         KV_TRANSFER_CONFIG='{"kv_connector":"OffloadingConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":73014444032,"store_threshold":0,"eviction_policy":"lru"}}'
+        DISABLE_HMA_FLAG="--disable-hybrid-kv-cache-manager"
         ;;
 
     hybrid-cpu)
@@ -180,6 +184,7 @@ case "$MODE" in
         KV_OFFLOAD_FLAG="--kv-offloading-size"
         KV_OFFLOAD_SIZE="72"
         KV_TRANSFER_CONFIG='{"kv_connector":"OffloadingConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":77309411328,"store_threshold":0,"eviction_policy":"lru"}}'
+        DISABLE_HMA_FLAG="--disable-hybrid-kv-cache-manager"
         ;;
 
     hybrid-mtier)
@@ -189,6 +194,7 @@ case "$MODE" in
         KV_OFFLOAD_SIZE="68"
         MTIER_FLAG="--kv-offloading-mtier"
         KV_TRANSFER_CONFIG='{"kv_connector":"OffloadingConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":73014444032,"store_threshold":0,"eviction_policy":"lru"}}'
+        DISABLE_HMA_FLAG="--disable-hybrid-kv-cache-manager"
         ;;
 esac
 
@@ -263,25 +269,32 @@ HF_HUB_OFFLINE=1 \
         ${KV_OFFLOAD_FLAG:+$KV_OFFLOAD_FLAG "$KV_OFFLOAD_SIZE"} \
         ${MTIER_FLAG:+$MTIER_FLAG} \
         ${KV_TRANSFER_CONFIG:+--kv-transfer-config "$KV_TRANSFER_CONFIG"} \
+        ${DISABLE_HMA_FLAG:+$DISABLE_HMA_FLAG} \
         --override-generation-config '{"temperature":0,"seed":42}' \
         --enable-auto-tool-choice \
-        --tool-call-parser hermes \
+        --tool-call-parser qwen3_coder \
         > "$VLLM_LOG" 2>&1 &
 VLLM_PID=$!
 echo "      PID $VLLM_PID  (log: $VLLM_LOG)"
 
 # ── Wait for health ───────────────────────────────────────────────
 echo ""
-echo "[2/2] Waiting for vLLM to be ready (model load ~2-3 min)..."
+echo "[2/2] Waiting for vLLM to be ready — streaming log:"
+echo ""
+tail -f "$VLLM_LOG" | grep -v '"GET /metrics HTTP' &
+TAIL_PID=$!
+
 until curl -sf "http://localhost:$PORT/health" > /dev/null 2>&1; do
     if ! kill -0 "$VLLM_PID" 2>/dev/null; then
+        kill "$TAIL_PID" 2>/dev/null || true
         echo ""
         echo "ERROR: vLLM died. Check: tail $VLLM_LOG"
         cleanup
     fi
-    printf "."
-    sleep 5
+    sleep 2
 done
+kill "$TAIL_PID" 2>/dev/null || true
+TAIL_PID=""
 echo ""
 echo "  vLLM ready!"
 echo ""
