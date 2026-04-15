@@ -87,7 +87,7 @@ echo "  model              = $MODEL"
 echo "  task               = $TASK"
 echo ""
 
-exec env \
+env \
     ANTHROPIC_BASE_URL="$BASE_URL" \
     ANTHROPIC_API_KEY="dummy" \
     ANTHROPIC_AUTH_TOKEN="dummy" \
@@ -97,4 +97,6 @@ exec env \
     claude --model "$MODEL" \
            --dangerously-skip-permissions \
            --verbose \
-           -p "$TASK"
+           --output-format stream-json \
+           -p "$TASK" \
+  | python3 "${SCRIPT_DIR}/parse_stream.py"

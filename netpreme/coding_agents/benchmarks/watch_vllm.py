@@ -31,6 +31,7 @@ Usage:
 """
 
 import argparse
+import json
 import os
 import re
 import signal
@@ -41,6 +42,39 @@ from datetime import datetime
 from typing import Optional
 
 import requests
+
+# ── shared tool-call sidecar file (written by run_swebench.py) ────────────────
+# Format: JSON array, one entry per turn:
+#   [{"turn": 1, "tool_calls": 2, "tool_names": ["Read", "Bash"]}, ...]
+TOOL_CALLS_FILE = "/tmp/vllm_tool_calls.json"
+
+
+def _read_tool_entry(turn_idx: int) -> tuple[Optional[int], Optional[list]]:
+    """Read tool call count and names for turn_idx (1-based) from the sidecar file."""
+    try:
+        with open(TOOL_CALLS_FILE) as f:
+            data = json.load(f)
+        entry = next((e for e in data if e.get("turn") == turn_idx), None)
+        if entry:
+            return entry.get("tool_calls"), entry.get("tool_names", [])
+    except Exception:
+        pass
+    return None, None
+
+
+def _fmt_tools(count: Optional[int], names: Optional[list]) -> str:
+    if count is None:
+        return "-"
+    if count == 0:
+        return "0"
+    # Deduplicate names preserving order, e.g. Read×3 → "Read×3"
+    seen: dict[str, int] = {}
+    for n in (names or []):
+        seen[n] = seen.get(n, 0) + 1
+    parts = [f"{n}×{c}" if c > 1 else n for n, c in seen.items()]
+    label = ",".join(parts)
+    return f"{count} [{label}]"
+
 
 # ── optional matplotlib ────────────────────────────────────────────────────────
 try:
@@ -76,6 +110,8 @@ class Turn:
     queue_ms: Optional[float]   # time spent waiting in scheduler queue (ms)
     prefill_ms: Optional[float] # time for prefill phase (ms)
     decode_ms: Optional[float]  # time for decode phase (ms)
+    tool_calls: Optional[int] = None        # tool calls this turn (from Claude stream-json sidecar)
+    tool_names: Optional[list] = None      # tool names this turn
 
 
 # ── Prometheus text format parser ─────────────────────────────────────────────
@@ -420,8 +456,8 @@ def save_chart(turns: list[Turn], path: str) -> None:
     bar(axes[1][1], g2c_mb, "GPU→CPU Offload (MB)", "#59a14f", "MB")
     bar(axes[1][2], c2g_mb, "CPU→GPU Recall (MB)",  "#76b7b2", "MB")
 
-    # axes[1][3] unused — hide it
-    axes[1][3].set_visible(False)
+    tool_calls_data = [t.tool_calls or 0 for t in turns]
+    bar(axes[1][3], tool_calls_data, "Tool Calls per Turn", "#e15759", "count")
 
     plt.tight_layout()
     plt.savefig(path, dpi=150)
@@ -453,7 +489,8 @@ def main():
            f"  {'TTFT':>8}  {'ITL':>8}  {'E2E':>8}"
            f"  {'GPU$':>7}  {'CPU$':>7}"
            f"  {'gCum':>7}  {'cCum':>7}"
-           f"  {'G→C':>8}  {'C→G':>8}")
+           f"  {'G→C':>8}  {'C→G':>8}"
+           f"  {'Tools':<30}")
     sep = "─" * len(hdr)
     print(sep)
     print(hdr)
@@ -640,6 +677,7 @@ def main():
                         gpu_hit, cpu_hit, gpu_cumul, cpu_cumul,
                         d_g2c, d_c2g,
                         queue_ms_, prefill_ms_, decode_ms_,
+                        **dict(zip(("tool_calls", "tool_names"), _read_tool_entry(turn_idx))),
                     )
                     turns.append(t)
                     pending_turns.append(t)
@@ -687,6 +725,7 @@ def main():
                         f"  {fmt_f(None if t.cpu_cumul is None else t.cpu_cumul * 100, 1, '%'):>7}"
                         f"  {fmt_bytes(t.g2c_bytes):>8}"
                         f"  {fmt_bytes(t.c2g_bytes):>8}"
+                        f"  {_fmt_tools(t.tool_calls, t.tool_names):<30}"
                     )
                 pending_turns.clear()
                 idle_polls = 0
