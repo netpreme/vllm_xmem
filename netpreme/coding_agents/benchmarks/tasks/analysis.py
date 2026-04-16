@@ -27,11 +27,8 @@ import numpy as np
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
-
 SCRIPT_DIR  = Path(__file__).resolve().parent
 DEFAULT_DIR = SCRIPT_DIR / "results"
-OUT_FILE    = SCRIPT_DIR / "analysis.png"
 
 # Fixed instance sets (10 / 10 / 6) used for consistent comparisons.
 # To disable filtering and use all available results, set to None.
@@ -70,14 +67,6 @@ SELECTED_IDS: set[str] | None = {
 # difficulty levels in logical order
 LEVEL_ORDER = ["<15 min fix", "15 min - 1 hour", "1-4 hours", ">4 hours", "unknown"]
 
-METRICS = [
-    ("isl_per_turn",       "ISL / turn",        "tokens"),   # all per-turn values
-    ("osl_per_turn",       "OSL / turn",        "tokens"),   # all per-turn values
-    ("total_isl",          "Total ISL",         "tokens"),
-    ("total_osl",          "Total OSL",         "tokens"),
-    ("avg_tools_per_turn", "Avg tools / turn",  "count"),
-]
-
 COLORS  = ["#2196F3", "#E91E63", "#4CAF50", "#FF9800", "#9C27B0"]
 MARKERS = ["o", "s", "^", "D", "v"]
 
@@ -113,19 +102,24 @@ def extract(record: dict) -> dict | None:
     # Turn 0: cold start → 0 %
     # Turn N: cached prefix = prev_isl + prev_osl; new = tool result tokens
     # hit % = (prev_isl + prev_osl) / curr_isl * 100   [capped at 100]
-    cache_hits: list[float] = [0.0]   # turn 0 always cold
+    # Compaction turn (ISL drops vs prev): set to None — excluded from stats.
+    cache_hits: list[float | None] = [0.0]   # turn 0 always cold
     total_cached = 0.0
     for i in range(1, len(turns)):
         p_isl = turns[i - 1].get("isl") or 0
         p_osl = turns[i - 1].get("osl") or 0
         c_isl = turns[i].get("isl") or 0
-        hit   = min((p_isl + p_osl) / c_isl * 100, 100.0) if c_isl else 0.0
-        cache_hits.append(hit)
-        total_cached += min(p_isl + p_osl, c_isl)
+        if c_isl < p_isl:              # context compaction — ISL shrank
+            cache_hits.append(None)
+        else:
+            hit = min((p_isl + p_osl) / c_isl * 100, 100.0) if c_isl else 0.0
+            cache_hits.append(hit)
+            total_cached += min(p_isl + p_osl, c_isl)
 
     total_input         = sum(t.get("isl") or 0 for t in turns)
     overall_cache_hit   = total_cached / total_input * 100 if total_input else 0.0
-    avg_cache_hit       = float(np.mean(cache_hits[1:])) if len(cache_hits) > 1 else 0.0
+    valid_hits          = [h for h in cache_hits[1:] if h is not None]
+    avg_cache_hit       = float(np.mean(valid_hits)) if valid_hits else 0.0
 
     return {
         "instance_id":        record["instance_id"],
@@ -158,135 +152,51 @@ def sorted_levels(groups: dict) -> list[str]:
     return ordered
 
 
-# ── plotting ──────────────────────────────────────────────────────────────────
-
-def plot_panel(ax, datasets: list[tuple[str, dict]], metric: str, title: str, ylabel: str,
-               rng: np.random.Generator) -> None:
-    """Plot one metric panel with all datasets overlaid."""
-    # collect all levels across datasets to fix x positions
-    all_levels: list[str] = []
-    for _, grouped in datasets:
-        for lvl in sorted_levels(grouped):
-            if lvl not in all_levels:
-                all_levels.append(lvl)
-
-    n_ds     = len(datasets)
-    width    = 0.6 / max(n_ds, 1)   # per-dataset strip width within each level slot
-
-    for j, (name, grouped) in enumerate(datasets):
-        color  = COLORS[j % len(COLORS)]
-        marker = MARKERS[j % len(MARKERS)]
-        offset = (j - (n_ds - 1) / 2) * width
-
-        for xi, lvl in enumerate(all_levels):
-            raw = [r.get(metric) for r in grouped.get(lvl, [])]
-            # flatten: if values are lists (per-turn), expand them
-            vals = []
-            for v in raw:
-                if isinstance(v, list):
-                    vals.extend(v)
-                elif v is not None:
-                    vals.append(v)
-            if not vals:
-                continue
-            arr = np.array(vals, dtype=float)
-            jx  = xi + offset + rng.uniform(-width * 0.4, width * 0.4, len(arr))
-            ax.scatter(jx, arr, color=color, marker=marker, alpha=0.65, s=45, zorder=3)
-
-            m, s   = arr.mean(), arr.std()
-            x0, x1 = xi + offset - width * 0.45, xi + offset + width * 0.45
-            ax.hlines(m, x0, x1, colors=color, linewidths=2.5, zorder=4)
-            ax.fill_between([x0, x1], [m - s, m - s], [m + s, m + s],
-                            color=color, alpha=0.18, zorder=2)
-
-    # auto y-limit: clip at IQR fence (Q3 + 1.5×IQR) so outliers don't squash the view
-    all_vals: list[float] = []
-    for _, grouped in datasets:
-        for lvl in all_levels:
-            for r in grouped.get(lvl, []):
-                v = r.get(metric)
-                if isinstance(v, list):
-                    all_vals.extend(float(x) for x in v if x is not None)
-                elif v is not None:
-                    all_vals.append(float(v))
-    if all_vals:
-        arr_all = np.array(all_vals)
-        q1, q3  = np.percentile(arr_all, 25), np.percentile(arr_all, 75)
-        fence   = q3 + 1.5 * (q3 - q1)
-        y_max   = fence * 1.05
-        ax.set_ylim(bottom=max(0, arr_all.min() * 0.95), top=y_max)
-
-    ax.set_title(title, fontsize=11, fontweight="bold", pad=6)
-    ax.set_ylabel(ylabel, fontsize=9)
-    ax.set_xticks(range(len(all_levels)))
-    ax.set_xticklabels(all_levels, fontsize=8, rotation=15, ha="right")
-    ax.grid(axis="y", alpha=0.25, linestyle="--")
-    ax.spines[["top", "right"]].set_visible(False)
-    ax.yaxis.set_major_formatter(
-        matplotlib.ticker.FuncFormatter(
-            lambda v, _: f"{v/1000:.0f}k" if v >= 1000 else f"{v:.1f}"
-        )
-    )
-
-
-def summary_panel(ax, datasets: list[tuple[str, dict]]) -> None:
-    ax.axis("off")
-    lines = ["Instances loaded\n"]
-    for name, grouped in datasets:
-        total = sum(len(v) for v in grouped.values())
-        lines.append(f"{name}  ({total} runs)")
-        for lvl in sorted_levels(grouped):
-            recs = grouped[lvl]
-            turns = [r["total_turns"] for r in recs]
-            lines.append(
-                f"  {lvl:<20} n={len(recs):<3}  "
-                f"turns {min(turns)}-{max(turns)} (avg {np.mean(turns):.0f})"
-            )
-        lines.append("")
-    ax.text(0.04, 0.97, "\n".join(lines), transform=ax.transAxes,
-            fontsize=8, va="top", fontfamily="monospace",
-            bbox=dict(boxstyle="round,pad=0.4", facecolor="#f5f5f5", alpha=0.8))
-
-
 # ── cache figure ──────────────────────────────────────────────────────────────
 
 def plot_cache_figure(datasets: list[tuple[str, dict]], rng: np.random.Generator) -> None:
     """Second figure: cache hit % evolution (line) + overall distribution (scatter)."""
     fig, (ax_line, ax_dist) = plt.subplots(1, 2, figsize=(14, 5))
 
-    # ── left: per-turn mean ± std evolution ──────────────────────────────────
+    # ── left: per-turn mean with min/max band, starting from turn 1 ──────────
     for j, (name, grouped) in enumerate(datasets):
         ds_label = name if len(datasets) > 1 else None
         for li, lvl in enumerate(sorted_levels(grouped)):
             color  = COLORS[li % len(COLORS)]
             ls     = ["-", "--", ":", "-."][j % 4]
             series = [r["cache_hits_per_turn"] for r in grouped[lvl]]
+            if not series:
+                continue
             max_t  = max(len(s) for s in series)
 
-            xs, means, stds = [], [], []
-            for t in range(max_t):
-                vals = [s[t] for s in series if t < len(s)]
+            xs, means, mins, maxs = [], [], [], []
+            for t in range(1, max_t):   # start from 1, skip turn 0 (always 0)
+                # skip None (compaction turns)
+                vals = [s[t] for s in series if t < len(s) and s[t] is not None]
                 if len(vals) >= 2:
                     xs.append(t)
                     means.append(float(np.mean(vals)))
-                    stds.append(float(np.std(vals)))
+                    mins.append(float(np.min(vals)))
+                    maxs.append(float(np.max(vals)))
 
             lbl = f"{lvl}" + (f" [{ds_label}]" if ds_label else "")
             ax_line.plot(xs, means, color=color, linestyle=ls, linewidth=2, label=lbl)
-            ax_line.fill_between(xs,
-                                 [m - s for m, s in zip(means, stds)],
-                                 [m + s for m, s in zip(means, stds)],
-                                 color=color, alpha=0.12)
+            ax_line.fill_between(xs, mins, maxs, color=color, alpha=0.15)
 
-    ax_line.set_title("Cache hit % per turn\n(mean ± 1 std across instances)",
+    ax_line.set_title("Cache hit % per turn\n(turn 0 excluded · compaction turns excluded)",
                       fontsize=11, fontweight="bold")
-    ax_line.set_xlabel("Turn number", fontsize=9)
+    ax_line.set_xlabel("Turn", fontsize=9)
     ax_line.set_ylabel("Cache hit %", fontsize=9)
-    ax_line.set_ylim(-5, 105)
-    ax_line.axhline(0, color="gray", linewidth=0.5, linestyle="--")
-    ax_line.legend(fontsize=8, loc="lower right")
+    ax_line.set_ylim(45, 105)
     ax_line.grid(alpha=0.2, linestyle="--")
     ax_line.spines[["top", "right"]].set_visible(False)
+
+    # legend: level colors + explanation of line/band
+    existing_handles, existing_labels = ax_line.get_legend_handles_labels()
+    proxy_band  = matplotlib.patches.Patch(facecolor="gray", alpha=0.3,
+                                           label="░ min – max range")
+    ax_line.legend(handles=existing_handles + [proxy_band],
+                   fontsize=8, loc="lower right")
 
     # ── right: overall cache hit % per instance ───────────────────────────────
     all_levels: list[str] = []
@@ -303,35 +213,60 @@ def plot_cache_figure(datasets: list[tuple[str, dict]], rng: np.random.Generator
         marker = MARKERS[j % len(MARKERS)]
         offset = (j - (n_ds - 1) / 2) * width
 
+        # accumulate mean/median per level for legend labels
+        level_stats: dict[str, tuple[float, float]] = {}
         for xi, lvl in enumerate(all_levels):
-            vals = [r["overall_cache_hit_pct"] for r in grouped.get(lvl, [])]
+            # flatten all per-turn cache hit rates (turn 1+), skip None (compaction turns)
+            vals = []
+            for r in grouped.get(lvl, []):
+                vals.extend(v for v in r["cache_hits_per_turn"][1:] if v is not None)
             if not vals:
                 continue
             arr    = np.array(vals, dtype=float)
             jx     = xi + offset + rng.uniform(-width * 0.4, width * 0.4, len(arr))
-            ax_dist.scatter(jx, arr, color=color, marker=marker, alpha=0.65, s=50, zorder=3)
-            m, s   = arr.mean(), arr.std()
+            ax_dist.scatter(jx, arr, color=color, marker=marker, alpha=0.25, s=12, zorder=3)
+            m   = float(arr.mean())
+            med = float(np.median(arr))
+            level_stats[lvl] = (m, med)
             x0, x1 = xi + offset - width * 0.45, xi + offset + width * 0.45
-            ax_dist.hlines(m, x0, x1, colors=color, linewidths=2.5, zorder=4)
-            ax_dist.fill_between([x0, x1], [m - s, m - s], [m + s, m + s],
-                                 color=color, alpha=0.18, zorder=2)
-            ax_dist.annotate(f"{m:.1f}%", xy=(xi + offset, m + s + 1),
-                             ha="center", fontsize=7, color=color)
+            ax_dist.hlines(m,   x0, x1, colors=color,   linewidths=2.5, zorder=4)
+            ax_dist.hlines(med, x0, x1, colors="black", linewidths=1.5,
+                           linestyles="--", zorder=4)
+            # value labels directly next to each line (right side)
+            ax_dist.text(x1 + 0.04, m,   f"{m:.1f}%",   color=color,   fontsize=7,
+                         va="center", ha="left")
+            ax_dist.text(x1 + 0.04, med, f"{med:.1f}%", color="black", fontsize=7,
+                         va="center", ha="left")
+            # n label anchored inside axes at bottom of each group
+            ax_dist.text(xi + offset, 46.5, f"n={len(arr)}",
+                         ha="center", va="bottom", fontsize=7, color="gray")
 
-    ax_dist.set_title("Overall cache hit % per instance\n(mean ± 1 std)",
-                      fontsize=11, fontweight="bold")
+    # legend: dots + mean (with value) + median (with value), placed at y=50-60 under <15 min fix
+    first_lvl  = all_levels[0] if all_levels else ""
+    m0, med0   = level_stats.get(first_lvl, (0, 0))
+    dot_handle    = matplotlib.lines.Line2D([0], [0], marker="o", color="w",
+                                            markerfacecolor=COLORS[0], markersize=6,
+                                            alpha=0.5, label="individual turns")
+    mean_handle   = matplotlib.lines.Line2D([0], [0], color=COLORS[0], linewidth=2.5,
+                                            label=f"mean  ({m0:.1f}%)")
+    median_handle = matplotlib.lines.Line2D([0], [0], color="black", linewidth=1.5,
+                                            linestyle="--", label=f"median ({med0:.1f}%)")
+    # anchor at data coords: x=0 (under first level), y=55 (between 50-60)
+    ax_dist.legend(handles=[dot_handle, mean_handle, median_handle],
+                   fontsize=8, loc="upper left",
+                   bbox_to_anchor=(0.0, 0.26),   # axes-fraction: left edge, ~y=57 in [45,105]
+                   bbox_transform=ax_dist.transAxes)
+
+    ax_dist.set_title("Cache hit % — all turns\n(compaction turns excluded)",
+                      fontsize=10, fontweight="bold")
     ax_dist.set_ylabel("Cache hit %", fontsize=9)
-    ax_dist.set_ylim(-5, 105)
+    ax_dist.set_ylim(45, 105)
     ax_dist.set_xticks(range(len(all_levels)))
     ax_dist.set_xticklabels(all_levels, fontsize=8, rotation=15, ha="right")
     ax_dist.grid(axis="y", alpha=0.25, linestyle="--")
     ax_dist.spines[["top", "right"]].set_visible(False)
 
-    fig.suptitle(
-        "vLLM prefix cache hit rate by difficulty level\n"
-        "(estimated: hit = (prev_isl + prev_osl) / curr_isl)",
-        fontsize=12,
-    )
+    fig.suptitle("vLLM prefix cache hit rate by difficulty level", fontsize=12)
     fig.tight_layout()
     out = SCRIPT_DIR / "analysis_cache.png"
     fig.savefig(out, dpi=150, bbox_inches="tight")
@@ -522,32 +457,6 @@ def main() -> None:
         sys.exit(1)
 
     rng = np.random.default_rng(42)
-    fig, axes = plt.subplots(2, 3, figsize=(17, 9))
-    axes = axes.flatten()
-
-    for i, (metric, title, ylabel) in enumerate(METRICS):
-        plot_panel(axes[i], datasets, metric, title, ylabel, rng)
-
-    summary_panel(axes[5], datasets)
-
-    # legend for multiple datasets
-    if len(datasets) > 1:
-        handles = [
-            mpatches.Patch(color=COLORS[j % len(COLORS)], label=name)
-            for j, (name, _) in enumerate(datasets)
-        ]
-        fig.legend(handles=handles, loc="lower right",
-                   fontsize=9, framealpha=0.8, title="Dataset")
-
-    fig.suptitle(
-        "SWE-bench run metrics by difficulty level\n"
-        "(dots = per-instance · bar = mean · shading = ±1 std)",
-        fontsize=13, y=1.01,
-    )
-    fig.tight_layout()
-    fig.savefig(OUT_FILE, dpi=150, bbox_inches="tight")
-    print(f"Saved → {OUT_FILE}")
-
     plot_cache_figure(datasets, rng)
     plot_dist_figure(datasets, rng)
 
