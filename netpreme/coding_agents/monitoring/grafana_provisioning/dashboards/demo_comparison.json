@@ -1,0 +1,282 @@
+{
+  "title": "MTier vs CPU — Live Demo",
+  "uid": "demo-comparison",
+  "refresh": "2s",
+  "time": { "from": "now-5m", "to": "now" },
+  "timepicker": {},
+  "annotations": { "list": [] },
+  "panels": [
+    {
+      "type": "row", "id": 1, "gridPos": {"h":1,"w":24,"x":0,"y":0},
+      "title": "TTFT — Time to First Token", "collapsed": false, "panels": []
+    },
+    {
+      "type": "timeseries",
+      "id": 2,
+      "title": "TTFT p50 — CPU vs MTier",
+      "gridPos": {"h":8,"w":12,"x":0,"y":1},
+      "datasource": {"type":"prometheus","uid":"${DS_PROMETHEUS}"},
+      "fieldConfig": {
+        "defaults": {"unit":"s","custom":{"lineWidth":2,"fillOpacity":5}},
+        "overrides": [
+          {"matcher":{"id":"byName","options":"CPU p50"},  "properties":[{"id":"color","value":{"fixedColor":"#2196F3","mode":"fixed"}}]},
+          {"matcher":{"id":"byName","options":"MTier p50"},"properties":[{"id":"color","value":{"fixedColor":"#FF5722","mode":"fixed"}}]}
+        ]
+      },
+      "options": {"legend":{"displayMode":"list","placement":"bottom"},"tooltip":{"mode":"multi"}},
+      "targets": [
+        {
+          "datasource": {"type":"prometheus","uid":"${DS_PROMETHEUS}"},
+          "expr": "histogram_quantile(0.50, sum by(le) (rate(vllm:time_to_first_token_seconds_bucket{setup=\"hybrid-cpu\"}[$__rate_interval])))",
+          "legendFormat": "CPU p50", "refId": "A"
+        },
+        {
+          "datasource": {"type":"prometheus","uid":"${DS_PROMETHEUS}"},
+          "expr": "histogram_quantile(0.50, sum by(le) (rate(vllm:time_to_first_token_seconds_bucket{setup=\"hybrid-mtier\"}[$__rate_interval])))",
+          "legendFormat": "MTier p50", "refId": "B"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "id": 3,
+      "title": "TTFT p95 — CPU vs MTier",
+      "gridPos": {"h":8,"w":12,"x":12,"y":1},
+      "datasource": {"type":"prometheus","uid":"${DS_PROMETHEUS}"},
+      "fieldConfig": {
+        "defaults": {"unit":"s","custom":{"lineWidth":2,"fillOpacity":5}},
+        "overrides": [
+          {"matcher":{"id":"byName","options":"CPU p95"},  "properties":[{"id":"color","value":{"fixedColor":"#2196F3","mode":"fixed"}}]},
+          {"matcher":{"id":"byName","options":"MTier p95"},"properties":[{"id":"color","value":{"fixedColor":"#FF5722","mode":"fixed"}}]}
+        ]
+      },
+      "options": {"legend":{"displayMode":"list","placement":"bottom"},"tooltip":{"mode":"multi"}},
+      "targets": [
+        {
+          "datasource": {"type":"prometheus","uid":"${DS_PROMETHEUS}"},
+          "expr": "histogram_quantile(0.95, sum by(le) (rate(vllm:time_to_first_token_seconds_bucket{setup=\"hybrid-cpu\"}[$__rate_interval])))",
+          "legendFormat": "CPU p95", "refId": "A"
+        },
+        {
+          "datasource": {"type":"prometheus","uid":"${DS_PROMETHEUS}"},
+          "expr": "histogram_quantile(0.95, sum by(le) (rate(vllm:time_to_first_token_seconds_bucket{setup=\"hybrid-mtier\"}[$__rate_interval])))",
+          "legendFormat": "MTier p95", "refId": "B"
+        }
+      ]
+    },
+    {
+      "type": "row", "id": 10, "gridPos": {"h":1,"w":24,"x":0,"y":9},
+      "title": "E2E Request Latency", "collapsed": false, "panels": []
+    },
+    {
+      "type": "timeseries",
+      "id": 11,
+      "title": "E2E p50 — CPU vs MTier",
+      "gridPos": {"h":8,"w":12,"x":0,"y":10},
+      "datasource": {"type":"prometheus","uid":"${DS_PROMETHEUS}"},
+      "fieldConfig": {
+        "defaults": {"unit":"s","custom":{"lineWidth":2,"fillOpacity":5}},
+        "overrides": [
+          {"matcher":{"id":"byName","options":"CPU p50"},  "properties":[{"id":"color","value":{"fixedColor":"#2196F3","mode":"fixed"}}]},
+          {"matcher":{"id":"byName","options":"MTier p50"},"properties":[{"id":"color","value":{"fixedColor":"#FF5722","mode":"fixed"}}]}
+        ]
+      },
+      "options": {"legend":{"displayMode":"list","placement":"bottom"},"tooltip":{"mode":"multi"}},
+      "targets": [
+        {
+          "datasource": {"type":"prometheus","uid":"${DS_PROMETHEUS}"},
+          "expr": "histogram_quantile(0.50, sum by(le) (rate(vllm:e2e_request_latency_seconds_bucket{setup=\"hybrid-cpu\"}[$__rate_interval])))",
+          "legendFormat": "CPU p50", "refId": "A"
+        },
+        {
+          "datasource": {"type":"prometheus","uid":"${DS_PROMETHEUS}"},
+          "expr": "histogram_quantile(0.50, sum by(le) (rate(vllm:e2e_request_latency_seconds_bucket{setup=\"hybrid-mtier\"}[$__rate_interval])))",
+          "legendFormat": "MTier p50", "refId": "B"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "id": 12,
+      "title": "E2E p95 — CPU vs MTier",
+      "gridPos": {"h":8,"w":12,"x":12,"y":10},
+      "datasource": {"type":"prometheus","uid":"${DS_PROMETHEUS}"},
+      "fieldConfig": {
+        "defaults": {"unit":"s","custom":{"lineWidth":2,"fillOpacity":5}},
+        "overrides": [
+          {"matcher":{"id":"byName","options":"CPU p95"},  "properties":[{"id":"color","value":{"fixedColor":"#2196F3","mode":"fixed"}}]},
+          {"matcher":{"id":"byName","options":"MTier p95"},"properties":[{"id":"color","value":{"fixedColor":"#FF5722","mode":"fixed"}}]}
+        ]
+      },
+      "options": {"legend":{"displayMode":"list","placement":"bottom"},"tooltip":{"mode":"multi"}},
+      "targets": [
+        {
+          "datasource": {"type":"prometheus","uid":"${DS_PROMETHEUS}"},
+          "expr": "histogram_quantile(0.95, sum by(le) (rate(vllm:e2e_request_latency_seconds_bucket{setup=\"hybrid-cpu\"}[$__rate_interval])))",
+          "legendFormat": "CPU p95", "refId": "A"
+        },
+        {
+          "datasource": {"type":"prometheus","uid":"${DS_PROMETHEUS}"},
+          "expr": "histogram_quantile(0.95, sum by(le) (rate(vllm:e2e_request_latency_seconds_bucket{setup=\"hybrid-mtier\"}[$__rate_interval])))",
+          "legendFormat": "MTier p95", "refId": "B"
+        }
+      ]
+    },
+    {
+      "type": "row", "id": 20, "gridPos": {"h":1,"w":24,"x":0,"y":18},
+      "title": "Queue Wait & Cache", "collapsed": false, "panels": []
+    },
+    {
+      "type": "timeseries",
+      "id": 21,
+      "title": "Queue Wait p50 + p95 — CPU vs MTier",
+      "gridPos": {"h":8,"w":12,"x":0,"y":19},
+      "datasource": {"type":"prometheus","uid":"${DS_PROMETHEUS}"},
+      "fieldConfig": {
+        "defaults": {"unit":"s","custom":{"lineWidth":2,"fillOpacity":3}},
+        "overrides": [
+          {"matcher":{"id":"byName","options":"CPU p50"},  "properties":[{"id":"color","value":{"fixedColor":"#64B5F6","mode":"fixed"}}]},
+          {"matcher":{"id":"byName","options":"CPU p95"},  "properties":[{"id":"color","value":{"fixedColor":"#1565C0","mode":"fixed"}}]},
+          {"matcher":{"id":"byName","options":"MTier p50"},"properties":[{"id":"color","value":{"fixedColor":"#FFAB91","mode":"fixed"}}]},
+          {"matcher":{"id":"byName","options":"MTier p95"},"properties":[{"id":"color","value":{"fixedColor":"#BF360C","mode":"fixed"}}]}
+        ]
+      },
+      "options": {"legend":{"displayMode":"list","placement":"bottom"},"tooltip":{"mode":"multi"}},
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum by(le) (rate(vllm:request_queue_time_seconds_bucket{setup=\"hybrid-cpu\"}[$__rate_interval])))",
+          "legendFormat": "CPU p50", "refId": "A",
+          "datasource": {"type":"prometheus","uid":"${DS_PROMETHEUS}"}
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by(le) (rate(vllm:request_queue_time_seconds_bucket{setup=\"hybrid-cpu\"}[$__rate_interval])))",
+          "legendFormat": "CPU p95", "refId": "B",
+          "datasource": {"type":"prometheus","uid":"${DS_PROMETHEUS}"}
+        },
+        {
+          "expr": "histogram_quantile(0.50, sum by(le) (rate(vllm:request_queue_time_seconds_bucket{setup=\"hybrid-mtier\"}[$__rate_interval])))",
+          "legendFormat": "MTier p50", "refId": "C",
+          "datasource": {"type":"prometheus","uid":"${DS_PROMETHEUS}"}
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by(le) (rate(vllm:request_queue_time_seconds_bucket{setup=\"hybrid-mtier\"}[$__rate_interval])))",
+          "legendFormat": "MTier p95", "refId": "D",
+          "datasource": {"type":"prometheus","uid":"${DS_PROMETHEUS}"}
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "id": 22,
+      "title": "Cache Hit Rates — GPU & External",
+      "gridPos": {"h":8,"w":12,"x":12,"y":19},
+      "datasource": {"type":"prometheus","uid":"${DS_PROMETHEUS}"},
+      "fieldConfig": {
+        "defaults": {"unit":"percentunit","min":0,"max":1,"custom":{"lineWidth":2,"fillOpacity":5}},
+        "overrides": [
+          {"matcher":{"id":"byName","options":"CPU GPU hit"},   "properties":[{"id":"color","value":{"fixedColor":"#2196F3","mode":"fixed"}}]},
+          {"matcher":{"id":"byName","options":"CPU ext hit"},   "properties":[{"id":"color","value":{"fixedColor":"#64B5F6","mode":"fixed"}}]},
+          {"matcher":{"id":"byName","options":"MTier GPU hit"}, "properties":[{"id":"color","value":{"fixedColor":"#FF5722","mode":"fixed"}}]},
+          {"matcher":{"id":"byName","options":"MTier ext hit"}, "properties":[{"id":"color","value":{"fixedColor":"#FFAB91","mode":"fixed"}}]}
+        ]
+      },
+      "options": {"legend":{"displayMode":"list","placement":"bottom"},"tooltip":{"mode":"multi"}},
+      "targets": [
+        {
+          "expr": "rate(vllm:prefix_cache_hits_total{setup=\"hybrid-cpu\"}[$__rate_interval]) / rate(vllm:prefix_cache_queries_total{setup=\"hybrid-cpu\"}[$__rate_interval])",
+          "legendFormat": "CPU GPU hit", "refId": "A",
+          "datasource": {"type":"prometheus","uid":"${DS_PROMETHEUS}"}
+        },
+        {
+          "expr": "rate(vllm:external_prefix_cache_hits_total{setup=\"hybrid-cpu\"}[$__rate_interval]) / rate(vllm:external_prefix_cache_queries_total{setup=\"hybrid-cpu\"}[$__rate_interval])",
+          "legendFormat": "CPU ext hit", "refId": "B",
+          "datasource": {"type":"prometheus","uid":"${DS_PROMETHEUS}"}
+        },
+        {
+          "expr": "rate(vllm:prefix_cache_hits_total{setup=\"hybrid-mtier\"}[$__rate_interval]) / rate(vllm:prefix_cache_queries_total{setup=\"hybrid-mtier\"}[$__rate_interval])",
+          "legendFormat": "MTier GPU hit", "refId": "C",
+          "datasource": {"type":"prometheus","uid":"${DS_PROMETHEUS}"}
+        },
+        {
+          "expr": "rate(vllm:external_prefix_cache_hits_total{setup=\"hybrid-mtier\"}[$__rate_interval]) / rate(vllm:external_prefix_cache_queries_total{setup=\"hybrid-mtier\"}[$__rate_interval])",
+          "legendFormat": "MTier ext hit", "refId": "D",
+          "datasource": {"type":"prometheus","uid":"${DS_PROMETHEUS}"}
+        }
+      ]
+    },
+    {
+      "type": "row", "id": 30, "gridPos": {"h":1,"w":24,"x":0,"y":27},
+      "title": "Throughput", "collapsed": false, "panels": []
+    },
+    {
+      "type": "timeseries",
+      "id": 31,
+      "title": "Output Tokens/s — CPU vs MTier",
+      "gridPos": {"h":8,"w":12,"x":0,"y":28},
+      "datasource": {"type":"prometheus","uid":"${DS_PROMETHEUS}"},
+      "fieldConfig": {
+        "defaults": {"unit":"short","custom":{"lineWidth":2,"fillOpacity":8}},
+        "overrides": [
+          {"matcher":{"id":"byName","options":"CPU"},  "properties":[{"id":"color","value":{"fixedColor":"#2196F3","mode":"fixed"}}]},
+          {"matcher":{"id":"byName","options":"MTier"},"properties":[{"id":"color","value":{"fixedColor":"#FF5722","mode":"fixed"}}]}
+        ]
+      },
+      "options": {"legend":{"displayMode":"list","placement":"bottom"},"tooltip":{"mode":"multi"}},
+      "targets": [
+        {
+          "expr": "sum(rate(vllm:generation_tokens_total{setup=\"hybrid-cpu\"}[$__rate_interval]))",
+          "legendFormat": "CPU", "refId": "A",
+          "datasource": {"type":"prometheus","uid":"${DS_PROMETHEUS}"}
+        },
+        {
+          "expr": "sum(rate(vllm:generation_tokens_total{setup=\"hybrid-mtier\"}[$__rate_interval]))",
+          "legendFormat": "MTier", "refId": "B",
+          "datasource": {"type":"prometheus","uid":"${DS_PROMETHEUS}"}
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "id": 32,
+      "title": "KV Offload Bandwidth — CPU→GPU Recall (GB/s)",
+      "gridPos": {"h":8,"w":12,"x":12,"y":28},
+      "datasource": {"type":"prometheus","uid":"${DS_PROMETHEUS}"},
+      "fieldConfig": {
+        "defaults": {"unit":"Bps","custom":{"lineWidth":2,"fillOpacity":8}},
+        "overrides": [
+          {"matcher":{"id":"byName","options":"CPU recall"},  "properties":[{"id":"color","value":{"fixedColor":"#2196F3","mode":"fixed"}}]},
+          {"matcher":{"id":"byName","options":"MTier recall"},"properties":[{"id":"color","value":{"fixedColor":"#FF5722","mode":"fixed"}}]}
+        ]
+      },
+      "options": {"legend":{"displayMode":"list","placement":"bottom"},"tooltip":{"mode":"multi"}},
+      "targets": [
+        {
+          "expr": "rate(vllm:kv_offload_total_bytes{transfer_type=\"cpu_to_gpu\",setup=\"hybrid-cpu\"}[$__rate_interval])",
+          "legendFormat": "CPU recall", "refId": "A",
+          "datasource": {"type":"prometheus","uid":"${DS_PROMETHEUS}"}
+        },
+        {
+          "expr": "rate(vllm:kv_offload_total_bytes{transfer_type=\"cpu_to_gpu\",setup=\"hybrid-mtier\"}[$__rate_interval])",
+          "legendFormat": "MTier recall", "refId": "B",
+          "datasource": {"type":"prometheus","uid":"${DS_PROMETHEUS}"}
+        }
+      ]
+    }
+  ],
+  "schemaVersion": 38,
+  "version": 1,
+  "templating": {
+    "list": [
+      {
+        "current": {},
+        "hide": 0,
+        "includeAll": false,
+        "name": "DS_PROMETHEUS",
+        "options": [],
+        "query": "prometheus",
+        "refresh": 1,
+        "type": "datasource"
+      }
+    ]
+  }
+}

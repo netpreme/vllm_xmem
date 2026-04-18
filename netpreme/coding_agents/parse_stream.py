@@ -5,7 +5,7 @@ Parse claude --output-format stream-json from stdin.
 Writes per-turn tool call data to /tmp/vllm_tool_calls.json (read by watch_vllm.py).
 Prints a flat table — one row per vLLM turn and one row per tool call/result.
 
-Usage (via run_claude_auto.sh — not meant to be called directly):
+Usage (via run_claude.sh --auto — not meant to be called directly):
     claude ... --output-format stream-json -p "task" | python3 parse_stream.py
 
 Columns:

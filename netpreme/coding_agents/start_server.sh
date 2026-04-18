@@ -65,12 +65,16 @@
 #
 # ───────────────────────────────────────────────────────────────
 #  Usage:
-#    ./start_vllm_server.sh                  # hybrid-cpu (default)
-#    ./start_vllm_server.sh --hbm-only       # GPU HBM only, no offload
-#    ./start_vllm_server.sh --cpu-only       # CPU DRAM only (no GPU cache)
-#    ./start_vllm_server.sh --mtier-only     # MTier chip only (no GPU cache)
-#    ./start_vllm_server.sh --hybrid-cpu     # GPU HBM + CPU DRAM overflow
-#    ./start_vllm_server.sh --hybrid-mtier   # GPU HBM + MTier chip overflow
+#    ./start_vllm_server.sh                          # hybrid-cpu (default)
+#    ./start_vllm_server.sh --hbm-only               # GPU HBM only, no offload
+#    ./start_vllm_server.sh --cpu-only               # CPU DRAM only (no GPU cache)
+#    ./start_vllm_server.sh --mtier-only             # MTier chip only (no GPU cache)
+#    ./start_vllm_server.sh --hybrid-cpu             # GPU HBM + CPU DRAM overflow
+#    ./start_vllm_server.sh --hybrid-mtier           # GPU HBM + MTier chip overflow
+#    ./start_vllm_server.sh --gpu-util 0.75          # override GPU memory utilization
+#    ./start_vllm_server.sh --hybrid-cpu --gpu-util 0.60  # combine mode + util
+#    ./start_vllm_server.sh --port 8001                   # run on a different port
+#    ./start_vllm_server.sh --hybrid-cpu --port 8001      # combine mode + port
 #
 #  Connect Claude Code (separate terminal after server is ready):
 #    ./run_claude_local.sh
@@ -107,31 +111,59 @@ fi
 
 # ── Parse mode ───────────────────────────────────────────────────
 MODE="hybrid-cpu"
-for arg in "$@"; do
-    case "$arg" in
+GPU_UTIL_OVERRIDE=""
+PORT_OVERRIDE=""
+MAX_NUM_SEQS_OVERRIDE=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
         --hbm-only)     MODE="hbm-only" ;;
         --cpu-only)     MODE="cpu-only" ;;
         --mtier-only)   MODE="mtier-only" ;;
         --hybrid-cpu)   MODE="hybrid-cpu" ;;
         --hybrid-mtier) MODE="hybrid-mtier" ;;
-        *) echo "ERROR: Unknown argument: $arg" >&2
+        --gpu-util)
+            shift
+            GPU_UTIL_OVERRIDE="$1"
+            ;;
+        --gpu-util=*)
+            GPU_UTIL_OVERRIDE="${1#--gpu-util=}"
+            ;;
+        --port)
+            shift
+            PORT_OVERRIDE="$1"
+            ;;
+        --port=*)
+            PORT_OVERRIDE="${1#--port=}"
+            ;;
+        --max-num-seqs)
+            shift
+            MAX_NUM_SEQS_OVERRIDE="$1"
+            ;;
+        --max-num-seqs=*)
+            MAX_NUM_SEQS_OVERRIDE="${1#--max-num-seqs=}"
+            ;;
+        *) echo "ERROR: Unknown argument: $1" >&2
            echo "       Valid modes: --hbm-only | --cpu-only | --mtier-only | --hybrid-cpu | --hybrid-mtier" >&2
+           echo "       Options:     --gpu-util <0.0-1.0>  --port <number>  --max-num-seqs <N>" >&2
            exit 1 ;;
     esac
+    shift
 done
 
 # ── Core settings ────────────────────────────────────────────────
 MODEL="${MODEL:-qwen/qwen3-coder-30b-a3b-instruct-fp8}"
 HOST="${HOST:-0.0.0.0}"
-PORT="${PORT:-8000}"          # also used by run_claude_local.sh
-TP="${TENSOR_PARALLEL_SIZE:-2}"
+PORT="${PORT_OVERRIDE:-${PORT:-8000}}"
+TP="${TENSOR_PARALLEL_SIZE:-1}"
 DTYPE="${DTYPE:-auto}"
 MAX_MODEL_LEN="${MAX_MODEL_LEN:-262144}"
 # fp8 KV cache halves per-token KV memory (131 KB vs 262 KB in bf16), allowing
 # the startup check to pass with 9.33 GiB GPU KV for up to ~76K tokens.
 # At MAX_MODEL_LEN=65536 the check needs 8.0 GiB < 9.33 GiB available.
 KV_CACHE_DTYPE="${KV_CACHE_DTYPE:-fp8}"
-GPU_MEM_UTIL="${GPU_MEMORY_UTILIZATION:-0.92}"
+GPU_MEM_UTIL="${GPU_UTIL_OVERRIDE:-${GPU_MEMORY_UTILIZATION:-0.75}}"
+MAX_NUM_SEQS="${MAX_NUM_SEQS_OVERRIDE:-${MAX_NUM_SEQS:-256}}"
+NUM_GPU_BLOCKS_OVERRIDE="${NUM_GPU_BLOCKS_OVERRIDE:-}"   # empty = let vLLM decide
 
 # Use CUDA_VISIBLE_DEVICES from env or .env; default to 0 if unset
 CVD="${CUDA_VISIBLE_DEVICES:-0,1}"
@@ -142,7 +174,9 @@ VLLM_LOG="${VLLM_LOG:-/tmp/vllm_server_${PORT}.log}"
 #
 # Byte sizes:
 #   72 GiB = 77,309,411,328 bytes  (CPU DRAM)
-#   68 GiB = 73,014,444,032 bytes  (MTier chip: 77.3 GB capacity, 4 GB headroom)
+#   68 GiB = 73,014,444,032 bytes  (MTier bank 0: 70 GB capacity, 2 GiB headroom)
+#   NOTE: xmem MTier allocates from bank_id=0 only (cpu_gpu.py:484). The hardware
+#   has 4×70 GB banks but only bank 0 is usable until multi-bank support is added.
 #
 PREFIX_CACHE_FLAG=""
 KV_OFFLOAD_FLAG=""
@@ -170,6 +204,7 @@ case "$MODE" in
 
     mtier-only)
         # GPU prefix caching OFF → OffloadingConnector (MTier) is the sole KV store.
+        # xmem uses bank_id=0 only (single bank, 70 GB). Max usable = 68 GiB with headroom.
         PREFIX_CACHE_FLAG="--no-enable-prefix-caching"
         KV_OFFLOAD_FLAG="--kv-offloading-size"
         KV_OFFLOAD_SIZE="68"
@@ -189,6 +224,7 @@ case "$MODE" in
 
     hybrid-mtier)
         # GPU HBM prefix cache + MTier chip overflow via OffloadingConnector.
+        # xmem uses bank_id=0 only (single bank, 70 GB). Max usable = 68 GiB with headroom.
         PREFIX_CACHE_FLAG="--enable-prefix-caching"
         KV_OFFLOAD_FLAG="--kv-offloading-size"
         KV_OFFLOAD_SIZE="68"
@@ -209,6 +245,7 @@ echo "  TP      : $TP"
 echo "  Max len : $MAX_MODEL_LEN"
 echo "  KV dtype: $KV_CACHE_DTYPE"
 echo "  Mode    : $MODE"
+echo "  Max seqs: $MAX_NUM_SEQS"
 echo "  Sampling: temperature=0, seed=42 (deterministic)"
 echo "  Log     : $VLLM_LOG"
 echo "═══════════════════════════════════════════════════════"
@@ -270,6 +307,9 @@ HF_HUB_OFFLINE=1 \
         ${MTIER_FLAG:+$MTIER_FLAG} \
         ${KV_TRANSFER_CONFIG:+--kv-transfer-config "$KV_TRANSFER_CONFIG"} \
         ${DISABLE_HMA_FLAG:+$DISABLE_HMA_FLAG} \
+        --max-num-seqs "$MAX_NUM_SEQS" \
+        --max-num-batched-tokens 65536 \
+        ${NUM_GPU_BLOCKS_OVERRIDE:+--num-gpu-blocks-override "$NUM_GPU_BLOCKS_OVERRIDE"} \
         --override-generation-config '{"temperature":0,"seed":42}' \
         --enable-auto-tool-choice \
         --tool-call-parser qwen3_coder \
@@ -299,7 +339,7 @@ echo ""
 echo "  vLLM ready!"
 echo ""
 echo "  Claude Code:  ANTHROPIC_BASE_URL=http://localhost:$PORT"
-echo "  Launch:       ./run_claude_local.sh"
+echo "  Launch:       ./run_claude.sh"
 echo "  Metrics:      http://localhost:$PORT/metrics"
 echo "  Watch:        python3 netpreme/coding_agents/monitoring/watch_vllm.py"
 echo "  PID:          vllm=$VLLM_PID"

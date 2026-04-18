@@ -300,6 +300,7 @@ def run_instance(instance: dict, workdir: Path, model: str, base_url: str) -> di
             "--dangerously-skip-permissions",
             "--verbose",
             "--output-format", "stream-json",
+            "--max-turns", "100",
             "-p", problem,
         ],
         cwd=str(workdir),
@@ -343,7 +344,7 @@ def run_instance(instance: dict, workdir: Path, model: str, base_url: str) -> di
     # both a text block and a tool_use block, both carrying the same input_tokens.
     # Buffer until ISL changes, then flush one canonical row per unique ISL.
     pending_isl        = None
-    pending_turn_num   = 0     # turn number being accumulated (for sidecar)
+    pending_turn_num   = 0
     pending_tool_calls = 0
     pending_tool_names: list = []
     pending_snippet    = ""
@@ -411,16 +412,16 @@ def run_instance(instance: dict, workdir: Path, model: str, base_url: str) -> di
             etype = event.get("type")
 
             if etype == "assistant":
-                msg      = event.get("message", {})
-                isl      = msg.get("usage", {}).get("input_tokens")
-                content  = msg.get("content", [])
+                msg       = event.get("message", {})
+                isl       = msg.get("usage", {}).get("input_tokens")
+                content   = msg.get("content", [])
                 tool_uses = [b for b in content
                              if isinstance(b, dict) and b.get("type") == "tool_use"]
 
                 if isl != pending_isl:
                     flush_pending()
                     pending_isl      = isl
-                    pending_turn_num = len(turns) + 1   # set AFTER flush updates len(turns)
+                    pending_turn_num = len(turns) + 1
 
                 pending_tool_calls += len(tool_uses)
                 pending_tool_names.extend(b.get("name", "") for b in tool_uses)
@@ -495,8 +496,12 @@ def main():
     g.add_argument("--list",  action="store_true", help="List first 20 instances and exit")
     p.add_argument("--start",     type=int, default=0,    help="Start index for --all (default: 0)")
     p.add_argument("--end",       type=int, default=None, help="End index (exclusive) for --all")
-    p.add_argument("--skip-done", action="store_true",    help="Skip instances that already have results")
-    p.add_argument("--no-clone",  action="store_true",    help="Skip repo setup; run claude in cwd")
+    p.add_argument("--skip-done",  action="store_true",    help="Skip instances that already have results")
+    p.add_argument("--no-hard-first", action="store_true",  help="Disable default hardest-first ordering")
+    p.add_argument("--difficulty", type=str, nargs="+",
+                   help="Filter by difficulty level(s): easy, medium, hard, vhard  "
+                        "(maps to <15 min fix, 15 min - 1 hour, 1-4 hours, >4 hours)")
+    p.add_argument("--no-clone",   action="store_true",    help="Skip repo setup; run claude in cwd")
     p.add_argument("--workdir",   type=str, default=None, help="Override working directory for claude")
     p.add_argument("--port",      type=str, default=None, help="vLLM port (default from .env or 8000)")
     p.add_argument("--model",     type=str, default=None, help="Model name override")
@@ -524,14 +529,41 @@ def main():
             return Path(args.workdir) if args.workdir else Path.cwd()
         return setup_workspace(instance)
 
+    DIFFICULTY_MAP = {
+        "easy":   "<15 min fix",
+        "medium": "15 min - 1 hour",
+        "hard":   "1-4 hours",
+        "vhard":  ">4 hours",
+    }
+
     if args.all:
+        DIFFICULTY_ORDER = [">4 hours", "1-4 hours", "15 min - 1 hour", "<15 min fix", "unknown"]
+
         total   = len(ds)
         end     = args.end if args.end is not None else total
-        indices = range(args.start, min(end, total))
+        indices = list(range(args.start, min(end, total)))
+
+        if args.difficulty:
+            allowed = {DIFFICULTY_MAP.get(d, d) for d in args.difficulty}
+            indices = [i for i in indices if (ds[i].get("difficulty") or "unknown") in allowed]
+            print(f"Filtering to difficulty levels: {allowed}  ({len(indices)} instances)")
+
+        if not args.no_hard_first:
+            # Primary: hardest difficulty first; secondary: longest problem statement first
+            indices.sort(key=lambda i: (
+                DIFFICULTY_ORDER.index(
+                    ds[i].get("difficulty") or "unknown"
+                    if (ds[i].get("difficulty") or "unknown") in DIFFICULTY_ORDER
+                    else len(DIFFICULTY_ORDER)
+                ),
+                -len(ds[i].get("problem_statement") or ""),
+            ))
+
         n       = len(indices)
         results = []
 
-        print(f"\nRunning {n} instances (index {args.start}–{end - 1}) against {base_url}")
+        order_note = "" if args.no_hard_first else " (hardest first)"
+        print(f"\nRunning {n} instances{order_note} against {base_url}")
         print(f"Results will be saved to {RESULTS_DIR}/\n")
 
         for pos, idx in enumerate(indices, 1):
