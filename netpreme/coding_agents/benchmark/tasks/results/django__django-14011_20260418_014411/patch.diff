@@ -1,0 +1,24 @@
+diff --git a/django/test/testcases.py b/django/test/testcases.py
+index 92f566b7..9dfc6058 100644
+--- a/django/test/testcases.py
++++ b/django/test/testcases.py
+@@ -1511,6 +1511,7 @@ class LiveServerThread(threading.Thread):
+             self.error = e
+             self.is_ready.set()
+         finally:
++            # Close connections in finally block to ensure cleanup even if shutdown fails
+             connections.close_all()
+ 
+     def _create_server(self):
+@@ -1527,6 +1528,11 @@ class LiveServerThread(threading.Thread):
+             self.httpd.server_close()
+         self.join()
+ 
++        # Ensure database connections are closed after thread termination
++        # This is particularly important for ThreadedWSGIServer to prevent
++        # connection leaks that cause "database is being accessed by other users" errors
++        connections.close_all()
++
+ 
+ class LiveServerTestCase(TransactionTestCase):
+     """

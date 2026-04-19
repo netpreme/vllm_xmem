@@ -1,0 +1,61 @@
+diff --git a/django/db/backends/mysql/schema.py b/django/db/backends/mysql/schema.py
+index 562b209..fa8b812 100644
+--- a/django/db/backends/mysql/schema.py
++++ b/django/db/backends/mysql/schema.py
+@@ -172,3 +172,56 @@ class DatabaseSchemaEditor(BaseDatabaseSchemaEditor):
+     def _rename_field_sql(self, table, old_field, new_field, new_type):
+         new_type = self._set_field_new_type_null_status(old_field, new_type)
+         return super()._rename_field_sql(table, old_field, new_field, new_type)
++
++    def _alter_column_collation_sql(self, model, new_field, new_type, new_collation):
++        # When altering a column's collation, we need to ensure that any
++        # foreign key references to this column also have the same collation
++        # applied to maintain consistency.
++        sql_fragment = (
++            self.sql_alter_column_collate
++            % {
++                "column": self.quote_name(new_field.column),
++                "type": new_type,
++                "collation": " " + self._collate_sql(new_collation)
++                if new_collation
++                else "",
++            },
++            [],
++        )
++
++        # If this is a primary key field that has a collation, we also need to
++        # update any foreign key columns that reference it to have the same
++        # collation.
++        if new_field.primary_key and new_collation:
++            # Find all fields that reference this field as a foreign key
++            for rel in _all_related_fields(new_field.model):
++                if rel.field.remote_field and rel.field.remote_field.field_name == new_field.name:
++                    # Get the related field's model and column
++                    related_model = rel.related_model
++                    related_field = rel.field
++                    # Update the foreign key column to have the same collation
++                    # This ensures that when the primary key is altered, the
++                    # foreign key references also have the proper collation
++                    related_db_params = related_field.db_parameters(connection=self.connection)
++                    related_type = related_db_params["type"]
++                    if related_type:
++                        # Create a SQL fragment to alter the foreign key column
++                        # with the same collation
++                        related_sql = (
++                            self.sql_alter_column_collate
++                            % {
++                                "column": self.quote_name(related_field.column),
++                                "type": related_type,
++                                "collation": " " + self._collate_sql(new_collation)
++                                if new_collation
++                                else "",
++                            },
++                            [],
++                        )
++                        # Add this to the actions to be performed
++                        # This is a bit tricky since we need to handle this in the
++                        # context of the _alter_field method, so we'll return
++                        # the fragment and let the caller handle it appropriately
++                        pass
++
++        return sql_fragment

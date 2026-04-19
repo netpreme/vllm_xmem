@@ -1,0 +1,387 @@
+{
+  "instance_id": "django__django-15957",
+  "repo": "django/django",
+  "base_commit": "f387d024fc75569d2a4a338bfda76cc2f328f627",
+  "difficulty": "1-4 hours",
+  "problem_statement": "Prefetch objects don't work with slices\nDescription\n\t\n\u200bPrefetch() objects does not work with sliced querysets. For example the following code results in AssertionError: Cannot filter a query once a slice has been taken.:\nCategory.objects.prefetch_related(Prefetch(\n\t'post_set',\n\tqueryset=Post.objects.all()[:3],\n\tto_attr='example_posts',\n))\nThis behavior is also mentioned in \u200bthis StackOverflow answer. On the other hand it does not seem to be documented in Django Docs.\nWhy is it needed?\nMy use case seems to be a common one: I want to display a list of categories while displaying couple of example objects from each category next to it. If I'm not mistaken there isn't currently an efficient way of doing this. Prefetching without slicing would prefetch all objects (and there may be thousands of them) instead of the three examples that are needed.\n",
+  "model": "qwen/qwen3-coder-30b-a3b-instruct-fp8",
+  "server": "http://localhost:8000",
+  "workdir": "/tmp/swe_workspaces/django__django-15957",
+  "started_at": "2026-04-18T02:20:20.929597",
+  "finished_at": "2026-04-18T02:20:49.570147",
+  "turns": [
+    {
+      "turn": 1,
+      "isl": 27467,
+      "osl": 78,
+      "delta": 27467,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Glob"
+      ],
+      "snippet": "I'll investigate this Django issue with prefetch_related and sliced quer"
+    },
+    {
+      "turn": 2,
+      "isl": 27562,
+      "osl": 39,
+      "delta": 95,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Glob"
+      ],
+      "snippet": "Let me search for files related to prefetch functionality in Django:"
+    },
+    {
+      "turn": 3,
+      "isl": 27618,
+      "osl": 42,
+      "delta": 56,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": "Let me search more broadly for prefetch-related code:"
+    },
+    {
+      "turn": 4,
+      "isl": 28023,
+      "osl": 55,
+      "delta": 405,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Let me examine the core prefetch-related code in the Django models:"
+    },
+    {
+      "turn": 5,
+      "isl": 58236,
+      "osl": 67,
+      "delta": 30213,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Now let me look at the Prefetch class and how it's used in the prefetch_"
+    },
+    {
+      "turn": 6,
+      "isl": 74302,
+      "osl": 67,
+      "delta": 16066,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Let me look at the tests to understand the issue better:"
+    },
+    {
+      "turn": 7,
+      "isl": 79951,
+      "osl": 59,
+      "delta": 5649,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": "Let me search for tests that specifically deal with slicing and prefetch"
+    },
+    {
+      "turn": 8,
+      "isl": 80027,
+      "osl": 68,
+      "delta": 76,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": "Let me search for any tests that might be related to the issue with slic"
+    },
+    {
+      "turn": 9,
+      "isl": 80112,
+      "osl": 59,
+      "delta": 85,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": "Let me look at the specific error message in the Django codebase to unde"
+    },
+    {
+      "turn": 10,
+      "isl": 80201,
+      "osl": 59,
+      "delta": 89,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": "Let me check the query.py file to see where this error is raised:"
+    },
+    {
+      "turn": 11,
+      "isl": 80384,
+      "osl": 66,
+      "delta": 183,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 12,
+      "isl": 80703,
+      "osl": 55,
+      "delta": 319,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": "Let me look for more context around where this error is used in the pref"
+    },
+    {
+      "turn": 13,
+      "isl": 80782,
+      "osl": 91,
+      "delta": 79,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Let me look at the Prefetch class and how it's used in the prefetch_rela"
+    },
+    {
+      "turn": 14,
+      "isl": 82105,
+      "osl": 88,
+      "delta": 1323,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Now let me look at the `prefetch_one_level` function which is where the "
+    },
+    {
+      "turn": 15,
+      "isl": 83525,
+      "osl": 147,
+      "delta": 1420,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Now I need to understand how the issue occurs. Looking at line 2523, I c"
+    },
+    {
+      "turn": 16,
+      "isl": 84223,
+      "osl": 808,
+      "delta": 698,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Write"
+      ],
+      "snippet": "Now I understand the issue better. Let me create a test to reproduce the"
+    },
+    {
+      "turn": 17,
+      "isl": 85165,
+      "osl": 56,
+      "delta": 942,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": "Let me run the test to see the exact error:"
+    },
+    {
+      "turn": 18,
+      "isl": 85236,
+      "osl": 46,
+      "delta": 71,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 19,
+      "isl": 85429,
+      "osl": 55,
+      "delta": 193,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Let me simplify the test to focus on the core issue:"
+    },
+    {
+      "turn": 20,
+      "isl": 88236,
+      "osl": 78,
+      "delta": 2807,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "TodoWrite"
+      ],
+      "snippet": "Now I understand the issue better. Let me create a simpler test to repro"
+    },
+    {
+      "turn": 21,
+      "isl": 88366,
+      "osl": 60,
+      "delta": 130,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "TodoWrite"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 22,
+      "isl": 88468,
+      "osl": 227,
+      "delta": 102,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text"
+      ],
+      "tool_names": [],
+      "snippet": "Looking at the code and the issue description, I now understand the prob"
+    }
+  ],
+  "summary": {
+    "total_turns": 22,
+    "peak_isl": 88468,
+    "total_osl": 2370,
+    "total_output_tokens": 2370,
+    "total_tool_calls": 21,
+    "avg_tools_per_turn": 0.95,
+    "patch_lines": 0
+  },
+  "final_usage": {
+    "input_tokens": 1576121,
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 0,
+    "output_tokens": 2370,
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 0,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "",
+    "iterations": [],
+    "speed": "standard"
+  }
+}

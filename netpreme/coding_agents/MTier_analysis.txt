@@ -1,0 +1,237 @@
+═══════════════════════════════════════════════════════════════════
+MTier vs CPU DRAM — KV Cache Analysis & Experimental Design
+═══════════════════════════════════════════════════════════════════
+Model: Qwen3-Coder-30B-A3B-Instruct-FP8 (MoE, 3B active per token)
+GPU:   1× H100 (80 GB HBM)
+Date:  2026-04-19
+
+
+────────────────────────────────────────────────────────────────────
+1. MEMORY FUNDAMENTALS
+────────────────────────────────────────────────────────────────────
+
+KV bytes per token:
+  num_heads × head_dim × 2 (K+V) × num_layers × dtype_bytes
+  = 32 × 128 × 2 × 48 × 1 byte (fp8)
+  = 32 × 128 × 96 = 393,216 bits → but KV is fp16 in vLLM xmem:
+  Empirically: block_size=16 tokens, block=786,432 bytes
+  → 786,432 / 16 = 49,152 bytes per token  (48 KiB/token)
+
+GPU HBM KV capacity (gpu_memory_utilization=0.75, FP8 weights):
+  H100 HBM = 80 GB; model weights ~30B×1byte ≈ 30 GB
+  Available for KV: 80×0.75 - 30 ≈ 30 GB
+  Tokens: 30 GB / 49,152 B = ~610,000 tokens
+  At c=12, ISL=52K: 12 × 52K = 624K tokens → fills GPU HBM fully
+  → Explains why GPU hit rate is only 4-5% at c=12
+
+External KV storage capacity:
+  CPU DRAM:  72 GB  → 72 GB / 49,152 B = ~1,468,000 tokens  (~1.5M)
+  MTier:     70 GB  → 70 GB / 49,152 B = ~1,425,000 tokens  (~1.4M)
+  MTier has 4 banks → total 280 GB (only bank 0 used currently)
+
+At c=12 with 52K ISL:
+  Per-session total KV: 52,636 × 49,152 = ~2.59 GB
+  12 sessions: ~31 GB total → exceeds GPU HBM, must use external
+  External usage at c=12: ~92% of tokens loaded from external cache
+
+
+────────────────────────────────────────────────────────────────────
+2. TRANSFER MECHANISM (CRITICAL)
+────────────────────────────────────────────────────────────────────
+
+CPU DRAM path:
+  cudaMemcpyDeviceToHost: GPU → PCIe → CPU DRAM
+  cudaMemcpyHostToDevice: CPU DRAM → PCIe → GPU
+  PCIe Gen4 x16: ~32 GB/s (one direction), ~16 GB/s effective (round trip)
+
+MTier path:
+  cudaMemcpyDeviceToDevice: GPU ↔ MTier chip
+  MTier uses cuMemCreate → CUDA virtual memory mapped to MTier hardware
+  Transfer path: within CUDA device address space (not PCIe DeviceToHost)
+  This is a DIFFERENT path — potentially NVLink or direct memory fabric
+
+Implication: MTier is NOT constrained by PCIe in the same way CPU DRAM is.
+My earlier PCIe-saturation analysis for MTier was incorrect.
+
+
+────────────────────────────────────────────────────────────────────
+3. PREFILL COMPUTE TIME vs KV TRANSFER TIME
+────────────────────────────────────────────────────────────────────
+
+Prefill FLOPs (Qwen3-30B-A3B, 3B active params):
+  FLOPs/token ≈ 2 × active_params = 2 × 3B = 6 GFLOP/token
+  (plus attention: 4 × seq_len × d_model FLOPs, but smaller at moderate ISL)
+
+At c=12, ISL=52K tokens (total batch = 624K tokens):
+  Total FLOPs: 624,000 × 6B = 3.74 PetaFLOP
+  H100 FP8 effective throughput: ~2000 TFLOP/s
+  Compute time: 3.74 × 10^15 / 2 × 10^12 ≈ 1.87 seconds
+
+Observed TTFT: ~2.19s (CPU), ~2.27s (MTier)
+→ GPU prefill compute ≈ 85% of TTFT
+→ KV loading contributes only ~300-400ms
+
+KV loading per request:
+  52,636 tokens × 92% external × 49,152 B = ~2.38 GB
+  CPU DRAM (100 GB/s): 24ms per request
+  MTier (DeviceToDevice, bandwidth unknown): ? ms
+
+At c=12, 12 requests loading KV in parallel:
+  CPU demand: 12 × 100 GB/s = 1.2 TB/s demanded vs 100 GB/s available
+  → effective 100/12 = 8.3 GB/s per session → 286ms per request
+
+But vLLM can pipeline KV loads while other requests prefill.
+During 1.87s compute, KV loading can be overlapped → fully hidden if:
+  KV load time < time until the request's prefill starts
+  = 1.87s / 12 = 156ms per request slot
+
+CPU 24ms << 156ms → CPU KV loading IS fully hidden in compute pipeline
+MTier presumably also << 156ms → Also hidden
+
+CONCLUSION: At c=12 with this model, BOTH CPU and MTier KV transfers
+are fast enough to complete before their request's compute slot arrives.
+This is why TTFT is identical — KV bandwidth is NOT the bottleneck.
+
+
+────────────────────────────────────────────────────────────────────
+4. EMPIRICAL RESULTS (Clean isolated pair, 2026-04-19)
+────────────────────────────────────────────────────────────────────
+
+Metric                  CPU (port 8000)    MTier (port 8000)    Ratio
+─────────────────────────────────────────────────────────────────────
+TTFT p50 (ms)              2,192               2,270            0.97×
+TTFT p90 (ms)              4,765               4,849            0.98×
+ISL p50 (tokens)          52,636              46,173            1.14
+GPU hit rate                4.6%                5.2%             —
+External hit rate          96.5%               96.9%             —
+Tasks completed               12                  10             —
+Wall time (s)              371.7               350.6             —
+
+Both sequential runs on GPU 0. MTier is ~3% SLOWER (within noise).
+The ISL difference (52K vs 46K) means different tasks were processed.
+
+
+────────────────────────────────────────────────────────────────────
+5. WHAT CONDITION WOULD SHOW MTier ADVANTAGE?
+────────────────────────────────────────────────────────────────────
+
+BANDWIDTH advantage (MTier raw speed):
+  Requires: KV load time > compute time (KV is the bottleneck)
+  Condition: ISL large enough AND concurrency low enough that compute
+             doesn't dominate, AND KV transfers are NOT pipelined
+
+  For c=1, --cpu-only vs --mtier-only (no GPU cache, all external KV):
+  KV load: 52K × 49,152 B = 2.46 GB
+  CPU (100 GB/s): 24ms
+  Compute: 52K × 6 GFLOP / 2000 TFLOP = 156ms
+  → compute (156ms) >> KV load (24ms) → bandwidth NOT visible at c=1
+
+  Need ISL where KV load ≫ compute time.
+  Break-even: KV_GB / BW > compute_s
+  → ISL × 49152 / 100e9 > ISL × 6e9 / 2e12
+  → 49152 / 100e9 > 6e9 / 2e12
+  → 491ns > 3000ns → FALSE for any ISL
+  CPU is ALWAYS fast enough to hide behind compute for this model.
+
+CAPACITY advantage (MTier larger external cache):
+  At c=12: external cache used = 12 × 52K × 92% = 576K tokens × 49,152 B = 28.3 GB
+  CPU capacity: 72 GB → NOT full at c=12 (39% used)
+  MTier capacity: 70 GB → NOT full at c=12 (40% used)
+  → Capacity doesn't matter at c=12
+
+  At c=50 (estimated):
+  External cache demand = 50 × 52K × 92% = 2.39M tokens × 49,152 B = 117.6 GB
+  CPU capacity: 72 GB → FULL → evictions start → cache miss rate rises
+  MTier capacity: 70 GB → ALSO FULL (using 1 bank)
+  With 4 MTier banks (280 GB): NOT full → cache hits maintained
+
+  This is the scenario where MTier shows clear advantage:
+  HIGH CONCURRENCY (c=50+) + LONG SESSIONS + MTier 4-bank config
+
+
+────────────────────────────────────────────────────────────────────
+6. DESIGNED EXPERIMENT: CPU vs MTier CAPACITY DEMO
+────────────────────────────────────────────────────────────────────
+
+Setup:
+  Server A: hybrid-cpu, GPU 0, port 8001 (72 GB CPU DRAM)
+  Server B: hybrid-mtier 4-bank, GPU 0, port 8002 (280 GB MTier)
+
+Procedure:
+  Phase 1 — Cache fill (c=40, 20 min):
+    Fill both external caches with diverse sessions.
+    CPU cache will be ~80% full; MTier cache ~20% full.
+
+  Phase 2 — Stress test (c=40, sustained):
+    CPU: starts evicting old sessions → miss rate rises → TTFT increases
+    MTier: no evictions needed → high hit rate maintained → TTFT stable
+
+  Expected outcome:
+    CPU TTFT: stable early, then degrades as evictions cause recomputes
+    MTier TTFT: stable throughout (cache always has room)
+
+Key metric: external_cache_hit_rate over time
+  If CPU hit rate drops while MTier stays high → this IS the speedup
+
+Note: Currently only 1 MTier bank is configured (70 GB).
+To get the full 280 GB advantage, configure all 4 banks.
+
+
+────────────────────────────────────────────────────────────────────
+7. CURRENT DEMO (compare.py) — WHAT IT SHOWS
+────────────────────────────────────────────────────────────────────
+
+Cold → Warm GPU prefix cache speedup: ~8×
+  Round 1: ~3,500ms (full GPU prefill, nothing cached)
+  Round 2: ~430ms  (KV already in GPU HBM, just attention)
+  This is IDENTICAL for CPU and MTier — it's pure GPU prefix caching.
+
+To show MTier advantage in the demo:
+  Option A: Add Phase 3 where GPU cache is evicted (run many competing
+            sessions) then recall the original session from external.
+            MTier recall will be faster IF its DeviceToDevice bandwidth
+            is higher than CPU's DeviceToHost/HostToDevice via PCIe.
+
+  Option B: Run at c=40+ to trigger CPU capacity exhaustion.
+            Compare TTFT stability over time (CPU degrades, MTier stable).
+
+
+────────────────────────────────────────────────────────────────────
+8. BACK-OF-ENVELOPE: EXPECTED SPEEDUP AT HIGH CONCURRENCY
+────────────────────────────────────────────────────────────────────
+
+Assumption: MTier bandwidth (DeviceToDevice) = 100 GB/s (estimate)
+Assumption: CPU bandwidth (DeviceToHost+HostToDevice) = 32 GB/s
+  (PCIe Gen4 x16 = 32 GB/s in each direction; round-trip = 16 GB/s effective)
+
+At c=1, ISL=52K, external KV only:
+  CPU:   2.46 GB / 32 GB/s = 77ms  (if PCIe bottleneck, not system DRAM)
+  MTier: 2.46 GB / 100 GB/s = 25ms
+  Compute: 156ms
+  TTFT CPU:   156 + 77 = 233ms (if sequential)
+  TTFT MTier: 156 + 25 = 181ms (if sequential)
+  Speedup: 233/181 = 1.3× — modest
+
+At c=1, ISL=200K, --cpu-only vs --mtier-only:
+  KV: 200K × 49,152 B = 9.83 GB
+  CPU:   9.83 / 32 = 307ms
+  MTier: 9.83 / 100 = 98ms
+  Compute: 200K × 6 GFLOP / 2000 TFLOP = 600ms
+  TTFT CPU:   600 + 307 = 907ms
+  TTFT MTier: 600 + 98  = 698ms
+  Speedup: 907/698 = 1.3× — still modest (compute dominates)
+
+For MTier to show 3× speedup: need KV >> compute
+  3× speedup → MTier contribution = 2/3 of CPU TTFT
+  Not achievable when compute dominates
+
+ACTUAL SPEEDUP STORY:
+  The correct value proposition for MTier is CAPACITY:
+  - CPU DRAM: 72 GB → supports ~1.5M token external cache
+  - MTier 4-bank: 280 GB → supports ~5.8M token external cache
+  - 4× more sessions retained without eviction
+  - At high concurrency: CPU cache evictions cause full recomputes (~2.2s)
+    vs MTier cache hits (~0.4s for cached prefixes)
+  - Potential speedup at c=50+ with cache exhaustion: 2-5×
+
+═══════════════════════════════════════════════════════════════════

@@ -1,0 +1,273 @@
+{
+  "instance_id": "sympy__sympy-18199",
+  "repo": "sympy/sympy",
+  "base_commit": "ba80d1e493f21431b4bf729b3e0452cd47eb9566",
+  "difficulty": "1-4 hours",
+  "problem_statement": "nthroot_mod function misses one root of x = 0 mod p.\nWhen in the equation x**n = a mod p , when a % p == 0. Then x = 0 mod p is also a root of this equation. But right now `nthroot_mod` does not check for this condition. `nthroot_mod(17*17, 5 , 17)` has a root `0 mod 17`. But it does not return it.\n",
+  "model": "qwen/qwen3-coder-30b-a3b-instruct-fp8",
+  "server": "http://localhost:8000",
+  "workdir": "/tmp/swe_workspaces/sympy__sympy-18199",
+  "started_at": "2026-04-18T02:27:35.526013",
+  "finished_at": "2026-04-18T02:28:13.906658",
+  "turns": [
+    {
+      "turn": 1,
+      "isl": 27370,
+      "osl": 222,
+      "delta": 27370,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": "I'll investigate the `nthroot_mod` function issue where it misses the ro"
+    },
+    {
+      "turn": 2,
+      "isl": 27469,
+      "osl": 96,
+      "delta": 99,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Let me examine the `nthroot_mod` function implementation in the residue_"
+    },
+    {
+      "turn": 3,
+      "isl": 41976,
+      "osl": 70,
+      "delta": 14507,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Write"
+      ],
+      "snippet": "Now I need to understand the issue better by looking at the specific cas"
+    },
+    {
+      "turn": 4,
+      "isl": 42407,
+      "osl": 97,
+      "delta": 431,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 5,
+      "isl": 42467,
+      "osl": 334,
+      "delta": 60,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 6,
+      "isl": 42618,
+      "osl": 387,
+      "delta": 151,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Write"
+      ],
+      "snippet": "Interesting! It seems like the function is actually working correctly in"
+    },
+    {
+      "turn": 7,
+      "isl": 43104,
+      "osl": 49,
+      "delta": 486,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 8,
+      "isl": 43646,
+      "osl": 50,
+      "delta": 542,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Write"
+      ],
+      "snippet": "I see there's an issue with the current implementation. Let me look more"
+    },
+    {
+      "turn": 9,
+      "isl": 44388,
+      "osl": 604,
+      "delta": 742,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 10,
+      "isl": 44631,
+      "osl": 345,
+      "delta": 243,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Based on my investigation, it seems that the current implementation of `"
+    },
+    {
+      "turn": 11,
+      "isl": 46109,
+      "osl": 27,
+      "delta": 1478,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Let me also look at the `_nthroot_mod1` function:"
+    },
+    {
+      "turn": 12,
+      "isl": 47393,
+      "osl": 303,
+      "delta": 1284,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Write"
+      ],
+      "snippet": "Looking at the code more carefully, I think I understand the issue now. "
+    },
+    {
+      "turn": 13,
+      "isl": 48323,
+      "osl": 67,
+      "delta": 930,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 14,
+      "isl": 48593,
+      "osl": 37,
+      "delta": 270,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "TodoWrite"
+      ],
+      "snippet": "I've investigated the issue thoroughly and found that the current implem"
+    },
+    {
+      "turn": 15,
+      "isl": 49082,
+      "osl": 68,
+      "delta": 489,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text"
+      ],
+      "tool_names": [],
+      "snippet": "Based on my investigation, I've found that the `nthroot_mod` function in"
+    }
+  ],
+  "summary": {
+    "total_turns": 15,
+    "peak_isl": 49082,
+    "total_osl": 2756,
+    "total_output_tokens": 3644,
+    "total_tool_calls": 14,
+    "avg_tools_per_turn": 0.93,
+    "patch_lines": 0
+  },
+  "final_usage": {
+    "input_tokens": 639576,
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 0,
+    "output_tokens": 3644,
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 0,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "",
+    "iterations": [],
+    "speed": "standard"
+  }
+}

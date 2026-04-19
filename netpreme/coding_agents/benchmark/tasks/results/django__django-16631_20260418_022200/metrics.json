@@ -1,0 +1,307 @@
+{
+  "instance_id": "django__django-16631",
+  "repo": "django/django",
+  "base_commit": "9b224579875e30203d079cc2fee83b116d98eb78",
+  "difficulty": "1-4 hours",
+  "problem_statement": "SECRET_KEY_FALLBACKS is not used for sessions\nDescription\n\t\nI recently rotated my secret key, made the old one available in SECRET_KEY_FALLBACKS and I'm pretty sure everyone on our site is logged out now.\nI think the docs for \u200bSECRET_KEY_FALLBACKS may be incorrect when stating the following:\nIn order to rotate your secret keys, set a new SECRET_KEY and move the previous value to the beginning of SECRET_KEY_FALLBACKS. Then remove the old values from the end of the SECRET_KEY_FALLBACKS when you are ready to expire the sessions, password reset tokens, and so on, that make use of them.\nWhen looking at the Django source code, I see that the \u200bsalted_hmac function uses the SECRET_KEY by default and the \u200bAbstractBaseUser.get_session_auth_hash method does not call salted_hmac with a value for the secret keyword argument.\n",
+  "model": "qwen/qwen3-coder-30b-a3b-instruct-fp8",
+  "server": "http://localhost:8000",
+  "workdir": "/tmp/swe_workspaces/django__django-16631",
+  "started_at": "2026-04-18T02:21:37.183374",
+  "finished_at": "2026-04-18T02:22:00.570755",
+  "turns": [
+    {
+      "turn": 1,
+      "isl": 27433,
+      "osl": 87,
+      "delta": 27433,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Glob"
+      ],
+      "snippet": "I'll investigate the SECRET_KEY_FALLBACKS behavior in Django to understa"
+    },
+    {
+      "turn": 2,
+      "isl": 27540,
+      "osl": 68,
+      "delta": 107,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Let me examine the AbstractBaseUser class and its get_session_auth_hash "
+    },
+    {
+      "turn": 3,
+      "isl": 32503,
+      "osl": 62,
+      "delta": 4963,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Now let me look at the base user class to understand how get_session_aut"
+    },
+    {
+      "turn": 4,
+      "isl": 33940,
+      "osl": 55,
+      "delta": 1437,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": "Now let me look at how Django handles SECRET_KEY_FALLBACKS and session a"
+    },
+    {
+      "turn": 5,
+      "isl": 34135,
+      "osl": 63,
+      "delta": 195,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Let me examine the signing module which seems to be where the SECRET_KEY"
+    },
+    {
+      "turn": 6,
+      "isl": 37617,
+      "osl": 45,
+      "delta": 3482,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": "Let me also check how sessions are handled in Django, particularly how t"
+    },
+    {
+      "turn": 7,
+      "isl": 37738,
+      "osl": 56,
+      "delta": 121,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": "Let me check how sessions are validated in Django:"
+    },
+    {
+      "turn": 8,
+      "isl": 37811,
+      "osl": 28,
+      "delta": 73,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Glob"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 9,
+      "isl": 38058,
+      "osl": 46,
+      "delta": 247,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 10,
+      "isl": 41557,
+      "osl": 66,
+      "delta": 3499,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Now let me check the signed cookies session backend, which is likely whe"
+    },
+    {
+      "turn": 11,
+      "isl": 42327,
+      "osl": 66,
+      "delta": 770,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": "Now let me check how Django's authentication system validates sessions. "
+    },
+    {
+      "turn": 12,
+      "isl": 42519,
+      "osl": 44,
+      "delta": 192,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 13,
+      "isl": 43989,
+      "osl": 74,
+      "delta": 1470,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Now let me check how Django's authentication system works with sessions "
+    },
+    {
+      "turn": 14,
+      "isl": 46308,
+      "osl": 294,
+      "delta": 2319,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Now I understand the issue! Looking at the code, I can see the problem w"
+    },
+    {
+      "turn": 15,
+      "isl": 47407,
+      "osl": 654,
+      "delta": 1099,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "TodoWrite"
+      ],
+      "snippet": "Based on my investigation of the Django code, I can now explain the issu"
+    },
+    {
+      "turn": 16,
+      "isl": 48103,
+      "osl": 573,
+      "delta": 696,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "TodoWrite"
+      ],
+      "snippet": "Based on my investigation of Django's source code, I can now explain the"
+    },
+    {
+      "turn": 17,
+      "isl": 48718,
+      "osl": 328,
+      "delta": 615,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text"
+      ],
+      "tool_names": [],
+      "snippet": "I've investigated the issue with Django's SECRET_KEY_FALLBACKS and sessi"
+    }
+  ],
+  "summary": {
+    "total_turns": 17,
+    "peak_isl": 48718,
+    "total_osl": 2609,
+    "total_output_tokens": 2609,
+    "total_tool_calls": 16,
+    "avg_tools_per_turn": 0.94,
+    "patch_lines": 0
+  },
+  "final_usage": {
+    "input_tokens": 667703,
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 0,
+    "output_tokens": 2609,
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 0,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "",
+    "iterations": [],
+    "speed": "standard"
+  }
+}

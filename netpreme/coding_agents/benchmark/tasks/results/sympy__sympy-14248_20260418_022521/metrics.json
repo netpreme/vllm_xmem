@@ -1,0 +1,601 @@
+{
+  "instance_id": "sympy__sympy-14248",
+  "repo": "sympy/sympy",
+  "base_commit": "9986b38181cdd556a3f3411e553864f11912244e",
+  "difficulty": "1-4 hours",
+  "problem_statement": "The difference of MatrixSymbols prints as a sum with (-1) coefficient\nInternally, differences like a-b are represented as the sum of a with `(-1)*b`, but they are supposed to print like a-b. This does not happen with MatrixSymbols. I tried three printers: str, pretty, and latex: \r\n```\r\nfrom sympy import *\r\nA = MatrixSymbol('A', 2, 2)\r\nB = MatrixSymbol('B', 2, 2)\r\nprint(A - A*B - B)\r\npprint(A - A*B - B)\r\nlatex(A - A*B - B)\r\n```\r\nOutput:\r\n```\r\n(-1)*B + (-1)*A*B + A\r\n-B + -A\u22c5B + A\r\n'-1 B + -1 A B + A'\r\n```\r\n\r\nBased on a [Stack Overflow post](https://stackoverflow.com/q/48826611)\n",
+  "model": "qwen/qwen3-coder-30b-a3b-instruct-fp8",
+  "server": "http://localhost:8000",
+  "workdir": "/tmp/swe_workspaces/sympy__sympy-14248",
+  "started_at": "2026-04-18T02:24:17.143039",
+  "finished_at": "2026-04-18T02:25:21.711044",
+  "turns": [
+    {
+      "turn": 1,
+      "isl": 27456,
+      "osl": 76,
+      "delta": 27456,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "I'll investigate this issue with MatrixSymbol differences not printing c"
+    },
+    {
+      "turn": 2,
+      "isl": 27810,
+      "osl": 42,
+      "delta": 354,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Glob"
+      ],
+      "snippet": "Let me look at the MatrixSymbol implementation and how it handles subtra"
+    },
+    {
+      "turn": 3,
+      "isl": 28625,
+      "osl": 53,
+      "delta": 815,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": "Let me look at the MatrixSymbol class and related printing code:"
+    },
+    {
+      "turn": 4,
+      "isl": 28708,
+      "osl": 52,
+      "delta": 83,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 5,
+      "isl": 37292,
+      "osl": 68,
+      "delta": 8584,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Now let me look at the MatAdd class which handles addition of matrix exp"
+    },
+    {
+      "turn": 6,
+      "isl": 38559,
+      "osl": 42,
+      "delta": 1267,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Glob"
+      ],
+      "snippet": "Let me also check the printing module to understand how expressions are "
+    },
+    {
+      "turn": 7,
+      "isl": 38723,
+      "osl": 49,
+      "delta": 164,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 8,
+      "isl": 48101,
+      "osl": 43,
+      "delta": 9378,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Glob"
+      ],
+      "snippet": "Now let me check the pretty printer to understand how it handles matrix "
+    },
+    {
+      "turn": 9,
+      "isl": 48168,
+      "osl": 63,
+      "delta": 67,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 10,
+      "isl": 53930,
+      "osl": 158,
+      "delta": 5762,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Write"
+      ],
+      "snippet": "Let me create a test script to reproduce the issue first:"
+    },
+    {
+      "turn": 11,
+      "isl": 54130,
+      "osl": 47,
+      "delta": 200,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 12,
+      "isl": 54188,
+      "osl": 48,
+      "delta": 58,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 13,
+      "isl": 54453,
+      "osl": 1562,
+      "delta": 265,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": "Let me check the Python environment and try to run the test differently:"
+    },
+    {
+      "turn": 14,
+      "isl": 54922,
+      "osl": 179,
+      "delta": 469,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": "Let me check what Python version we're dealing with and how to properly "
+    },
+    {
+      "turn": 15,
+      "isl": 55025,
+      "osl": 72,
+      "delta": 103,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "The issue seems to be with Python 3.10 compatibility. Let me look at the"
+    },
+    {
+      "turn": 16,
+      "isl": 61742,
+      "osl": 239,
+      "delta": 6717,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Let me look at how the `_print_Add` method works in the pretty printer, "
+    },
+    {
+      "turn": 17,
+      "isl": 63068,
+      "osl": 190,
+      "delta": 1326,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": "Now I need to understand how the issue occurs. Looking at the problem de"
+    },
+    {
+      "turn": 18,
+      "isl": 63248,
+      "osl": 103,
+      "delta": 180,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": "Let me check if there's a `_print_MatAdd` method in the pretty printer:"
+    },
+    {
+      "turn": 19,
+      "isl": 63441,
+      "osl": 122,
+      "delta": 193,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 20,
+      "isl": 63511,
+      "osl": 64,
+      "delta": 70,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": "Let me check if there's a specific handler for MatAdd in the pretty prin"
+    },
+    {
+      "turn": 21,
+      "isl": 63698,
+      "osl": 41,
+      "delta": 187,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 22,
+      "isl": 64917,
+      "osl": 83,
+      "delta": 1219,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Now I understand the issue better. Looking at the code, I can see that: "
+    },
+    {
+      "turn": 23,
+      "isl": 66561,
+      "osl": 75,
+      "delta": 1644,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 24,
+      "isl": 66629,
+      "osl": 296,
+      "delta": 68,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 25,
+      "isl": 67326,
+      "osl": 41,
+      "delta": 697,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 26,
+      "isl": 67396,
+      "osl": 72,
+      "delta": 70,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 27,
+      "isl": 67584,
+      "osl": 43,
+      "delta": 188,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 28,
+      "isl": 67931,
+      "osl": 59,
+      "delta": 347,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "TodoWrite"
+      ],
+      "snippet": "Now I understand the problem clearly. The issue is in the `_print_MatAdd"
+    },
+    {
+      "turn": 29,
+      "isl": 68254,
+      "osl": 1342,
+      "delta": 323,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Edit"
+      ],
+      "snippet": "Now I'll implement the fix for the `_print_MatAdd` method in both the pr"
+    },
+    {
+      "turn": 30,
+      "isl": 68845,
+      "osl": 73,
+      "delta": 591,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Edit"
+      ],
+      "snippet": "Now let me also fix the LaTeX printer:"
+    },
+    {
+      "turn": 31,
+      "isl": 69334,
+      "osl": 316,
+      "delta": 489,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Let me also check if there's a simpler approach by looking at how the re"
+    },
+    {
+      "turn": 32,
+      "isl": 69951,
+      "osl": 420,
+      "delta": 617,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Edit"
+      ],
+      "snippet": "I see that the regular `_print_Add` method in the string printer handles"
+    },
+    {
+      "turn": 33,
+      "isl": 76272,
+      "osl": 394,
+      "delta": 6321,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Write"
+      ],
+      "snippet": "Let me try a different approach. Since I can't easily read the file agai"
+    },
+    {
+      "turn": 34,
+      "isl": 77002,
+      "osl": 531,
+      "delta": 730,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "TodoWrite"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 35,
+      "isl": 77259,
+      "osl": 499,
+      "delta": 257,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "ExitPlanMode"
+      ],
+      "snippet": "Let me summarize what I've done to fix the issue:  ## Problem Analysis T"
+    },
+    {
+      "turn": 36,
+      "isl": 77717,
+      "osl": 440,
+      "delta": 458,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text"
+      ],
+      "tool_names": [],
+      "snippet": "I've successfully fixed the issue with MatrixSymbol differences not prin"
+    }
+  ],
+  "summary": {
+    "total_turns": 36,
+    "peak_isl": 77717,
+    "total_osl": 7997,
+    "total_output_tokens": 5862,
+    "total_tool_calls": 35,
+    "avg_tools_per_turn": 0.97,
+    "patch_lines": 0
+  },
+  "final_usage": {
+    "input_tokens": 2081776,
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 0,
+    "output_tokens": 5862,
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 0,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "",
+    "iterations": [],
+    "speed": "standard"
+  }
+}

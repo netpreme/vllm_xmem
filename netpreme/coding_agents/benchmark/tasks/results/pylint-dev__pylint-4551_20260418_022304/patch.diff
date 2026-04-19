@@ -1,0 +1,71 @@
+diff --git a/pylint/pyreverse/diagrams.py b/pylint/pyreverse/diagrams.py
+index bf9f67a..dd7ab3e 100644
+--- a/pylint/pyreverse/diagrams.py
++++ b/pylint/pyreverse/diagrams.py
+@@ -84,6 +84,8 @@ class ClassDiagram(Figure, FilterMixIn):
+             for n, m in node.items()
+             if isinstance(m, astroid.FunctionDef) and decorated_with_property(m)
+         ]
++
++        # First, collect the regular attributes
+         for node_name, associated_nodes in (
+             list(node.instance_attrs_type.items())
+             + list(node.locals_type.items())
+@@ -95,8 +97,57 @@ class ClassDiagram(Figure, FilterMixIn):
+             if names:
+                 node_name = "{} : {}".format(node_name, ", ".join(names))
+             attrs.append(node_name)
++
++        # Then, look for type information in __init__ method arguments
++        # This handles cases like: def __init__(self, a: str = None): self.a = a
++        for method in node.values():
++            if isinstance(method, astroid.FunctionDef) and method.name == '__init__':
++                # Process arguments to find type information
++                if hasattr(method, 'args') and method.args:
++                    for arg in method.args.args:
++                        if arg.name != 'self' and hasattr(arg, 'annotation') and arg.annotation:
++                            # Get the type name from the annotation
++                            type_name = self._get_arg_type_name(arg.annotation)
++                            if type_name:
++                                # Check if this argument is assigned to an instance attribute
++                                # We'll add it to the attributes list if it's not already there
++                                attr_name = arg.name
++                                if not any(attr_name in attr for attr in attrs):
++                                    attrs.append("{} : {}".format(attr_name, type_name))
++
+         return sorted(attrs)
+ 
++    def _get_arg_type_name(self, annotation):
++        """Extract type name from argument annotation"""
++        if annotation is None:
++            return ""
++
++        # Handle astroid annotation types
++        if isinstance(annotation, astroid.Name):
++            return annotation.name
++        elif isinstance(annotation, astroid.Subscript):
++            # Handle generic types like List[str], Dict[str, int], etc.
++            if hasattr(annotation, 'value') and isinstance(annotation.value, astroid.Name):
++                type_name = annotation.value.name
++                # Add brackets for generic types
++                if hasattr(annotation, 'slice'):
++                    slice_content = ""
++                    if hasattr(annotation.slice, 'elts'):
++                        # Handle tuple-like slices
++                        slice_content = ", ".join(self._get_arg_type_name(elt) for elt in annotation.slice.elts)
++                    else:
++                        slice_content = self._get_arg_type_name(annotation.slice)
++                    return f"{type_name}[{slice_content}]"
++                return type_name
++        elif isinstance(annotation, astroid.Attribute):
++            # Handle module.ClassName type annotations
++            return annotation.as_string()
++        elif hasattr(annotation, 'name'):
++            return annotation.name
++        elif hasattr(annotation, 'as_string'):
++            return annotation.as_string()
++        return str(annotation)
++
+     def get_methods(self, node):
+         """return visible methods"""
+         methods = [

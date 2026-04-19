@@ -1,0 +1,270 @@
+{
+  "instance_id": "sympy__sympy-12489",
+  "repo": "sympy/sympy",
+  "base_commit": "aa9780761ad8c3c0f68beeef3a0ce5caac9e100b",
+  "difficulty": "1-4 hours",
+  "problem_statement": "combinatorics.Permutation can't be subclassed properly\nI stumbled across a subclassing issue with `combinatorics.Permutation`:\r\nThe object creation is done in `Permutation.__new__`, but internally the function `_af_new` is used (which itself is a reference to the static method `Permutation._af_new`). This method eventually creates the object calling `Basic.__new__(Perm, perm)` (`Perm` is a reference to `Permutation`).\r\nIn the end, this makes subclassing `Permutation` impossible (besides overriding `Permutation._af_new` as always instances of `Permutation` are returned.\r\n\r\nAn elegant solution would be to stick to Python's instance creation mechanisms, i.e. use classmethods where appropriate (`__new__` is one) and use the mandatory reference to the class (the first argument of a classmethod) the method is called on for instance creation.\r\n\r\nI'm completely new to sympy development and encountered this issue whilst trying to subclass `Permutation`. Therefore I'm not aware of any side effects changing the instance creation probably has. (I monkeypatched it locally and ran the tests, all succeeded.)\r\n\r\nMaybe there is a coherent explanation why the implementation is as it is and should not be changed?\n",
+  "model": "qwen/qwen3-coder-30b-a3b-instruct-fp8",
+  "server": "http://localhost:8000",
+  "workdir": "/tmp/swe_workspaces/sympy__sympy-12489",
+  "started_at": "2026-04-18T02:14:11.362255",
+  "finished_at": "2026-04-18T02:15:04.052831",
+  "turns": [
+    {
+      "turn": 1,
+      "isl": 27541,
+      "osl": 65,
+      "delta": 27541,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Glob"
+      ],
+      "snippet": "I'll investigate this Permutation subclassing issue in SymPy. Let me fir"
+    },
+    {
+      "turn": 2,
+      "isl": 27805,
+      "osl": 67,
+      "delta": 264,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Now let me examine the permutations.py file to understand the Permutatio"
+    },
+    {
+      "turn": 3,
+      "isl": 60883,
+      "osl": 56,
+      "delta": 33078,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Glob"
+      ],
+      "snippet": "Now I'll look at the test files to understand how Permutation is used an"
+    },
+    {
+      "turn": 4,
+      "isl": 60965,
+      "osl": 385,
+      "delta": 82,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 5,
+      "isl": 64293,
+      "osl": 65,
+      "delta": 3328,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": "Let me also check if there are any existing subclassing examples in the "
+    },
+    {
+      "turn": 6,
+      "isl": 64438,
+      "osl": 69,
+      "delta": 145,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Write"
+      ],
+      "snippet": "Let me create a simple test to reproduce the issue described in the prob"
+    },
+    {
+      "turn": 7,
+      "isl": 65039,
+      "osl": 367,
+      "delta": 601,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 8,
+      "isl": 65338,
+      "osl": 71,
+      "delta": 299,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Let me try a simpler approach to understand the issue by examining the P"
+    },
+    {
+      "turn": 9,
+      "isl": 66723,
+      "osl": 457,
+      "delta": 1385,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 10,
+      "isl": 67378,
+      "osl": 69,
+      "delta": 655,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Write"
+      ],
+      "snippet": "Now I understand the issue clearly. Looking at the Permutation class imp"
+    },
+    {
+      "turn": 11,
+      "isl": 68088,
+      "osl": 49,
+      "delta": 710,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Edit"
+      ],
+      "snippet": "Based on my analysis of the Permutation class implementation, I can now "
+    },
+    {
+      "turn": 12,
+      "isl": 68843,
+      "osl": 46,
+      "delta": 755,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Edit"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 13,
+      "isl": 69217,
+      "osl": 42,
+      "delta": 374,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Edit"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 14,
+      "isl": 69507,
+      "osl": 94,
+      "delta": 290,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Write"
+      ],
+      "snippet": "Now let me create a simple test to verify that our fix works:"
+    },
+    {
+      "turn": 15,
+      "isl": 69948,
+      "osl": 74,
+      "delta": 441,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 16,
+      "isl": 70290,
+      "osl": 314,
+      "delta": 342,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": "The environment has some compatibility issues, but that's not related to"
+    },
+    {
+      "turn": 17,
+      "isl": 70599,
+      "osl": 276,
+      "delta": 309,
+      "types": [
+        "text"
+      ],
+      "tool_names": [],
+      "snippet": "The environment has some Python version compatibility issues, but that's"
+    }
+  ],
+  "summary": {
+    "total_turns": 17,
+    "peak_isl": 70599,
+    "total_osl": 2566,
+    "total_output_tokens": 3975,
+    "total_tool_calls": 16,
+    "avg_tools_per_turn": 0.94,
+    "patch_lines": 58
+  },
+  "final_usage": {
+    "input_tokens": 1056895,
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 0,
+    "output_tokens": 3975,
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 0,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "",
+    "iterations": [],
+    "speed": "standard"
+  }
+}

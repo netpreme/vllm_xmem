@@ -1,0 +1,475 @@
+{
+  "instance_id": "django__django-16560",
+  "repo": "django/django",
+  "base_commit": "51c9bb7cd16081133af4f0ab6d06572660309730",
+  "difficulty": "1-4 hours",
+  "problem_statement": "Allow to customize the code attribute of ValidationError raised by BaseConstraint.validate\nDescription\n\t\nIt is currently possible to customize the violation_error_message of a ValidationError raised by a constraint but not the code.\nI'd like to add a new violation_error_message parameter to BaseConstraint to allow to easily add one.\nCurrently, to achieve the same result, you have to subclass the constraint to tweak validate to catch and reraise the ValidationError.\nSince the documentation recommends to Provide a descriptive error code to the constructor: when raising a ValidationError in \u200bhttps://docs.djangoproject.com/en/4.1/ref/forms/validation/#raising-validationerror , I think it would make sense to provide this possibility for errors raised by constraints.\nIf you think it would be a good idea, I'd be happy to work on a PR.\n",
+  "model": "qwen/qwen3-coder-30b-a3b-instruct-fp8",
+  "server": "http://localhost:8000",
+  "workdir": "/tmp/swe_workspaces/django__django-16560",
+  "started_at": "2026-04-18T02:20:49.630817",
+  "finished_at": "2026-04-18T02:21:37.122934",
+  "turns": [
+    {
+      "turn": 1,
+      "isl": 27413,
+      "osl": 82,
+      "delta": 27413,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Glob"
+      ],
+      "snippet": "I'll help you implement the ability to customize the code attribute of V"
+    },
+    {
+      "turn": 2,
+      "isl": 27524,
+      "osl": 56,
+      "delta": 111,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Let me examine the BaseConstraint class in the constraints.py file:"
+    },
+    {
+      "turn": 3,
+      "isl": 32005,
+      "osl": 74,
+      "delta": 4481,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": "Now let me also check how ValidationError is used in the Django codebase"
+    },
+    {
+      "turn": 4,
+      "isl": 32103,
+      "osl": 42,
+      "delta": 98,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 5,
+      "isl": 34151,
+      "osl": 70,
+      "delta": 2048,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": "Now let me look at some examples of how constraints are used in tests to"
+    },
+    {
+      "turn": 6,
+      "isl": 34253,
+      "osl": 41,
+      "delta": 102,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 7,
+      "isl": 44463,
+      "osl": 19,
+      "delta": 10210,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Edit"
+      ],
+      "snippet": "Based on my analysis of the Django codebase, I understand the requiremen"
+    },
+    {
+      "turn": 8,
+      "isl": 45298,
+      "osl": 781,
+      "delta": 835,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Edit"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 9,
+      "isl": 45455,
+      "osl": 121,
+      "delta": 157,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Edit"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 10,
+      "isl": 45806,
+      "osl": 308,
+      "delta": 351,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Edit"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 11,
+      "isl": 46081,
+      "osl": 232,
+      "delta": 275,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Edit"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 12,
+      "isl": 46307,
+      "osl": 183,
+      "delta": 226,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Edit"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 13,
+      "isl": 46459,
+      "osl": 109,
+      "delta": 152,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Edit"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 14,
+      "isl": 46723,
+      "osl": 221,
+      "delta": 264,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Edit"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 15,
+      "isl": 47156,
+      "osl": 390,
+      "delta": 433,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Write"
+      ],
+      "snippet": "Now let's add a test to verify our implementation works correctly:"
+    },
+    {
+      "turn": 16,
+      "isl": 47833,
+      "osl": 541,
+      "delta": 677,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": "Now let's run the tests to make sure our implementation works correctly:"
+    },
+    {
+      "turn": 17,
+      "isl": 47932,
+      "osl": 84,
+      "delta": 99,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": "Let me check what Python command is available:"
+    },
+    {
+      "turn": 18,
+      "isl": 47997,
+      "osl": 47,
+      "delta": 65,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 19,
+      "isl": 49203,
+      "osl": 56,
+      "delta": 1206,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": "Let me try running the Django tests in a different way:"
+    },
+    {
+      "turn": 20,
+      "isl": 49324,
+      "osl": 83,
+      "delta": 121,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": "Let me check the directory structure and run a simpler test approach:"
+    },
+    {
+      "turn": 21,
+      "isl": 49456,
+      "osl": 85,
+      "delta": 132,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": "Let me run a simple test to make sure our changes compile correctly:"
+    },
+    {
+      "turn": 22,
+      "isl": 49649,
+      "osl": 95,
+      "delta": 193,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": "Let me also run a few existing constraint tests to make sure we haven't "
+    },
+    {
+      "turn": 23,
+      "isl": 49946,
+      "osl": 196,
+      "delta": 297,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": "Let me fix the test and run a simpler version:"
+    },
+    {
+      "turn": 24,
+      "isl": 50183,
+      "osl": 199,
+      "delta": 237,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": "Great! Our implementation works correctly. Now let's also make sure we h"
+    },
+    {
+      "turn": 25,
+      "isl": 50854,
+      "osl": 259,
+      "delta": 671,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Write"
+      ],
+      "snippet": "Let me create a simple test to verify the core functionality without tri"
+    },
+    {
+      "turn": 26,
+      "isl": 51304,
+      "osl": 417,
+      "delta": 450,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 27,
+      "isl": 52069,
+      "osl": 59,
+      "delta": 765,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "TodoWrite"
+      ],
+      "snippet": "The tests show that our implementation is working correctly for the core"
+    },
+    {
+      "turn": 28,
+      "isl": 52444,
+      "osl": 389,
+      "delta": 375,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text"
+      ],
+      "tool_names": [],
+      "snippet": "## Summary  I have successfully implemented the ability to customize the"
+    }
+  ],
+  "summary": {
+    "total_turns": 28,
+    "peak_isl": 52444,
+    "total_osl": 5239,
+    "total_output_tokens": 5640,
+    "total_tool_calls": 27,
+    "avg_tools_per_turn": 0.96,
+    "patch_lines": 100
+  },
+  "final_usage": {
+    "input_tokens": 1249391,
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 0,
+    "output_tokens": 5640,
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 0,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "",
+    "iterations": [],
+    "speed": "standard"
+  }
+}

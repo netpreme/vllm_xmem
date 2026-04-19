@@ -1,0 +1,31 @@
+diff --git a/django/db/models/sql/query.py b/django/db/models/sql/query.py
+index aaf35ee3..c7218f8e 100644
+--- a/django/db/models/sql/query.py
++++ b/django/db/models/sql/query.py
+@@ -612,6 +612,26 @@ class Query(BaseExpression):
+             # combined query must have two joins, too.
+             reuse.discard(new_alias)
+             if alias != new_alias:
++                # Ensure new_alias doesn't conflict with existing keys or values in change_map
++                # to prevent AssertionError in change_aliases
++                original_new_alias = new_alias
++                while new_alias in change_map or new_alias in change_map.values():
++                    # Increment the suffix to avoid conflicts
++                    if new_alias[-1].isdigit():
++                        # Try to increment the numeric suffix
++                        try:
++                            # Find the numeric suffix at the end
++                            i = len(new_alias) - 1
++                            while i >= 0 and new_alias[i].isdigit():
++                                i -= 1
++                            prefix = new_alias[:i+1]
++                            suffix = int(new_alias[i+1:])
++                            new_alias = prefix + str(suffix + 1)
++                        except ValueError:
++                            # If suffix parsing fails, append a number
++                            new_alias = new_alias + '1'
++                    else:
++                        new_alias = new_alias + '1'
+                 change_map[alias] = new_alias
+             if not rhs.alias_refcount[alias]:
+                 # The alias was unused in the rhs query. Unref it so that it

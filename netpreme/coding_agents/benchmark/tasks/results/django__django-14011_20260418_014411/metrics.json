@@ -1,0 +1,314 @@
+{
+  "instance_id": "django__django-14011",
+  "repo": "django/django",
+  "base_commit": "e4430f22c8e3d29ce5d9d0263fba57121938d06d",
+  "difficulty": "1-4 hours",
+  "problem_statement": "LiveServerTestCase's ThreadedWSGIServer doesn't close database connections after each thread\nDescription\n\t\nIn Django 2.2.17, I'm seeing the reappearance of #22414 after it was fixed in 1.11. #22414 is the issue where the following error will occur at the conclusion of a test run when destroy_test_db() is called:\nOperationalError: database \"test_myapp\" is being accessed by other users\nThis error happens when not all of the database connections are closed. In my case today, I'm seeing this when running a single test that is a LiveServerTestCase. I see it in approximately half of my test runs, so it's not wholly deterministic (it's a race condition).\nThere weren't a whole lot of changes in the LiveServerTestCase-related code between 1.11 and 2.2, so I looked at them individually.\nIssue #20238 added threading support to LiveServerTestCase. One of the changes it made \u200bwas changing LiveServerThread to use ThreadedWSGIServer instead of WSGIServer. LiveServerThread is used by LiveServerTestCase.\nWhen I tried modifying LiveServerThread to use the old WSGIServer, I could no longer reproduce the above error. My changes were as follows:\nclass NonThreadedLiveServerThread(LiveServerThread):\n\tdef _create_server(self):\n\t\treturn WSGIServer((self.host, self.port), QuietWSGIRequestHandler, allow_reuse_address=False)\nclass MyTest(LiveServerTestCase):\n\tserver_thread_class = NonThreadedLiveServerThread\nThe CPython docs \u200bdescribe ThreadingMixIn as defining an attribute \"which indicates whether or not the server should wait for thread termination.\"\nConsistent with what I described above, Aymeric said the following on ticket #20238, seeming to foreshadow issues like this one:\nmore threading will certainly create more race conditions on shutdown, especially when it comes to the database connections \u2014 it's taken months to eliminate most from LiveServerTestCase, and I'm sure there are still some left,\n",
+  "model": "qwen/qwen3-coder-30b-a3b-instruct-fp8",
+  "server": "http://localhost:8000",
+  "workdir": "/tmp/swe_workspaces/django__django-14011",
+  "started_at": "2026-04-18T01:43:39.980231",
+  "finished_at": "2026-04-18T01:44:11.390821",
+  "turns": [
+    {
+      "turn": 1,
+      "isl": 27700,
+      "osl": 60,
+      "delta": 27700,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Glob"
+      ],
+      "snippet": "I'll investigate this issue with LiveServerTestCase's ThreadedWSGIServer"
+    },
+    {
+      "turn": 2,
+      "isl": 28582,
+      "osl": 46,
+      "delta": 882,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": "Let me look specifically for LiveServerTestCase related files:"
+    },
+    {
+      "turn": 3,
+      "isl": 28719,
+      "osl": 58,
+      "delta": 137,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Let me examine the main testcases.py file where LiveServerTestCase is de"
+    },
+    {
+      "turn": 4,
+      "isl": 47456,
+      "osl": 55,
+      "delta": 18737,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Now let me look at the servers tests to understand the issue better:"
+    },
+    {
+      "turn": 5,
+      "isl": 50932,
+      "osl": 61,
+      "delta": 3476,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Let me also check the basehttp module to understand the ThreadedWSGIServ"
+    },
+    {
+      "turn": 6,
+      "isl": 53443,
+      "osl": 412,
+      "delta": 2511,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "TodoWrite"
+      ],
+      "snippet": "Based on my investigation of the Django code, I can now explain the issu"
+    },
+    {
+      "turn": 7,
+      "isl": 53897,
+      "osl": 52,
+      "delta": 454,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": "Let me look more closely at the specific problem with the threading and "
+    },
+    {
+      "turn": 8,
+      "isl": 53986,
+      "osl": 84,
+      "delta": 89,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Let me also check how the server shutdown is handled in the ThreadedWSGI"
+    },
+    {
+      "turn": 9,
+      "isl": 54411,
+      "osl": 50,
+      "delta": 425,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "WebSearch"
+      ],
+      "snippet": "Let me also check the Python documentation for ThreadingMixIn to underst"
+    },
+    {
+      "turn": 10,
+      "isl": 54713,
+      "osl": 96,
+      "delta": 302,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Let me look at the specific problem in the LiveServerThread more careful"
+    },
+    {
+      "turn": 11,
+      "isl": 55347,
+      "osl": 1291,
+      "delta": 634,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "TodoWrite"
+      ],
+      "snippet": "Now I understand the issue better. Let me create a proper fix for this p"
+    },
+    {
+      "turn": 12,
+      "isl": 55514,
+      "osl": 125,
+      "delta": 167,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Edit"
+      ],
+      "snippet": "Based on my analysis of the Django code, I can now explain the issue and"
+    },
+    {
+      "turn": 13,
+      "isl": 56083,
+      "osl": 60,
+      "delta": 569,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "TodoWrite"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 14,
+      "isl": 56263,
+      "osl": 44,
+      "delta": 180,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Edit"
+      ],
+      "snippet": "Let me also make sure that the connections are properly closed in the ru"
+    },
+    {
+      "turn": 15,
+      "isl": 56429,
+      "osl": 58,
+      "delta": 166,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": "Let me also check if there are any tests that specifically cover this sc"
+    },
+    {
+      "turn": 16,
+      "isl": 56522,
+      "osl": 87,
+      "delta": 93,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Glob"
+      ],
+      "snippet": "Let me also check if there are any existing tests that might be affected"
+    },
+    {
+      "turn": 17,
+      "isl": 56585,
+      "osl": 129,
+      "delta": 63,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Glob"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 18,
+      "isl": 56638,
+      "osl": 517,
+      "delta": 53,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 19,
+      "isl": 57109,
+      "osl": 49,
+      "delta": 471,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "TodoWrite"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 20,
+      "isl": 57287,
+      "osl": 138,
+      "delta": 178,
+      "types": [
+        "text"
+      ],
+      "tool_names": [],
+      "snippet": "## Summary  I've analyzed and fixed the issue with `LiveServerTestCase`'"
+    }
+  ],
+  "summary": {
+    "total_turns": 20,
+    "peak_isl": 57287,
+    "total_osl": 3472,
+    "total_output_tokens": 2599,
+    "total_tool_calls": 19,
+    "avg_tools_per_turn": 0.95,
+    "patch_lines": 24
+  },
+  "final_usage": {
+    "input_tokens": 1017616,
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 0,
+    "output_tokens": 2599,
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 0,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "",
+    "iterations": [],
+    "speed": "standard"
+  }
+}

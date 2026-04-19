@@ -1,0 +1,239 @@
+{
+  "instance_id": "django__django-12325",
+  "repo": "django/django",
+  "base_commit": "29c126bb349526b5f1cd78facbe9f25906f18563",
+  "difficulty": "1-4 hours",
+  "problem_statement": "pk setup for MTI to parent get confused by multiple OneToOne references.\nDescription\n\t\nclass Document(models.Model):\n\tpass\nclass Picking(Document):\n\tdocument_ptr = models.OneToOneField(Document, on_delete=models.CASCADE, parent_link=True, related_name='+')\n\torigin = models.OneToOneField(Document, related_name='picking', on_delete=models.PROTECT)\nproduces django.core.exceptions.ImproperlyConfigured: Add parent_link=True to appname.Picking.origin.\nclass Picking(Document):\n\torigin = models.OneToOneField(Document, related_name='picking', on_delete=models.PROTECT)\n\tdocument_ptr = models.OneToOneField(Document, on_delete=models.CASCADE, parent_link=True, related_name='+')\nWorks\nFirst issue is that order seems to matter?\nEven if ordering is required \"by design\"(It shouldn't be we have explicit parent_link marker) shouldn't it look from top to bottom like it does with managers and other things?\n",
+  "model": "qwen/qwen3-coder-30b-a3b-instruct-fp8",
+  "server": "http://localhost:8000",
+  "workdir": "/tmp/swe_workspaces/django__django-12325",
+  "started_at": "2026-04-18T02:17:56.750406",
+  "finished_at": "2026-04-18T02:18:20.563613",
+  "turns": [
+    {
+      "turn": 1,
+      "isl": 27455,
+      "osl": 94,
+      "delta": 27455,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Glob"
+      ],
+      "snippet": "I'll investigate this Django model inheritance issue with OneToOne field"
+    },
+    {
+      "turn": 2,
+      "isl": 28242,
+      "osl": 59,
+      "delta": 787,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": "Let me look at the Django model inheritance and OneToOne field handling "
+    },
+    {
+      "turn": 3,
+      "isl": 28346,
+      "osl": 56,
+      "delta": 104,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 4,
+      "isl": 47678,
+      "osl": 84,
+      "delta": 19332,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 5,
+      "isl": 62000,
+      "osl": 29,
+      "delta": 14322,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 6,
+      "isl": 65025,
+      "osl": 57,
+      "delta": 3025,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 7,
+      "isl": 65080,
+      "osl": 31,
+      "delta": 55,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Glob"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 8,
+      "isl": 65130,
+      "osl": 30,
+      "delta": 50,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 9,
+      "isl": 65839,
+      "osl": 201,
+      "delta": 709,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "TodoWrite"
+      ],
+      "snippet": "Based on my investigation of the Django codebase, I've identified the is"
+    },
+    {
+      "turn": 10,
+      "isl": 66289,
+      "osl": 38,
+      "delta": 450,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": "Let me search for existing tests related to this issue to better underst"
+    },
+    {
+      "turn": 11,
+      "isl": 66473,
+      "osl": 53,
+      "delta": 184,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 12,
+      "isl": 68079,
+      "osl": 28,
+      "delta": 1606,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 13,
+      "isl": 73799,
+      "osl": 51,
+      "delta": 5720,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 14,
+      "isl": 78978,
+      "osl": 29,
+      "delta": 5179,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "TodoWrite"
+      ],
+      "snippet": "Now I have a better understanding of the issue. Let me create a focused "
+    },
+    {
+      "turn": 15,
+      "isl": 79213,
+      "osl": 70,
+      "delta": 235,
+      "types": [
+        "text"
+      ],
+      "tool_names": [],
+      "snippet": "Based on my investigation of the Django codebase, I can now explain the "
+    }
+  ],
+  "summary": {
+    "total_turns": 15,
+    "peak_isl": 79213,
+    "total_osl": 910,
+    "total_output_tokens": 1544,
+    "total_tool_calls": 14,
+    "avg_tools_per_turn": 0.93,
+    "patch_lines": 0
+  },
+  "final_usage": {
+    "input_tokens": 887626,
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 0,
+    "output_tokens": 1544,
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 0,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "",
+    "iterations": [],
+    "speed": "standard"
+  }
+}

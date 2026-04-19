@@ -1,0 +1,531 @@
+{
+  "instance_id": "django__django-11885",
+  "repo": "django/django",
+  "base_commit": "04ac9b45a34440fa447feb6ae934687aacbfc5f4",
+  "difficulty": "1-4 hours",
+  "problem_statement": "Combine fast delete queries\nDescription\n\t\nWhen emulating ON DELETE CASCADE via on_delete=models.CASCADE the deletion.Collector will try to perform fast queries which are DELETE FROM table WHERE table.pk IN .... There's a few conditions required for this fast path to be taken but when this happens the collection logic should combine such queries by table to reduce the number of roundtrips to the database.\nFor example, given the following models\nclass Person(models.Model):\n\tfriends = models.ManyToManyField('self')\nclass User(models.Model):\n\tpass\nclass Entry(models.Model):\n\tcreated_by = models.ForeignKey(User)\n\tupdated_by = models.ForeignKey(User)\nIssuing a person.delete() or user.delete() will result in 3 queries of the form\nDELETE FROM person_friends WHERE from_id = :id\nDELETE FROM person_friends WHERE to_id = :id\nDELETE FROM person WHERE id = :id\nDELETE FROM entry WHERE created_by_id = :id\nDELETE FROM entry WHERE updated_by = :id\nDELETRE FROM user WHERE id = :id\nBut both queries (or N queries depending on the number of foreign relationships) can be combined into a single one by using OR\nDELETE FROM person_friends WHERE from_id = :id OR to_id = :id\nDELETE FROM person WHERE id = :id\nDELETE FROM entry WHERE created_by_id = :id OR updated_by = :id\nDELETE FROM user WHERE id = :id\n",
+  "model": "qwen/qwen3-coder-30b-a3b-instruct-fp8",
+  "server": "http://localhost:8000",
+  "workdir": "/tmp/swe_workspaces/django__django-11885",
+  "started_at": "2026-04-18T01:36:41.256876",
+  "finished_at": "2026-04-18T01:37:55.413585",
+  "turns": [
+    {
+      "turn": 1,
+      "isl": 27547,
+      "osl": 67,
+      "delta": 27547,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Glob"
+      ],
+      "snippet": "I'll help you implement the optimization to combine fast delete queries "
+    },
+    {
+      "turn": 2,
+      "isl": 27634,
+      "osl": 58,
+      "delta": 87,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Let me examine the deletion.py file to understand how the deletion colle"
+    },
+    {
+      "turn": 3,
+      "isl": 31671,
+      "osl": 128,
+      "delta": 4037,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Glob"
+      ],
+      "snippet": "Now I need to look at how the fast deletes are handled in the deletion c"
+    },
+    {
+      "turn": 4,
+      "isl": 31819,
+      "osl": 55,
+      "delta": 148,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 5,
+      "isl": 33952,
+      "osl": 68,
+      "delta": 2133,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": "Let me search for the DeleteQuery class to understand how fast deletes a"
+    },
+    {
+      "turn": 6,
+      "isl": 34046,
+      "osl": 44,
+      "delta": 94,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 7,
+      "isl": 36233,
+      "osl": 75,
+      "delta": 2187,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": "Now I understand the structure better. Let me also look at how `_raw_del"
+    },
+    {
+      "turn": 8,
+      "isl": 36339,
+      "osl": 52,
+      "delta": 106,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 9,
+      "isl": 36415,
+      "osl": 66,
+      "delta": 76,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 10,
+      "isl": 37588,
+      "osl": 66,
+      "delta": 1173,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": "Let me search more specifically for the _raw_delete method:"
+    },
+    {
+      "turn": 11,
+      "isl": 37678,
+      "osl": 62,
+      "delta": 90,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 12,
+      "isl": 37780,
+      "osl": 1304,
+      "delta": 102,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 13,
+      "isl": 37949,
+      "osl": 65,
+      "delta": 169,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 14,
+      "isl": 38257,
+      "osl": 44,
+      "delta": 308,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "TodoWrite"
+      ],
+      "snippet": "Now I understand the structure. Let me analyze the problem and implement"
+    },
+    {
+      "turn": 15,
+      "isl": 38508,
+      "osl": 65,
+      "delta": 251,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Edit"
+      ],
+      "snippet": "Looking at the code more closely, I need to understand how the fast_dele"
+    },
+    {
+      "turn": 16,
+      "isl": 39108,
+      "osl": 95,
+      "delta": 600,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Edit"
+      ],
+      "snippet": "Wait, I realize there's an issue with my approach. The `|` operator for "
+    },
+    {
+      "turn": 17,
+      "isl": 40003,
+      "osl": 74,
+      "delta": 895,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Edit"
+      ],
+      "snippet": "Actually, I think I'm overcomplicating this. Let me re-read the problem "
+    },
+    {
+      "turn": 18,
+      "isl": 43074,
+      "osl": 209,
+      "delta": 3071,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Let me read the file again to get the current state and then make the pr"
+    },
+    {
+      "turn": 19,
+      "isl": 43739,
+      "osl": 547,
+      "delta": 665,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Edit"
+      ],
+      "snippet": "Now I can see the current implementation. Looking at the problem more ca"
+    },
+    {
+      "turn": 20,
+      "isl": 44292,
+      "osl": 815,
+      "delta": 553,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "TodoWrite"
+      ],
+      "snippet": "Let me update the todo list to reflect the current progress:"
+    },
+    {
+      "turn": 21,
+      "isl": 44467,
+      "osl": 336,
+      "delta": 175,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": "Looking at the problem more carefully, I realize that the optimization d"
+    },
+    {
+      "turn": 22,
+      "isl": 44947,
+      "osl": 14,
+      "delta": 480,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Glob"
+      ],
+      "snippet": "Let me find the correct test directory structure:"
+    },
+    {
+      "turn": 23,
+      "isl": 45001,
+      "osl": 853,
+      "delta": 54,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Glob"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 24,
+      "isl": 45046,
+      "osl": 441,
+      "delta": 45,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Glob"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 25,
+      "isl": 45092,
+      "osl": 309,
+      "delta": 46,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Glob"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 26,
+      "isl": 45164,
+      "osl": 76,
+      "delta": 72,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": "Let me check if there are any tests for the deletion module:"
+    },
+    {
+      "turn": 27,
+      "isl": 45465,
+      "osl": 58,
+      "delta": 301,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Glob"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 28,
+      "isl": 45690,
+      "osl": 825,
+      "delta": 225,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": "Let me run a simple test to make sure our changes don't break basic func"
+    },
+    {
+      "turn": 29,
+      "isl": 45896,
+      "osl": 43,
+      "delta": 206,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": "Let me check if there are any existing tests we can run to validate our "
+    },
+    {
+      "turn": 30,
+      "isl": 45989,
+      "osl": 64,
+      "delta": 93,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Let me summarize what I've implemented and verify it's correct:"
+    },
+    {
+      "turn": 31,
+      "isl": 46285,
+      "osl": 44,
+      "delta": 296,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "I notice that my edit didn't take effect properly. Let me check the curr"
+    },
+    {
+      "turn": 32,
+      "isl": 46707,
+      "osl": 53,
+      "delta": 422,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Edit"
+      ],
+      "snippet": "I see that my changes weren't applied correctly. Let me apply the correc"
+    },
+    {
+      "turn": 33,
+      "isl": 47191,
+      "osl": 64,
+      "delta": 484,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "TodoWrite"
+      ],
+      "snippet": "Let me also update the todo list to reflect that we've completed the imp"
+    },
+    {
+      "turn": 34,
+      "isl": 47372,
+      "osl": 47,
+      "delta": 181,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "ExitPlanMode"
+      ],
+      "snippet": "## Summary  I have successfully implemented the optimization to combine "
+    },
+    {
+      "turn": 35,
+      "isl": 50151,
+      "osl": 36,
+      "delta": 2779,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "ExitPlanMode"
+      ],
+      "snippet": "I've successfully implemented the optimization to combine fast delete qu"
+    },
+    {
+      "turn": 36,
+      "isl": 50695,
+      "osl": 198,
+      "delta": 544,
+      "types": [
+        "text"
+      ],
+      "tool_names": [],
+      "snippet": "I've successfully implemented the optimization to combine fast delete qu"
+    }
+  ],
+  "summary": {
+    "total_turns": 36,
+    "peak_isl": 50695,
+    "total_osl": 7420,
+    "total_output_tokens": 6799,
+    "total_tool_calls": 35,
+    "avg_tools_per_turn": 0.97,
+    "patch_lines": 52
+  },
+  "final_usage": {
+    "input_tokens": 1474790,
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 0,
+    "output_tokens": 6799,
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 0,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "",
+    "iterations": [],
+    "speed": "standard"
+  }
+}

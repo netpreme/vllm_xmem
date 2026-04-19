@@ -1,0 +1,56 @@
+diff --git a/django/db/models/sql/query.py b/django/db/models/sql/query.py
+index 9735ce1..8e30cf0 100644
+--- a/django/db/models/sql/query.py
++++ b/django/db/models/sql/query.py
+@@ -550,7 +550,51 @@ class Query(BaseExpression):
+         Perform a COUNT() query using the current filter constraints.
+         """
+         obj = self.clone()
++        # Add the count annotation
+         obj.add_annotation(Count("*"), alias="__count", is_summary=True)
++
++        # Strip unused annotations to optimize the count query
++        # Only keep annotations that are referenced in filters, ordering, or other query components
++        if self.annotations:
++            # Get the list of annotations that are actually referenced in the query
++            referenced_annotations = set()
++
++            # Check if any annotations are referenced in WHERE clauses
++            if self.where:
++                for child in self.where.children:
++                    if hasattr(child, 'get_source_expressions'):
++                        for expr in child.get_source_expressions():
++                            if isinstance(expr, Ref) and expr.refs in self.annotations:
++                                referenced_annotations.add(expr.refs)
++
++            # Check if any annotations are referenced in ORDER BY clauses
++            if self.order_by:
++                for order_expr in self.order_by:
++                    if hasattr(order_expr, 'get_source_expressions'):
++                        for expr in order_expr.get_source_expressions():
++                            if isinstance(expr, Ref) and expr.refs in self.annotations:
++                                referenced_annotations.add(expr.refs)
++
++            # Check if any annotations are referenced in GROUP BY clauses
++            if isinstance(self.group_by, (list, tuple)):
++                for expr in self.group_by:
++                    if hasattr(expr, 'get_source_expressions'):
++                        for source_expr in expr.get_source_expressions():
++                            if isinstance(source_expr, Ref) and source_expr.refs in self.annotations:
++                                referenced_annotations.add(source_expr.refs)
++
++            # If there are referenced annotations, only include those in the count query
++            if referenced_annotations:
++                # Create a new annotation mask that only includes referenced annotations
++                # and the count annotation
++                new_mask = set(referenced_annotations)
++                new_mask.add("__count")
++                obj.set_annotation_mask(new_mask)
++            else:
++                # If no annotations are referenced, we still want to include the count
++                # but remove all other annotations to optimize the query
++                obj.set_annotation_mask({"__count"})
++
+         return obj.get_aggregation(using, ["__count"])["__count"]
+ 
+     def has_filters(self):

@@ -1,0 +1,33 @@
+diff --git a/django/db/backends/base/schema.py b/django/db/backends/base/schema.py
+index 61f88401..9e003d7d 100644
+--- a/django/db/backends/base/schema.py
++++ b/django/db/backends/base/schema.py
+@@ -407,6 +407,28 @@ class BaseDatabaseSchemaEditor:
+             model, columns, exclude=meta_constraint_names | meta_index_names,
+             **constraint_kwargs
+         )
++        # Handle case where both unique and index constraints exist on same fields
++        if len(constraint_names) > 1:
++            # If we're looking for an index constraint and there are multiple,
++            # we need to filter to find the right one
++            if constraint_kwargs.get('index') is True:
++                # For index constraints, we want to delete the index one specifically
++                # We can identify it by checking if it's a unique constraint or not
++                # by looking at the constraint details from introspection
++                filtered_names = []
++                with self.connection.cursor() as cursor:
++                    constraints = self.connection.introspection.get_constraints(cursor, model._meta.db_table)
++                for name in constraint_names:
++                    if name in constraints and constraints[name]['index'] is True:
++                        filtered_names.append(name)
++                if len(filtered_names) == 1:
++                    constraint_names = filtered_names
++                else:
++                    # Fallback to first one if we can't distinguish
++                    constraint_names = constraint_names[:1]
++            else:
++                # For other constraint types, just take the first one
++                constraint_names = constraint_names[:1]
+         if len(constraint_names) != 1:
+             raise ValueError("Found wrong number (%s) of constraints for %s(%s)" % (
+                 len(constraint_names),

@@ -1,0 +1,70 @@
+diff --git a/django/db/models/query.py b/django/db/models/query.py
+index 387deca5..36977abb 100644
+--- a/django/db/models/query.py
++++ b/django/db/models/query.py
+@@ -505,7 +505,9 @@ class QuerySet:
+                 for obj_with_pk, results in zip(objs_with_pk, returned_columns):
+                     for result, field in zip(results, opts.db_returning_fields):
+                         if field != opts.pk:
+-                            setattr(obj_with_pk, field.attname, result)
++                            # Apply field conversion logic to ensure from_db_value is called
++                            converted_value = field.from_db_value(result, None, connection)
++                            setattr(obj_with_pk, field.attname, converted_value)
+                 for obj_with_pk in objs_with_pk:
+                     obj_with_pk._state.adding = False
+                     obj_with_pk._state.db = self.db
+@@ -518,7 +520,9 @@ class QuerySet:
+                     assert len(returned_columns) == len(objs_without_pk)
+                 for obj_without_pk, results in zip(objs_without_pk, returned_columns):
+                     for result, field in zip(results, opts.db_returning_fields):
+-                        setattr(obj_without_pk, field.attname, result)
++                        # Apply field conversion logic to ensure from_db_value is called
++                        converted_value = field.from_db_value(result, None, connection)
++                        setattr(obj_without_pk, field.attname, converted_value)
+                     obj_without_pk._state.adding = False
+                     obj_without_pk._state.db = self.db
+ 
+diff --git a/django/db/models/sql/compiler.py b/django/db/models/sql/compiler.py
+index f02199d9..2004a898 100644
+--- a/django/db/models/sql/compiler.py
++++ b/django/db/models/sql/compiler.py
+@@ -1412,10 +1412,37 @@ class SQLInsertCompiler(SQLCompiler):
+             if not self.returning_fields:
+                 return []
+             if self.connection.features.can_return_rows_from_bulk_insert and len(self.query.objs) > 1:
+-                return self.connection.ops.fetch_returned_insert_rows(cursor)
++                rows = self.connection.ops.fetch_returned_insert_rows(cursor)
++                # Apply field converters to returned values
++                if rows and returning_fields:
++                    converted_rows = []
++                    for row in rows:
++                        converted_row = []
++                        for i, (value, field) in enumerate(zip(row, returning_fields)):
++                            if field and hasattr(field, 'from_db_value'):
++                                # Apply the field's from_db_value converter
++                                converted_value = field.from_db_value(value, None, self.connection)
++                                converted_row.append(converted_value)
++                            else:
++                                converted_row.append(value)
++                        converted_rows.append(tuple(converted_row))
++                    return converted_rows
++                return rows
+             if self.connection.features.can_return_columns_from_insert:
+                 assert len(self.query.objs) == 1
+-                return [self.connection.ops.fetch_returned_insert_columns(cursor, self.returning_params)]
++                row = self.connection.ops.fetch_returned_insert_columns(cursor, self.returning_params)
++                # Apply field converters to returned values
++                if row and returning_fields:
++                    converted_row = []
++                    for i, (value, field) in enumerate(zip(row, returning_fields)):
++                        if field and hasattr(field, 'from_db_value'):
++                            # Apply the field's from_db_value converter
++                            converted_value = field.from_db_value(value, None, self.connection)
++                            converted_row.append(converted_value)
++                        else:
++                            converted_row.append(value)
++                    return [tuple(converted_row)]
++                return [row]
+             return [(self.connection.ops.last_insert_id(
+                 cursor, self.query.get_meta().db_table, self.query.get_meta().pk.column
+             ),)]

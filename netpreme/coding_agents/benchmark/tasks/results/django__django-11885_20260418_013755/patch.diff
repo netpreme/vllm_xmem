@@ -1,0 +1,52 @@
+diff --git a/django/db/models/deletion.py b/django/db/models/deletion.py
+index ae82d263..c912efd5 100644
+--- a/django/db/models/deletion.py
++++ b/django/db/models/deletion.py
+@@ -310,9 +310,45 @@ class Collector:
+                     )
+ 
+             # fast deletes
++            # Group fast deletes by table to reduce database round trips
++            table_fast_deletes = {}
+             for qs in self.fast_deletes:
+-                count = qs._raw_delete(using=self.using)
+-                deleted_counter[qs.model._meta.label] += count
++                table_name = qs.model._meta.db_table
++                if table_name not in table_fast_deletes:
++                    table_fast_deletes[table_name] = []
++                table_fast_deletes[table_name].append(qs)
++
++            # Process each group of fast deletes for the same table
++            for table_name, qs_list in table_fast_deletes.items():
++                # For queries to the same table, we can combine them by collecting
++                # all primary keys and performing a single delete operation
++                if len(qs_list) == 1:
++                    # No need to combine if there's only one query
++                    count = qs_list[0]._raw_delete(using=self.using)
++                    deleted_counter[qs_list[0].model._meta.label] += count
++                else:
++                    # Combine queries for the same table by collecting all PKs
++                    # and deleting them in one operation
++                    all_pks = []
++                    for qs in qs_list:
++                        # Get all primary keys from each queryset
++                        try:
++                            pks = list(qs.values_list('pk', flat=True))
++                            all_pks.extend(pks)
++                        except Exception:
++                            # If we can't get pks, fall back to individual deletion
++                            count = qs._raw_delete(using=self.using)
++                            deleted_counter[qs.model._meta.label] += count
++
++                    # Remove duplicates if any
++                    all_pks = list(set(all_pks))
++
++                    if all_pks:
++                        # Create a new queryset with all pks and delete it
++                        model = qs_list[0].model
++                        new_qs = model._base_manager.using(self.using).filter(pk__in=all_pks)
++                        count = new_qs._raw_delete(using=self.using)
++                        deleted_counter[model._meta.label] += count
+ 
+             # update fields
+             for model, instances_for_fieldvalues in self.field_updates.items():

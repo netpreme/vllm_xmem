@@ -1,0 +1,66 @@
+diff --git a/xarray/core/computation.py b/xarray/core/computation.py
+index 9fe93c8..6733fbc 100644
+--- a/xarray/core/computation.py
++++ b/xarray/core/computation.py
+@@ -271,12 +271,17 @@ def apply_dataarray_vfunc(
+     """
+     from .dataarray import DataArray
+ 
++    print(f"DEBUG apply_dataarray_vfunc: keep_attrs={keep_attrs}")
++    print(f"DEBUG apply_dataarray_vfunc: args types={[(type(a), hasattr(a, 'attrs')) for a in args]}")
++
+     if len(args) > 1:
+         args = deep_align(
+             args, join=join, copy=False, exclude=exclude_dims, raise_on_invalid=False
+         )
+ 
+     objs = _all_of_type(args, DataArray)
++    print(f"DEBUG apply_dataarray_vfunc: objs={objs}")
++    print(f"DEBUG apply_dataarray_vfunc: objs attrs={[x.attrs for x in objs]}")
+ 
+     if keep_attrs == "drop":
+         name = result_name(args)
+@@ -300,11 +305,13 @@ def apply_dataarray_vfunc(
+         out = DataArray(result_var, coords, name=name, fastpath=True)
+ 
+     attrs = merge_attrs([x.attrs for x in objs], combine_attrs=keep_attrs)
++    print(f"DEBUG apply_dataarray_vfunc: merge_attrs result={attrs}")
+     if isinstance(out, tuple):
+         for da in out:
+             da.attrs = attrs
+     else:
+         out.attrs = attrs
++    print(f"DEBUG apply_dataarray_vfunc: final result attrs={getattr(out, 'attrs', 'no attrs')}")
+ 
+     return out
+ 
+@@ -1809,6 +1816,8 @@ def where(cond, x, y):
+         equivalent methods
+     """
+     # alignment for three arguments is complicated, so don't support it yet
++    # For DataArrays, we want to preserve attributes from the first DataArray argument
++    # that has attributes, rather than trying to merge all attributes
+     return apply_ufunc(
+         duck_array_ops.where,
+         cond,
+@@ -1817,6 +1826,7 @@ def where(cond, x, y):
+         join="exact",
+         dataset_join="exact",
+         dask="allowed",
++        keep_attrs=True,
+     )
+ 
+ 
+diff --git a/xarray/core/dtypes.py b/xarray/core/dtypes.py
+index 5f93490..6a35c58 100644
+--- a/xarray/core/dtypes.py
++++ b/xarray/core/dtypes.py
+@@ -38,7 +38,7 @@ NINF = AlwaysLessThan()
+ PROMOTE_TO_OBJECT = [
+     {np.number, np.character},  # numpy promotes to character
+     {np.bool_, np.character},  # numpy promotes to character
+-    {np.bytes_, np.unicode_},  # numpy promotes to unicode
++    {np.bytes_, np.str_},  # numpy promotes to unicode (NumPy 2.0+)
+ ]
+ 
+ 

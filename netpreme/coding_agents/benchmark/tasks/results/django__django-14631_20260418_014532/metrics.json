@@ -1,0 +1,592 @@
+{
+  "instance_id": "django__django-14631",
+  "repo": "django/django",
+  "base_commit": "84400d2e9db7c51fee4e9bb04c028f665b8e7624",
+  "difficulty": "1-4 hours",
+  "problem_statement": "BaseForm's _clean_fields() and changed_data should access values via BoundField\nDescription\n\t \n\t\t(last modified by Chris Jerdonek)\n\t \nWhile working on #32917, I noticed that \u200bBaseForm._clean_fields() and \u200bBaseForm.changed_data don't currently access their values through a BoundField object. It would be better for consistency if they did, and to reduce the number of code paths.\nOne consequence of the current code is that form._clean_fields() can return a different value from form[name].initial when they should be the same. This case is almost, but not quite, covered by \u200btest_datetime_clean_initial_callable_disabled() (the test can be adjusted to cover this case).\nAs part of this ticket and in line with accessing data through the BoundField objects, I noticed that the code would also be simpler if the per-field logic of changed_data() were moved into a method of the BoundField class. It could be called something like bf.did_change(). This would be more appropriate because whether form data changed for a field is a property of its BoundField (as it depends on the underlying form data), as opposed to the unbound field. With this change, the method could change from its current ~20 lines to something like this--\n@cached_property\ndef changed_data(self):\n\treturn [name for name, bf in self._bound_items() if bf._did_change()]\nA similar change could be made to BaseForm._clean_fields().\n",
+  "model": "qwen/qwen3-coder-30b-a3b-instruct-fp8",
+  "server": "http://localhost:8000",
+  "workdir": "/tmp/swe_workspaces/django__django-14631",
+  "started_at": "2026-04-18T01:44:11.451601",
+  "finished_at": "2026-04-18T01:45:32.130833",
+  "turns": [
+    {
+      "turn": 1,
+      "isl": 27559,
+      "osl": 79,
+      "delta": 27559,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Glob"
+      ],
+      "snippet": "I'll help you implement this improvement to make BaseForm._clean_fields("
+    },
+    {
+      "turn": 2,
+      "isl": 27663,
+      "osl": 52,
+      "delta": 104,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Glob"
+      ],
+      "snippet": "Let me search for form-related files in the Django codebase:"
+    },
+    {
+      "turn": 3,
+      "isl": 27837,
+      "osl": 87,
+      "delta": 174,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Now let me examine the main forms module to understand the BaseForm clas"
+    },
+    {
+      "turn": 4,
+      "isl": 33444,
+      "osl": 39,
+      "delta": 5607,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Now let me also look at the BoundField class to understand how it works:"
+    },
+    {
+      "turn": 5,
+      "isl": 36423,
+      "osl": 56,
+      "delta": 2979,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": "Now I need to look at the issue more closely. Let me also check if there"
+    },
+    {
+      "turn": 6,
+      "isl": 36625,
+      "osl": 59,
+      "delta": 202,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": "Let me look at the test that was mentioned in the issue:"
+    },
+    {
+      "turn": 7,
+      "isl": 36721,
+      "osl": 76,
+      "delta": 96,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": "Let me search for the test in a different way:"
+    },
+    {
+      "turn": 8,
+      "isl": 36810,
+      "osl": 70,
+      "delta": 89,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Let me look at the test file to understand the context better:"
+    },
+    {
+      "turn": 9,
+      "isl": 51850,
+      "osl": 63,
+      "delta": 15040,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": "Let me search for the specific test function mentioned in the issue:"
+    },
+    {
+      "turn": 10,
+      "isl": 51944,
+      "osl": 572,
+      "delta": 94,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": "Let me search for the test function in a broader way:"
+    },
+    {
+      "turn": 11,
+      "isl": 52133,
+      "osl": 79,
+      "delta": 189,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 12,
+      "isl": 53059,
+      "osl": 78,
+      "delta": 926,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "TodoWrite"
+      ],
+      "snippet": "Now I have a good understanding of the issue. Let me summarize what need"
+    },
+    {
+      "turn": 13,
+      "isl": 53404,
+      "osl": 68,
+      "delta": 345,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Edit"
+      ],
+      "snippet": "Let me first modify the BaseForm._clean_fields() method to access values"
+    },
+    {
+      "turn": 14,
+      "isl": 53841,
+      "osl": 79,
+      "delta": 437,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Edit"
+      ],
+      "snippet": "Now I need to modify the BaseForm.changed_data property to access values"
+    },
+    {
+      "turn": 15,
+      "isl": 56495,
+      "osl": 120,
+      "delta": 2654,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Let me read the file again to get the current state and make the proper "
+    },
+    {
+      "turn": 16,
+      "isl": 57608,
+      "osl": 236,
+      "delta": 1113,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Edit"
+      ],
+      "snippet": "Now I'll make the changes to both methods:"
+    },
+    {
+      "turn": 17,
+      "isl": 58035,
+      "osl": 207,
+      "delta": 427,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Edit"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 18,
+      "isl": 58487,
+      "osl": 352,
+      "delta": 452,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Edit"
+      ],
+      "snippet": "Now I need to add the `_did_change()` method to the BoundField class as "
+    },
+    {
+      "turn": 19,
+      "isl": 59038,
+      "osl": 385,
+      "delta": 551,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Edit"
+      ],
+      "snippet": "Now I need to update the BaseForm.changed_data property to use the new _"
+    },
+    {
+      "turn": 20,
+      "isl": 59389,
+      "osl": 364,
+      "delta": 351,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": "I need to check if there's a `_bound_items()` method in the BaseForm cla"
+    },
+    {
+      "turn": 21,
+      "isl": 59488,
+      "osl": 438,
+      "delta": 99,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": "Let me check if there's a method that returns bound fields:"
+    },
+    {
+      "turn": 22,
+      "isl": 59570,
+      "osl": 58,
+      "delta": 82,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Let me check what methods are available to iterate over bound fields:"
+    },
+    {
+      "turn": 23,
+      "isl": 60152,
+      "osl": 82,
+      "delta": 582,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Edit"
+      ],
+      "snippet": "I need to create a helper method to get the bound items. Let me add a me"
+    },
+    {
+      "turn": 24,
+      "isl": 60544,
+      "osl": 70,
+      "delta": 392,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "TodoWrite"
+      ],
+      "snippet": "Now let me update the todo list to mark the tasks as completed:"
+    },
+    {
+      "turn": 25,
+      "isl": 60780,
+      "osl": 93,
+      "delta": 236,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": "Now let's run some tests to make sure our changes work correctly. First,"
+    },
+    {
+      "turn": 26,
+      "isl": 61318,
+      "osl": 85,
+      "delta": 538,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": "Let me try a different approach to run the tests:"
+    },
+    {
+      "turn": 27,
+      "isl": 61648,
+      "osl": 83,
+      "delta": 330,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": "Let me install the missing dependency and try a simpler test approach:"
+    },
+    {
+      "turn": 28,
+      "isl": 61780,
+      "osl": 386,
+      "delta": 132,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": "Let me try to run a simple test to verify our changes work:"
+    },
+    {
+      "turn": 29,
+      "isl": 62253,
+      "osl": 83,
+      "delta": 473,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": "Let me install the required packages properly:"
+    },
+    {
+      "turn": 30,
+      "isl": 63218,
+      "osl": 411,
+      "delta": 965,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Write"
+      ],
+      "snippet": "Now let me create a simple test to verify our changes work:"
+    },
+    {
+      "turn": 31,
+      "isl": 63983,
+      "osl": 323,
+      "delta": 765,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 32,
+      "isl": 64178,
+      "osl": 747,
+      "delta": 195,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": "Let me install the required packages properly:"
+    },
+    {
+      "turn": 33,
+      "isl": 64534,
+      "osl": 45,
+      "delta": 356,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Let me try a simpler approach to verify our changes work by looking at t"
+    },
+    {
+      "turn": 34,
+      "isl": 64839,
+      "osl": 33,
+      "delta": 305,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 35,
+      "isl": 65101,
+      "osl": 51,
+      "delta": 262,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 36,
+      "isl": 65395,
+      "osl": 310,
+      "delta": 294,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 37,
+      "isl": 65875,
+      "osl": 76,
+      "delta": 480,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Let me also check that the _bound_items method was added correctly:"
+    },
+    {
+      "turn": 38,
+      "isl": 66053,
+      "osl": 65,
+      "delta": 178,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "TodoWrite"
+      ],
+      "snippet": "Perfect! Let me now update the todo list to mark the final task as compl"
+    },
+    {
+      "turn": 39,
+      "isl": 66293,
+      "osl": 77,
+      "delta": 240,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "ExitPlanMode"
+      ],
+      "snippet": "## Summary of Changes Made  I have successfully implemented the improvem"
+    },
+    {
+      "turn": 40,
+      "isl": 66781,
+      "osl": 166,
+      "delta": 488,
+      "types": [
+        "text"
+      ],
+      "tool_names": [],
+      "snippet": "I've successfully implemented the improvements to make BaseForm._clean_f"
+    }
+  ],
+  "summary": {
+    "total_turns": 40,
+    "peak_isl": 66781,
+    "total_osl": 6803,
+    "total_output_tokens": 6685,
+    "total_tool_calls": 39,
+    "avg_tools_per_turn": 0.97,
+    "patch_lines": 90
+  },
+  "final_usage": {
+    "input_tokens": 2192148,
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 0,
+    "output_tokens": 6685,
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 0,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "",
+    "iterations": [],
+    "speed": "standard"
+  }
+}

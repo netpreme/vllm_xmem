@@ -1,0 +1,22 @@
+diff --git a/django/db/backends/mysql/operations.py b/django/db/backends/mysql/operations.py
+index 50f85e06..cef18ee5 100644
+--- a/django/db/backends/mysql/operations.py
++++ b/django/db/backends/mysql/operations.py
+@@ -70,7 +70,16 @@ class DatabaseOperations(BaseDatabaseOperations):
+ 
+     def _convert_field_to_tz(self, field_name, tzname):
+         if settings.USE_TZ:
+-            field_name = "CONVERT_TZ(%s, 'UTC', '%s')" % (field_name, tzname)
++            # Check if the database has a specific timezone setting that differs from Django's timezone
++            # If so, we should not convert from UTC to Django timezone, but rather handle appropriately
++            db_timezone = getattr(self.connection, 'timezone', None)
++            if db_timezone is not None and db_timezone != tzname:
++                # Database has its own timezone setting that differs from Django's timezone
++                # In this case, we should not apply CONVERT_TZ as it would be incorrect
++                # The field is already stored in the database's timezone
++                pass
++            else:
++                field_name = "CONVERT_TZ(%s, 'UTC', '%s')" % (field_name, tzname)
+         return field_name
+ 
+     def datetime_cast_date_sql(self, field_name, tzname):

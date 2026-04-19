@@ -1,0 +1,25 @@
+diff --git a/xarray/core/computation.py b/xarray/core/computation.py
+index 823cbe0..523fe37 100644
+--- a/xarray/core/computation.py
++++ b/xarray/core/computation.py
+@@ -1933,7 +1933,8 @@ def _ensure_numeric(data: T_Xarray) -> T_Xarray:
+     from .dataset import Dataset
+ 
+     def to_floatable(x: DataArray) -> DataArray:
+-        if x.dtype.kind in "mM":
++        if x.dtype.kind == "M":
++            # datetime64: convert to numeric values relative to epoch
+             return x.copy(
+                 data=datetime_to_numeric(
+                     x.data,
+@@ -1941,6 +1942,10 @@ def _ensure_numeric(data: T_Xarray) -> T_Xarray:
+                     datetime_unit="ns",
+                 ),
+             )
++        elif x.dtype.kind == "m":
++            # timedelta64: convert to numeric values in nanoseconds
++            # This preserves the timedelta values as they are already in a numeric form
++            return x.copy(data=x.data.astype("float64"))
+         return x
+ 
+     if isinstance(data, Dataset):

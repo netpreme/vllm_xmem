@@ -1,0 +1,449 @@
+{
+  "instance_id": "sympy__sympy-14248",
+  "repo": "sympy/sympy",
+  "base_commit": "9986b38181cdd556a3f3411e553864f11912244e",
+  "difficulty": "1-4 hours",
+  "problem_statement": "The difference of MatrixSymbols prints as a sum with (-1) coefficient\nInternally, differences like a-b are represented as the sum of a with `(-1)*b`, but they are supposed to print like a-b. This does not happen with MatrixSymbols. I tried three printers: str, pretty, and latex: \r\n```\r\nfrom sympy import *\r\nA = MatrixSymbol('A', 2, 2)\r\nB = MatrixSymbol('B', 2, 2)\r\nprint(A - A*B - B)\r\npprint(A - A*B - B)\r\nlatex(A - A*B - B)\r\n```\r\nOutput:\r\n```\r\n(-1)*B + (-1)*A*B + A\r\n-B + -A\u22c5B + A\r\n'-1 B + -1 A B + A'\r\n```\r\n\r\nBased on a [Stack Overflow post](https://stackoverflow.com/q/48826611)\n",
+  "model": "qwen/qwen3-coder-30b-a3b-instruct-fp8",
+  "server": "http://localhost:8000",
+  "workdir": "/tmp/swe_workspaces/sympy__sympy-14248",
+  "started_at": "2026-04-18T02:25:00.918702",
+  "finished_at": "2026-04-18T02:25:47.773540",
+  "turns": [
+    {
+      "turn": 1,
+      "isl": 27456,
+      "osl": 76,
+      "delta": 27456,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "I'll investigate this issue with MatrixSymbol differences not printing c"
+    },
+    {
+      "turn": 2,
+      "isl": 27810,
+      "osl": 69,
+      "delta": 354,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": "Let me look at the MatrixSymbol implementation and how it handles subtra"
+    },
+    {
+      "turn": 3,
+      "isl": 27909,
+      "osl": 52,
+      "delta": 99,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 4,
+      "isl": 36493,
+      "osl": 70,
+      "delta": 8584,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Now let me look at the MatAdd class to understand how addition/subtracti"
+    },
+    {
+      "turn": 5,
+      "isl": 37762,
+      "osl": 44,
+      "delta": 1269,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Glob"
+      ],
+      "snippet": "Let me also check the printing module to understand how expressions are "
+    },
+    {
+      "turn": 6,
+      "isl": 37838,
+      "osl": 30,
+      "delta": 76,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Glob"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 7,
+      "isl": 37990,
+      "osl": 65,
+      "delta": 152,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Let me look at the str printer to understand how expressions are convert"
+    },
+    {
+      "turn": 8,
+      "isl": 47384,
+      "osl": 808,
+      "delta": 9394,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Write"
+      ],
+      "snippet": "Now let me create a test script to reproduce the issue and understand wh"
+    },
+    {
+      "turn": 9,
+      "isl": 47753,
+      "osl": 325,
+      "delta": 369,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 10,
+      "isl": 48046,
+      "osl": 49,
+      "delta": 293,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": "Let me try a simpler approach to test the issue:"
+    },
+    {
+      "turn": 11,
+      "isl": 48409,
+      "osl": 148,
+      "delta": 363,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": "Let me check the Python version and try to run the tests in a different "
+    },
+    {
+      "turn": 12,
+      "isl": 48473,
+      "osl": 490,
+      "delta": 64,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": "Let me check if there's a setup.py or installation issue:"
+    },
+    {
+      "turn": 13,
+      "isl": 48860,
+      "osl": 41,
+      "delta": 387,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Let me check the Python version compatibility issue and look at the code"
+    },
+    {
+      "turn": 14,
+      "isl": 49079,
+      "osl": 72,
+      "delta": 219,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "The issue is that in Python 3.12, `collections.Mapping` was moved to `co"
+    },
+    {
+      "turn": 15,
+      "isl": 49749,
+      "osl": 215,
+      "delta": 670,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Let me look at the specific issue with how MatAdd is printed. Looking at"
+    },
+    {
+      "turn": 16,
+      "isl": 50026,
+      "osl": 95,
+      "delta": 277,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Looking at the code, I can see the issue now. The problem is that when w"
+    },
+    {
+      "turn": 17,
+      "isl": 50498,
+      "osl": 98,
+      "delta": 472,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "TodoWrite"
+      ],
+      "snippet": "Now I understand the issue! The problem is in the `_print_Add` method. W"
+    },
+    {
+      "turn": 18,
+      "isl": 50761,
+      "osl": 166,
+      "delta": 263,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "TodoWrite"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 19,
+      "isl": 50937,
+      "osl": 406,
+      "delta": 176,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": "Let me approach this differently. Since I can't easily run the code due "
+    },
+    {
+      "turn": 20,
+      "isl": 51304,
+      "osl": 283,
+      "delta": 367,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": "Let me look at how the LaTeX printer handles MatAdd:"
+    },
+    {
+      "turn": 21,
+      "isl": 51406,
+      "osl": 292,
+      "delta": 102,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 22,
+      "isl": 51793,
+      "osl": 211,
+      "delta": 387,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 23,
+      "isl": 51880,
+      "osl": 104,
+      "delta": 87,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 24,
+      "isl": 51970,
+      "osl": 134,
+      "delta": 90,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 25,
+      "isl": 52181,
+      "osl": 55,
+      "delta": 211,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": "Let me search more specifically for the _print_MatAdd method in the late"
+    },
+    {
+      "turn": 26,
+      "isl": 52446,
+      "osl": 46,
+      "delta": 265,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 27,
+      "isl": 52659,
+      "osl": 45,
+      "delta": 213,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Now I understand the issue better. The problem is that when we have an e"
+    },
+    {
+      "turn": 28,
+      "isl": 53213,
+      "osl": 56,
+      "delta": 554,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "TodoWrite"
+      ],
+      "snippet": "Based on my analysis, I can see the issue clearly now. The problem is in"
+    },
+    {
+      "turn": 29,
+      "isl": 53519,
+      "osl": 320,
+      "delta": 306,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "ExitPlanMode"
+      ],
+      "snippet": "Based on my analysis of the SymPy code, I've identified the root cause o"
+    },
+    {
+      "turn": 30,
+      "isl": 54019,
+      "osl": 82,
+      "delta": 500,
+      "types": [
+        "text"
+      ],
+      "tool_names": [],
+      "snippet": "I've analyzed the issue with MatrixSymbol differences not printing corre"
+    }
+  ],
+  "summary": {
+    "total_turns": 30,
+    "peak_isl": 54019,
+    "total_osl": 4947,
+    "total_output_tokens": 4115,
+    "total_tool_calls": 29,
+    "avg_tools_per_turn": 0.97,
+    "patch_lines": 0
+  },
+  "final_usage": {
+    "input_tokens": 1399623,
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 0,
+    "output_tokens": 4115,
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 0,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "",
+    "iterations": [],
+    "speed": "standard"
+  }
+}

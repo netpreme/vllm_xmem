@@ -1,0 +1,476 @@
+{
+  "instance_id": "pydata__xarray-6992",
+  "repo": "pydata/xarray",
+  "base_commit": "45c0a114e2b7b27b83c9618bc05b36afac82183c",
+  "difficulty": ">4 hours",
+  "problem_statement": "index refactor: more `_coord_names` than `_variables` on Dataset\n### What happened?\n\n`xr.core.dataset.DataVariables` assumes that everything that is in `ds._dataset._variables` and not in `self._dataset._coord_names` is a \"data variable\". However, since the index refactor we can end up with more `_coord_names` than `_variables` which breaks a number of stuff (e.g. the repr).\n\n### What did you expect to happen?\n\nWell it seems this assumption is now wrong.\n\n### Minimal Complete Verifiable Example\n\n```Python\nds = xr.Dataset(coords={\"a\": (\"x\", [1, 2, 3]), \"b\": (\"x\", ['a', 'b', 'c'])})\r\nds.set_index(z=['a', 'b']).reset_index(\"z\", drop=True)\n```\n\n\n### MVCE confirmation\n\n- [ ] Minimal example \u2014 the example is as focused as reasonably possible to demonstrate the underlying issue in xarray.\n- [ ] Complete example \u2014 the example is self-contained, including all data and the text of any traceback.\n- [ ] Verifiable example \u2014 the example copy & pastes into an IPython prompt or [Binder notebook](https://mybinder.org/v2/gh/pydata/xarray/main?urlpath=lab/tree/doc/examples/blank_template.ipynb), returning the result.\n- [ ] New issue \u2014 a search of GitHub Issues suggests this is not a duplicate.\n\n### Relevant log output\n\n```Python\nValueError: __len__() should return >= 0\n```\n\n\n### Anything else we need to know?\n\nThe error comes from here\r\n\r\nhttps://github.com/pydata/xarray/blob/63ba862d03c8d0cd8b44d2071bc360e9fed4519d/xarray/core/dataset.py#L368\r\n\r\nBisected to #5692 - which probably does not help too much.\r\n\n\n### Environment\n\n<details>\r\n\r\n\r\n\r\n</details>\r\n\n",
+  "model": "qwen/qwen3-coder-30b-a3b-instruct-fp8",
+  "server": "http://localhost:8000",
+  "workdir": "/tmp/swe_workspaces/pydata__xarray-6992",
+  "started_at": "2026-04-18T01:47:20.708567",
+  "finished_at": "2026-04-18T01:48:01.595840",
+  "turns": [
+    {
+      "turn": 1,
+      "isl": 27672,
+      "osl": 66,
+      "delta": 27672,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Glob"
+      ],
+      "snippet": "I'll investigate this issue with the dataset repr and the `_coord_names`"
+    },
+    {
+      "turn": 2,
+      "isl": 27758,
+      "osl": 63,
+      "delta": 86,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Let me examine the dataset.py file to understand the issue with `_coord_"
+    },
+    {
+      "turn": 3,
+      "isl": 27879,
+      "osl": 70,
+      "delta": 121,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": "Let me search for the specific error location mentioned in the issue:"
+    },
+    {
+      "turn": 4,
+      "isl": 27966,
+      "osl": 72,
+      "delta": 87,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": "Let me look at the specific line mentioned in the issue (around line 368"
+    },
+    {
+      "turn": 5,
+      "isl": 28063,
+      "osl": 65,
+      "delta": 97,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": "Let me look at the DataVariables class and related code:"
+    },
+    {
+      "turn": 6,
+      "isl": 28253,
+      "osl": 184,
+      "delta": 190,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Write"
+      ],
+      "snippet": "Let me first reproduce the issue described in the problem statement to u"
+    },
+    {
+      "turn": 7,
+      "isl": 28475,
+      "osl": 43,
+      "delta": 222,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 8,
+      "isl": 28533,
+      "osl": 33,
+      "delta": 58,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": "Let me check what Python interpreter is available:"
+    },
+    {
+      "turn": 9,
+      "isl": 28584,
+      "osl": 42,
+      "delta": 51,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 10,
+      "isl": 28648,
+      "osl": 26,
+      "delta": 64,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 11,
+      "isl": 28962,
+      "osl": 87,
+      "delta": 314,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": "Great! I've reproduced the issue. Now let me examine the DataVariables c"
+    },
+    {
+      "turn": 12,
+      "isl": 29077,
+      "osl": 66,
+      "delta": 115,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 13,
+      "isl": 30292,
+      "osl": 135,
+      "delta": 1215,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": "Now I can see the issue! Looking at line 368, the `__len__` method assum"
+    },
+    {
+      "turn": 14,
+      "isl": 30452,
+      "osl": 345,
+      "delta": 160,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Write"
+      ],
+      "snippet": "Let me look at the specific issue more closely by examining what happens"
+    },
+    {
+      "turn": 15,
+      "isl": 30835,
+      "osl": 26,
+      "delta": 383,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 16,
+      "isl": 31305,
+      "osl": 297,
+      "delta": 470,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": "Perfect! Now I can see the issue clearly.   The problem occurs in the `D"
+    },
+    {
+      "turn": 17,
+      "isl": 31627,
+      "osl": 74,
+      "delta": 322,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 18,
+      "isl": 32090,
+      "osl": 85,
+      "delta": 463,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": "Let me look at the full reset_index method:"
+    },
+    {
+      "turn": 19,
+      "isl": 33583,
+      "osl": 318,
+      "delta": 1493,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Edit"
+      ],
+      "snippet": "Now I understand the issue better. The problem is in the `DataVariables."
+    },
+    {
+      "turn": 20,
+      "isl": 33954,
+      "osl": 33,
+      "delta": 371,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": "Now let's test our fix:"
+    },
+    {
+      "turn": 21,
+      "isl": 34280,
+      "osl": 40,
+      "delta": 326,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": "Great! The fix works. Let's also test the original example:"
+    },
+    {
+      "turn": 22,
+      "isl": 34456,
+      "osl": 431,
+      "delta": 176,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Write"
+      ],
+      "snippet": "Perfect! The fix works correctly. Let me also create a more comprehensiv"
+    },
+    {
+      "turn": 23,
+      "isl": 34926,
+      "osl": 26,
+      "delta": 470,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 24,
+      "isl": 35291,
+      "osl": 257,
+      "delta": 365,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Edit"
+      ],
+      "snippet": "Let me fix the test to use proper dimensions:"
+    },
+    {
+      "turn": 25,
+      "isl": 35688,
+      "osl": 26,
+      "delta": 397,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 26,
+      "isl": 35858,
+      "osl": 77,
+      "delta": 170,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": "Excellent! All tests pass. Let me also run the existing tests to make su"
+    },
+    {
+      "turn": 27,
+      "isl": 37067,
+      "osl": 167,
+      "delta": 1209,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": "Let me try a simpler approach to run some tests:"
+    },
+    {
+      "turn": 28,
+      "isl": 37312,
+      "osl": 407,
+      "delta": 245,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Write"
+      ],
+      "snippet": "Perfect! Let me also run a few more tests to make sure the fix is solid:"
+    },
+    {
+      "turn": 29,
+      "isl": 37757,
+      "osl": 26,
+      "delta": 445,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 30,
+      "isl": 37937,
+      "osl": 149,
+      "delta": 180,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "TodoWrite"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 31,
+      "isl": 38110,
+      "osl": 372,
+      "delta": 173,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "ExitPlanMode"
+      ],
+      "snippet": "## Summary  I've successfully fixed the issue with `DataVariables.__len_"
+    },
+    {
+      "turn": 32,
+      "isl": 38534,
+      "osl": 416,
+      "delta": 424,
+      "types": [
+        "text"
+      ],
+      "tool_names": [],
+      "snippet": "I've successfully fixed the issue with `DataVariables.__len__()` returni"
+    }
+  ],
+  "summary": {
+    "total_turns": 32,
+    "peak_isl": 38534,
+    "total_osl": 4524,
+    "total_output_tokens": 4524,
+    "total_tool_calls": 31,
+    "avg_tools_per_turn": 0.97,
+    "patch_lines": 15
+  },
+  "final_usage": {
+    "input_tokens": 1031224,
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 0,
+    "output_tokens": 4524,
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 0,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "",
+    "iterations": [],
+    "speed": "standard"
+  }
+}

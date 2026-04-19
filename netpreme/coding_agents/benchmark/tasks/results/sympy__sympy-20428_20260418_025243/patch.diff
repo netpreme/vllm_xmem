@@ -1,0 +1,53 @@
+diff --git a/sympy/polys/densebasic.py b/sympy/polys/densebasic.py
+index 1caeb8f62..5fe4f40c1 100644
+--- a/sympy/polys/densebasic.py
++++ b/sympy/polys/densebasic.py
+@@ -1678,6 +1678,11 @@ def dmp_terms_gcd(f, u, K):
+         return (0,)*(u + 1), f
+ 
+     F = dmp_to_dict(f, u)
++
++    # Handle the case where F.keys() is empty (zero polynomial)
++    if not F:
++        return (0,)*(u + 1), f
++
+     G = monomial_min(*list(F.keys()))
+ 
+     if all(g == 0 for g in G):
+diff --git a/sympy/polys/densetools.py b/sympy/polys/densetools.py
+index f05782464..b83de28b4 100644
+--- a/sympy/polys/densetools.py
++++ b/sympy/polys/densetools.py
+@@ -1198,6 +1198,15 @@ def dup_clear_denoms(f, K0, K1=None, convert=False):
+     if not K1.is_one(common):
+         f = dup_mul_ground(f, common, K0)
+ 
++    # Normalize zero polynomials to ensure consistent representation
++    # This fixes the issue where clear_denoms() produces polynomials that
++    # print as zero but have inconsistent behavior
++    if not convert and not K1.is_one(common):
++        # Check if the result is actually zero and normalize it
++        from .densebasic import dmp_zero_p
++        if dmp_zero_p(f, 0):
++            f = []
++
+     if not convert:
+         return common, f
+     else:
+@@ -1252,6 +1261,16 @@ def dmp_clear_denoms(f, u, K0, K1=None, convert=False):
+     if not K1.is_one(common):
+         f = dmp_mul_ground(f, common, u, K0)
+ 
++    # Normalize zero polynomials to ensure consistent representation
++    # This fixes the issue where clear_denoms() produces polynomials that
++    # print as zero but have inconsistent behavior
++    if not convert and not K1.is_one(common):
++        # Check if the result is actually zero and normalize it
++        from .densebasic import dmp_zero_p
++        if dmp_zero_p(f, u):
++            # For multivariate case, we need to create a proper zero representation
++            f = dmp_zero(u)
++
+     if not convert:
+         return common, f
+     else:

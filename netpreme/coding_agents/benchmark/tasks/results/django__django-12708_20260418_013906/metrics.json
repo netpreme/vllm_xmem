@@ -1,0 +1,372 @@
+{
+  "instance_id": "django__django-12708",
+  "repo": "django/django",
+  "base_commit": "447980e72ac01da1594dd3373a03ba40b7ee6f80",
+  "difficulty": "1-4 hours",
+  "problem_statement": "Migration crashes deleting an index_together if there is a unique_together on the same fields\nDescription\n\t\nHappens with Django 1.11.10\nSteps to reproduce:\n1) Create models with 2 fields, add 2 same fields to unique_together and to index_together\n2) Delete index_together -> Fail\nIt will fail at django/db/backends/base/schema.py, line 378, in _delete_composed_index(), ValueError: Found wrong number (2) of constraints for as this one will find two constraints, the _uniq and the _idx one. No way to get out of this...\nThe worst in my case is that happened as I wanted to refactor my code to use the \"new\" (Dj 1.11) Options.indexes feature. I am actually not deleting the index, just the way it is declared in my code.\nI think there are 2 different points here:\n1) The deletion of index_together should be possible alone or made coherent (migrations side?) with unique_together\n2) Moving the declaration of an index should not result in an index re-creation\n",
+  "model": "qwen/qwen3-coder-30b-a3b-instruct-fp8",
+  "server": "http://localhost:8000",
+  "workdir": "/tmp/swe_workspaces/django__django-12708",
+  "started_at": "2026-04-18T01:38:16.885636",
+  "finished_at": "2026-04-18T01:39:06.420879",
+  "turns": [
+    {
+      "turn": 1,
+      "isl": 27490,
+      "osl": 40,
+      "delta": 27490,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Glob"
+      ],
+      "snippet": "I'll investigate this Django migration issue where deleting an `index_to"
+    },
+    {
+      "turn": 2,
+      "isl": 27621,
+      "osl": 48,
+      "delta": 131,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Let me examine the base schema.py file where the error occurs according "
+    },
+    {
+      "turn": 3,
+      "isl": 42855,
+      "osl": 74,
+      "delta": 15234,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Glob"
+      ],
+      "snippet": "Now let me look at the `_delete_composed_index` method more closely, whi"
+    },
+    {
+      "turn": 4,
+      "isl": 43060,
+      "osl": 52,
+      "delta": 205,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 5,
+      "isl": 45335,
+      "osl": 62,
+      "delta": 2275,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": "Let me look at how constraints are processed in the model meta to unders"
+    },
+    {
+      "turn": 6,
+      "isl": 45443,
+      "osl": 36,
+      "delta": 108,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": "Let me search for where unique_together and index_together are processed"
+    },
+    {
+      "turn": 7,
+      "isl": 45678,
+      "osl": 40,
+      "delta": 235,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": "Let me search for how unique_together and index_together are converted t"
+    },
+    {
+      "turn": 8,
+      "isl": 45788,
+      "osl": 51,
+      "delta": 110,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Let me look at the migrations code to understand how constraints are cre"
+    },
+    {
+      "turn": 9,
+      "isl": 47841,
+      "osl": 186,
+      "delta": 2053,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": "Let me search for where unique_together and index_together are converted"
+    },
+    {
+      "turn": 10,
+      "isl": 47947,
+      "osl": 53,
+      "delta": 106,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": "Let me search for how constraints are created from unique_together/index"
+    },
+    {
+      "turn": 11,
+      "isl": 48050,
+      "osl": 64,
+      "delta": 103,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Glob"
+      ],
+      "snippet": "Let me look at the model creation process more broadly to understand how"
+    },
+    {
+      "turn": 12,
+      "isl": 48225,
+      "osl": 39,
+      "delta": 175,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 13,
+      "isl": 49628,
+      "osl": 76,
+      "delta": 1403,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": "Now I need to understand how unique_together and index_together are conv"
+    },
+    {
+      "turn": 14,
+      "isl": 49762,
+      "osl": 84,
+      "delta": 134,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": "Let me search for where constraints are created from unique_together/ind"
+    },
+    {
+      "turn": 15,
+      "isl": 49982,
+      "osl": 80,
+      "delta": 220,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Let me look at the base model file to see how unique_together is process"
+    },
+    {
+      "turn": 16,
+      "isl": 51197,
+      "osl": 70,
+      "delta": 1215,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": "Let me search for where the conversion from unique_together/index_togeth"
+    },
+    {
+      "turn": 17,
+      "isl": 51304,
+      "osl": 88,
+      "delta": 107,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": "Let me search for where unique_together and index_together are processed"
+    },
+    {
+      "turn": 18,
+      "isl": 51541,
+      "osl": 34,
+      "delta": 237,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Let me look at the Django source code to understand how unique_together "
+    },
+    {
+      "turn": 19,
+      "isl": 53967,
+      "osl": 79,
+      "delta": 2426,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Edit"
+      ],
+      "snippet": "Based on my investigation of the Django codebase, I've identified the co"
+    },
+    {
+      "turn": 20,
+      "isl": 55109,
+      "osl": 71,
+      "delta": 1142,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Write"
+      ],
+      "snippet": "Let me also create a test case to verify that this fix works correctly:"
+    },
+    {
+      "turn": 21,
+      "isl": 55533,
+      "osl": 77,
+      "delta": 424,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Write"
+      ],
+      "snippet": "Let me also create a more comprehensive test that specifically tests the"
+    },
+    {
+      "turn": 22,
+      "isl": 56028,
+      "osl": 66,
+      "delta": 495,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Write"
+      ],
+      "snippet": "Let me also create a proper unit test that can be run to validate the fi"
+    },
+    {
+      "turn": 23,
+      "isl": 56894,
+      "osl": 55,
+      "delta": 866,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "TodoWrite"
+      ],
+      "snippet": "Let me create a summary of what I've done to fix the issue:"
+    },
+    {
+      "turn": 24,
+      "isl": 57112,
+      "osl": 43,
+      "delta": 218,
+      "types": [
+        "text"
+      ],
+      "tool_names": [],
+      "snippet": "## Summary  I've analyzed and fixed the Django migration issue where del"
+    }
+  ],
+  "summary": {
+    "total_turns": 24,
+    "peak_isl": 57112,
+    "total_osl": 1568,
+    "total_output_tokens": 4796,
+    "total_tool_calls": 23,
+    "avg_tools_per_turn": 0.96,
+    "patch_lines": 33
+  },
+  "final_usage": {
+    "input_tokens": 1153390,
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 0,
+    "output_tokens": 4796,
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 0,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "",
+    "iterations": [],
+    "speed": "standard"
+  }
+}

@@ -1,0 +1,106 @@
+diff --git a/pylint/pyreverse/diagrams.py b/pylint/pyreverse/diagrams.py
+index bf9f67a..31decd2 100644
+--- a/pylint/pyreverse/diagrams.py
++++ b/pylint/pyreverse/diagrams.py
+@@ -84,18 +84,95 @@ class ClassDiagram(Figure, FilterMixIn):
+             for n, m in node.items()
+             if isinstance(m, astroid.FunctionDef) and decorated_with_property(m)
+         ]
+-        for node_name, associated_nodes in (
+-            list(node.instance_attrs_type.items())
+-            + list(node.locals_type.items())
+-            + properties
+-        ):
++
++        # Collect all attributes from instance_attrs_type, locals_type, and properties
++        all_attrs = list(node.instance_attrs_type.items()) + list(node.locals_type.items()) + properties
++
++        # First, collect the regular attributes with their inferred types
++        for node_name, associated_nodes in all_attrs:
+             if not self.show_attr(node_name):
+                 continue
+             names = self.class_names(associated_nodes)
+             if names:
+                 node_name = "{} : {}".format(node_name, ", ".join(names))
+             attrs.append(node_name)
+-        return sorted(attrs)
++
++        # Find type information from __init__ method arguments
++        # This handles cases like: def __init__(self, a: str = None): self.a = a
++        init_args_types = {}
++        for method in node.values():
++            if isinstance(method, astroid.FunctionDef) and method.name == '__init__':
++                # Process arguments to find type information
++                if hasattr(method, 'args') and method.args:
++                    for arg in method.args.args:
++                        if arg.name != 'self' and hasattr(arg, 'annotation') and arg.annotation:
++                            # Get the type name from the annotation
++                            type_name = self._get_arg_type_name(arg.annotation)
++                            if type_name:
++                                init_args_types[arg.name] = type_name
++
++        # Replace existing attributes with type information from __init__ if available
++        # and the attribute doesn't already have explicit type information
++        updated_attrs = []
++        for attr in attrs:
++            # Extract attribute name from "attr_name : type" format
++            if " : " in attr:
++                # This attribute already has type information, keep it as is
++                updated_attrs.append(attr)
++            else:
++                # This attribute has no type information yet
++                attr_name = attr
++                # If we have type info from __init__, use it
++                if attr_name in init_args_types:
++                    updated_attrs.append("{} : {}".format(attr_name, init_args_types[attr_name]))
++                else:
++                    updated_attrs.append(attr)
++
++        # Add new attributes from __init__ arguments that are not already in attrs
++        for attr_name, type_name in init_args_types.items():
++            if not any(attr_name in attr for attr in updated_attrs):
++                updated_attrs.append("{} : {}".format(attr_name, type_name))
++
++        return sorted(updated_attrs)
++
++    def _get_arg_type_name(self, annotation):
++        """Extract type name from argument annotation"""
++        if annotation is None:
++            return ""
++
++        # Handle astroid annotation types
++        if isinstance(annotation, astroid.Name):
++            return annotation.name
++        elif isinstance(annotation, astroid.Subscript):
++            # Handle generic types like List[str], Dict[str, int], etc.
++            if hasattr(annotation, 'value') and isinstance(annotation.value, astroid.Name):
++                type_name = annotation.value.name
++                # Add brackets for generic types
++                if hasattr(annotation, 'slice'):
++                    slice_content = ""
++                    if hasattr(annotation.slice, 'elts'):
++                        # Handle tuple-like slices
++                        slice_content = ", ".join(self._get_arg_type_name(elt) for elt in annotation.slice.elts)
++                    else:
++                        slice_content = self._get_arg_type_name(annotation.slice)
++                    return f"{type_name}[{slice_content}]"
++                return type_name
++            # Handle cases like Union[str, int]
++            elif hasattr(annotation, 'elts') and annotation.elts:
++                type_names = []
++                for elt in annotation.elts:
++                    type_name = self._get_arg_type_name(elt)
++                    if type_name:
++                        type_names.append(type_name)
++                return " | ".join(type_names) if type_names else ""
++        elif isinstance(annotation, astroid.Attribute):
++            # Handle module.ClassName type annotations
++            return annotation.as_string()
++        elif hasattr(annotation, 'name'):
++            return annotation.name
++        elif hasattr(annotation, 'as_string'):
++            return annotation.as_string()
++        return str(annotation)
+ 
+     def get_methods(self, node):
+         """return visible methods"""

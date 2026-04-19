@@ -1,0 +1,46 @@
+diff --git a/sklearn/ensemble/_hist_gradient_boosting/gradient_boosting.py b/sklearn/ensemble/_hist_gradient_boosting/gradient_boosting.py
+index ad6a5a8..63fd104 100644
+--- a/sklearn/ensemble/_hist_gradient_boosting/gradient_boosting.py
++++ b/sklearn/ensemble/_hist_gradient_boosting/gradient_boosting.py
+@@ -426,17 +426,32 @@ class BaseHistGradientBoosting(BaseEstimator, ABC):
+ 
+         Scores are computed on validation data or on training data.
+         """
+-        self.train_score_.append(
+-            self.scorer_(self, X_binned_small_train, y_small_train)
+-        )
+-
+-        if self._use_validation_data:
+-            self.validation_score_.append(
+-                self.scorer_(self, X_binned_val, y_val)
++        # If we have classes_ attribute, we need to decode y_small_train and y_val
++        # back to their original labels for the scorer to work properly with string targets
++        if hasattr(self, 'classes_'):
++            y_small_train_decoded = self.classes_[y_small_train.astype(int)]
++            y_val_decoded = self.classes_[y_val.astype(int)]
++            self.train_score_.append(
++                self.scorer_(self, X_binned_small_train, y_small_train_decoded)
+             )
+-            return self._should_stop(self.validation_score_)
++            if self._use_validation_data:
++                self.validation_score_.append(
++                    self.scorer_(self, X_binned_val, y_val_decoded)
++                )
++                return self._should_stop(self.validation_score_)
++            else:
++                return self._should_stop(self.train_score_)
+         else:
+-            return self._should_stop(self.train_score_)
++            self.train_score_.append(
++                self.scorer_(self, X_binned_small_train, y_small_train)
++            )
++            if self._use_validation_data:
++                self.validation_score_.append(
++                    self.scorer_(self, X_binned_val, y_val)
++                )
++                return self._should_stop(self.validation_score_)
++            else:
++                return self._should_stop(self.train_score_)
+ 
+     def _check_early_stopping_loss(self,
+                                    raw_predictions,

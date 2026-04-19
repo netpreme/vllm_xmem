@@ -1,0 +1,797 @@
+{
+  "instance_id": "pylint-dev__pylint-7080",
+  "repo": "pylint-dev/pylint",
+  "base_commit": "3c5eca2ded3dd2b59ebaf23eb289453b5d2930f0",
+  "difficulty": "15 min - 1 hour",
+  "problem_statement": "`--recursive=y` ignores `ignore-paths`\n### Bug description\r\n\r\nWhen running recursively, it seems `ignore-paths` in my settings in pyproject.toml is completely ignored\r\n\r\n### Configuration\r\n\r\n```ini\r\n[tool.pylint.MASTER]\r\nignore-paths = [\r\n  # Auto generated\r\n  \"^src/gen/.*$\",\r\n]\r\n```\r\n\r\n\r\n### Command used\r\n\r\n```shell\r\npylint --recursive=y src/\r\n```\r\n\r\n\r\n### Pylint output\r\n\r\n```shell\r\n************* Module region_selection\r\nsrc\\region_selection.py:170:0: R0914: Too many local variables (17/15) (too-many-locals)\r\n************* Module about\r\nsrc\\gen\\about.py:2:0: R2044: Line with empty comment (empty-comment)\r\nsrc\\gen\\about.py:4:0: R2044: Line with empty comment (empty-comment)\r\nsrc\\gen\\about.py:57:0: C0301: Line too long (504/120) (line-too-long)\r\nsrc\\gen\\about.py:12:0: C0103: Class name \"Ui_AboutAutoSplitWidget\" doesn't conform to '_?_?[a-zA-Z]+?$' pattern (invalid-name)\r\nsrc\\gen\\about.py:12:0: R0205: Class 'Ui_AboutAutoSplitWidget' inherits from object, can be safely removed from bases in python3 (useless-object-inheritance)\r\nsrc\\gen\\about.py:13:4: C0103: Method name \"setupUi\" doesn't conform to snake_case naming style (invalid-name)\r\nsrc\\gen\\about.py:13:22: C0103: Argument name \"AboutAutoSplitWidget\" doesn't conform to snake_case naming style (invalid-name)\r\nsrc\\gen\\about.py:53:4: C0103: Method name \"retranslateUi\" doesn't conform to snake_case naming style (invalid-name)\r\nsrc\\gen\\about.py:53:28: C0103: Argument name \"AboutAutoSplitWidget\" doesn't conform to snake_case naming style (invalid-name)\r\nsrc\\gen\\about.py:24:8: W0201: Attribute 'ok_button' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\about.py:27:8: W0201: Attribute 'created_by_label' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\about.py:30:8: W0201: Attribute 'version_label' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\about.py:33:8: W0201: Attribute 'donate_text_label' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\about.py:37:8: W0201: Attribute 'donate_button_label' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\about.py:43:8: W0201: Attribute 'icon_label' defined outside __init__ (attribute-defined-outside-init)\r\n************* Module design\r\nsrc\\gen\\design.py:2:0: R2044: Line with empty comment (empty-comment)\r\nsrc\\gen\\design.py:4:0: R2044: Line with empty comment (empty-comment)\r\nsrc\\gen\\design.py:328:0: C0301: Line too long (123/120) (line-too-long)\r\nsrc\\gen\\design.py:363:0: C0301: Line too long (125/120) (line-too-long)\r\nsrc\\gen\\design.py:373:0: C0301: Line too long (121/120) (line-too-long)\r\nsrc\\gen\\design.py:412:0: C0301: Line too long (131/120) (line-too-long)\r\nsrc\\gen\\design.py:12:0: C0103: Class name \"Ui_MainWindow\" doesn't conform to '_?_?[a-zA-Z]+?$' pattern (invalid-name)\r\nsrc\\gen\\design.py:308:8: C0103: Attribute name \"actionSplit_Settings\" doesn't conform to snake_case naming style (invalid-name)\r\nsrc\\gen\\design.py:318:8: C0103: Attribute name \"actionCheck_for_Updates_on_Open\" doesn't conform to snake_case naming style (invalid-name)\r\nsrc\\gen\\design.py:323:8: C0103: Attribute name \"actionLoop_Last_Split_Image_To_First_Image\" doesn't conform to snake_case naming style (invalid-name)\r\nsrc\\gen\\design.py:325:8: C0103: Attribute name \"actionAuto_Start_On_Reset\" doesn't conform to snake_case naming style (invalid-name)\r\nsrc\\gen\\design.py:327:8: C0103: Attribute name \"actionGroup_dummy_splits_when_undoing_skipping\" doesn't conform to snake_case naming style (invalid-name)\r\nsrc\\gen\\design.py:12:0: R0205: Class 'Ui_MainWindow' inherits from object, can be safely removed from bases in python3 (useless-object-inheritance)\r\nsrc\\gen\\design.py:12:0: R0902: Too many instance attributes (69/15) (too-many-instance-attributes)\r\nsrc\\gen\\design.py:13:4: C0103: Method name \"setupUi\" doesn't conform to snake_case naming style (invalid-name)\r\nsrc\\gen\\design.py:13:22: C0103: Argument name \"MainWindow\" doesn't conform to snake_case naming style (invalid-name)\r\nsrc\\gen\\design.py:16:8: C0103: Variable name \"sizePolicy\" doesn't conform to snake_case naming style (invalid-name)\r\nsrc\\gen\\design.py:13:4: R0915: Too many statements (339/50) (too-many-statements)\r\nsrc\\gen\\design.py:354:4: C0103: Method name \"retranslateUi\" doesn't conform to snake_case naming style (invalid-name)\r\nsrc\\gen\\design.py:354:28: C0103: Argument name \"MainWindow\" doesn't conform to snake_case naming style (invalid-name)\r\nsrc\\gen\\design.py:354:4: R0915: Too many statements (61/50) (too-many-statements)\r\nsrc\\gen\\design.py:31:8: W0201: Attribute 'central_widget' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\design.py:33:8: W0201: Attribute 'x_label' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\design.py:36:8: W0201: Attribute 'select_region_button' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\design.py:40:8: W0201: Attribute 'start_auto_splitter_button' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\design.py:44:8: W0201: Attribute 'reset_button' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\design.py:49:8: W0201: Attribute 'undo_split_button' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\design.py:54:8: W0201: Attribute 'skip_split_button' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\design.py:59:8: W0201: Attribute 'check_fps_button' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\design.py:63:8: W0201: Attribute 'fps_label' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\design.py:66:8: W0201: Attribute 'live_image' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\design.py:75:8: W0201: Attribute 'current_split_image' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\design.py:81:8: W0201: Attribute 'current_image_label' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\design.py:85:8: W0201: Attribute 'width_label' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\design.py:88:8: W0201: Attribute 'height_label' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\design.py:91:8: W0201: Attribute 'fps_value_label' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\design.py:95:8: W0201: Attribute 'width_spinbox' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\design.py:101:8: W0201: Attribute 'height_spinbox' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\design.py:107:8: W0201: Attribute 'capture_region_label' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\design.py:111:8: W0201: Attribute 'current_image_file_label' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\design.py:115:8: W0201: Attribute 'take_screenshot_button' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\design.py:119:8: W0201: Attribute 'x_spinbox' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\design.py:128:8: W0201: Attribute 'y_spinbox' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\design.py:136:8: W0201: Attribute 'y_label' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\design.py:139:8: W0201: Attribute 'align_region_button' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\design.py:143:8: W0201: Attribute 'select_window_button' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\design.py:147:8: W0201: Attribute 'browse_button' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\design.py:151:8: W0201: Attribute 'split_image_folder_label' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\design.py:154:8: W0201: Attribute 'split_image_folder_input' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\design.py:158:8: W0201: Attribute 'capture_region_window_label' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\design.py:162:8: W0201: Attribute 'image_loop_label' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\design.py:165:8: W0201: Attribute 'similarity_viewer_groupbox' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\design.py:169:8: W0201: Attribute 'table_live_label' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\design.py:173:8: W0201: Attribute 'table_highest_label' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\design.py:177:8: W0201: Attribute 'table_threshold_label' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\design.py:181:8: W0201: Attribute 'line_1' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\design.py:186:8: W0201: Attribute 'table_current_image_label' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\design.py:189:8: W0201: Attribute 'table_reset_image_label' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\design.py:192:8: W0201: Attribute 'line_2' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\design.py:197:8: W0201: Attribute 'line_3' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\design.py:202:8: W0201: Attribute 'line_4' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\design.py:207:8: W0201: Attribute 'line_5' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\design.py:212:8: W0201: Attribute 'table_current_image_live_label' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\design.py:216:8: W0201: Attribute 'table_current_image_highest_label' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\design.py:220:8: W0201: Attribute 'table_current_image_threshold_label' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\design.py:224:8: W0201: Attribute 'table_reset_image_live_label' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\design.py:228:8: W0201: Attribute 'table_reset_image_highest_label' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\design.py:232:8: W0201: Attribute 'table_reset_image_threshold_label' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\design.py:236:8: W0201: Attribute 'reload_start_image_button' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\design.py:240:8: W0201: Attribute 'start_image_status_label' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\design.py:243:8: W0201: Attribute 'start_image_status_value_label' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\design.py:246:8: W0201: Attribute 'image_loop_value_label' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\design.py:249:8: W0201: Attribute 'previous_image_button' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\design.py:254:8: W0201: Attribute 'next_image_button' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\design.py:296:8: W0201: Attribute 'menu_bar' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\design.py:299:8: W0201: Attribute 'menu_help' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\design.py:301:8: W0201: Attribute 'menu_file' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\design.py:304:8: W0201: Attribute 'action_view_help' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\design.py:306:8: W0201: Attribute 'action_about' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\design.py:308:8: W0201: Attribute 'actionSplit_Settings' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\design.py:310:8: W0201: Attribute 'action_save_profile' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\design.py:312:8: W0201: Attribute 'action_load_profile' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\design.py:314:8: W0201: Attribute 'action_save_profile_as' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\design.py:316:8: W0201: Attribute 'action_check_for_updates' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\design.py:318:8: W0201: Attribute 'actionCheck_for_Updates_on_Open' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\design.py:323:8: W0201: Attribute 'actionLoop_Last_Split_Image_To_First_Image' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\design.py:325:8: W0201: Attribute 'actionAuto_Start_On_Reset' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\design.py:327:8: W0201: Attribute 'actionGroup_dummy_splits_when_undoing_skipping' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\design.py:329:8: W0201: Attribute 'action_settings' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\design.py:331:8: W0201: Attribute 'action_check_for_updates_on_open' defined outside __init__ (attribute-defined-outside-init)\r\n************* Module resources_rc\r\nsrc\\gen\\resources_rc.py:1:0: C0302: Too many lines in module (2311/1000) (too-many-lines)\r\nsrc\\gen\\resources_rc.py:8:0: C0103: Constant name \"qt_resource_data\" doesn't conform to UPPER_CASE naming style (invalid-name)\r\nsrc\\gen\\resources_rc.py:2278:0: C0103: Constant name \"qt_resource_name\" doesn't conform to UPPER_CASE naming style (invalid-name)\r\nsrc\\gen\\resources_rc.py:2294:0: C0103: Constant name \"qt_resource_struct\" doesn't conform to UPPER_CASE naming style (invalid-name)\r\nsrc\\gen\\resources_rc.py:2305:0: C0103: Function name \"qInitResources\" doesn't conform to snake_case naming style (invalid-name)\r\nsrc\\gen\\resources_rc.py:2308:0: C0103: Function name \"qCleanupResources\" doesn't conform to snake_case naming style (invalid-name)\r\n************* Module settings\r\nsrc\\gen\\settings.py:2:0: R2044: Line with empty comment (empty-comment)\r\nsrc\\gen\\settings.py:4:0: R2044: Line with empty comment (empty-comment)\r\nsrc\\gen\\settings.py:61:0: C0301: Line too long (158/120) (line-too-long)\r\nsrc\\gen\\settings.py:123:0: C0301: Line too long (151/120) (line-too-long)\r\nsrc\\gen\\settings.py:209:0: C0301: Line too long (162/120) (line-too-long)\r\nsrc\\gen\\settings.py:214:0: C0301: Line too long (121/120) (line-too-long)\r\nsrc\\gen\\settings.py:221:0: C0301: Line too long (177/120) (line-too-long)\r\nsrc\\gen\\settings.py:223:0: C0301: Line too long (181/120) (line-too-long)\r\nsrc\\gen\\settings.py:226:0: C0301: Line too long (461/120) (line-too-long)\r\nsrc\\gen\\settings.py:228:0: C0301: Line too long (192/120) (line-too-long)\r\nsrc\\gen\\settings.py:12:0: C0103: Class name \"Ui_DialogSettings\" doesn't conform to '_?_?[a-zA-Z]+?$' pattern (invalid-name)\r\nsrc\\gen\\settings.py:12:0: R0205: Class 'Ui_DialogSettings' inherits from object, can be safely removed from bases in python3 (useless-object-inheritance)\r\nsrc\\gen\\settings.py:12:0: R0902: Too many instance attributes (35/15) (too-many-instance-attributes)\r\nsrc\\gen\\settings.py:13:4: C0103: Method name \"setupUi\" doesn't conform to snake_case naming style (invalid-name)\r\nsrc\\gen\\settings.py:13:22: C0103: Argument name \"DialogSettings\" doesn't conform to snake_case naming style (invalid-name)\r\nsrc\\gen\\settings.py:16:8: C0103: Variable name \"sizePolicy\" doesn't conform to snake_case naming style (invalid-name)\r\nsrc\\gen\\settings.py:13:4: R0915: Too many statements (190/50) (too-many-statements)\r\nsrc\\gen\\settings.py:205:4: C0103: Method name \"retranslateUi\" doesn't conform to snake_case naming style (invalid-name)\r\nsrc\\gen\\settings.py:205:28: C0103: Argument name \"DialogSettings\" doesn't conform to snake_case naming style (invalid-name)\r\nsrc\\gen\\settings.py:26:8: W0201: Attribute 'capture_settings_groupbox' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\settings.py:29:8: W0201: Attribute 'fps_limit_spinbox' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\settings.py:36:8: W0201: Attribute 'fps_limit_label' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\settings.py:40:8: W0201: Attribute 'live_capture_region_checkbox' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\settings.py:46:8: W0201: Attribute 'capture_method_combobox' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\settings.py:49:8: W0201: Attribute 'capture_method_label' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\settings.py:52:8: W0201: Attribute 'capture_device_label' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\settings.py:55:8: W0201: Attribute 'capture_device_combobox' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\settings.py:59:8: W0201: Attribute 'image_settings_groupbox' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\settings.py:65:8: W0201: Attribute 'default_comparison_method' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\settings.py:73:8: W0201: Attribute 'default_comparison_method_label' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\settings.py:76:8: W0201: Attribute 'default_pause_time_label' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\settings.py:80:8: W0201: Attribute 'default_pause_time_spinbox' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\settings.py:87:8: W0201: Attribute 'default_similarity_threshold_label' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\settings.py:92:8: W0201: Attribute 'default_similarity_threshold_spinbox' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\settings.py:98:8: W0201: Attribute 'loop_splits_checkbox' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\settings.py:104:8: W0201: Attribute 'custom_image_settings_info_label' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\settings.py:111:8: W0201: Attribute 'default_delay_time_label' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\settings.py:116:8: W0201: Attribute 'default_delay_time_spinbox' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\settings.py:121:8: W0201: Attribute 'hotkeys_groupbox' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\settings.py:127:8: W0201: Attribute 'set_pause_hotkey_button' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\settings.py:131:8: W0201: Attribute 'split_input' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\settings.py:137:8: W0201: Attribute 'undo_split_input' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\settings.py:143:8: W0201: Attribute 'split_label' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\settings.py:146:8: W0201: Attribute 'reset_input' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\settings.py:152:8: W0201: Attribute 'set_undo_split_hotkey_button' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\settings.py:156:8: W0201: Attribute 'reset_label' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\settings.py:159:8: W0201: Attribute 'set_reset_hotkey_button' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\settings.py:163:8: W0201: Attribute 'set_split_hotkey_button' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\settings.py:167:8: W0201: Attribute 'pause_label' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\settings.py:170:8: W0201: Attribute 'pause_input' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\settings.py:176:8: W0201: Attribute 'undo_split_label' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\settings.py:179:8: W0201: Attribute 'set_skip_split_hotkey_button' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\settings.py:183:8: W0201: Attribute 'skip_split_label' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\settings.py:186:8: W0201: Attribute 'skip_split_input' defined outside __init__ (attribute-defined-outside-init)\r\n************* Module update_checker\r\nsrc\\gen\\update_checker.py:2:0: R2044: Line with empty comment (empty-comment)\r\nsrc\\gen\\update_checker.py:4:0: R2044: Line with empty comment (empty-comment)\r\nsrc\\gen\\update_checker.py:12:0: C0103: Class name \"Ui_UpdateChecker\" doesn't conform to '_?_?[a-zA-Z]+?$' pattern (invalid-name)\r\nsrc\\gen\\update_checker.py:12:0: R0205: Class 'Ui_UpdateChecker' inherits from object, can be safely removed from bases in python3 (useless-object-inheritance)\r\nsrc\\gen\\update_checker.py:13:4: C0103: Method name \"setupUi\" doesn't conform to snake_case naming style (invalid-name)\r\nsrc\\gen\\update_checker.py:13:22: C0103: Argument name \"UpdateChecker\" doesn't conform to snake_case naming style (invalid-name)\r\nsrc\\gen\\update_checker.py:17:8: C0103: Variable name \"sizePolicy\" doesn't conform to snake_case naming style (invalid-name)\r\nsrc\\gen\\update_checker.py:33:8: C0103: Variable name \"sizePolicy\" doesn't conform to snake_case naming style (invalid-name)\r\nsrc\\gen\\update_checker.py:13:4: R0915: Too many statements (56/50) (too-many-statements)\r\nsrc\\gen\\update_checker.py:71:4: C0103: Method name \"retranslateUi\" doesn't conform to snake_case naming style (invalid-name)\r\nsrc\\gen\\update_checker.py:71:28: C0103: Argument name \"UpdateChecker\" doesn't conform to snake_case naming style (invalid-name)\r\nsrc\\gen\\update_checker.py:31:8: W0201: Attribute 'update_status_label' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\update_checker.py:39:8: W0201: Attribute 'current_version_label' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\update_checker.py:42:8: W0201: Attribute 'latest_version_label' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\update_checker.py:45:8: W0201: Attribute 'go_to_download_label' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\update_checker.py:48:8: W0201: Attribute 'left_button' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\update_checker.py:52:8: W0201: Attribute 'right_button' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\update_checker.py:55:8: W0201: Attribute 'current_version_number_label' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\update_checker.py:59:8: W0201: Attribute 'latest_version_number_label' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\update_checker.py:63:8: W0201: Attribute 'do_not_ask_again_checkbox' defined outside __init__ (attribute-defined-outside-init)\r\nsrc\\gen\\update_checker.py:1:0: R0401: Cyclic import (region_capture -> region_selection) (cyclic-import)\r\nsrc\\gen\\update_checker.py:1:0: R0401: Cyclic import (error_messages -> user_profile -> region_capture -> region_selection) (cyclic-import)\r\nsrc\\gen\\update_checker.py:1:0: R0401: Cyclic import (AutoSplitImage -> split_parser) (cyclic-import)\r\nsrc\\gen\\update_checker.py:1:0: R0401: Cyclic import (AutoControlledWorker -> error_messages -> AutoSplit) (cyclic-import)\r\nsrc\\gen\\update_checker.py:1:0: R0401: Cyclic import (AutoSplit -> user_profile -> region_capture -> region_selection -> error_messages) (cyclic-import)\r\nsrc\\gen\\update_checker.py:1:0: R0401: Cyclic import (AutoSplitImage -> error_messages -> user_profile) (cyclic-import)\r\nsrc\\gen\\update_checker.py:1:0: R0401: Cyclic import (AutoSplit -> menu_bar -> user_profile -> region_capture -> region_selection -> error_messages) (cyclic-import)\r\nsrc\\gen\\update_checker.py:1:0: R0401: Cyclic import (AutoSplit -> region_selection -> error_messages) (cyclic-import)\r\nsrc\\gen\\update_checker.py:1:0: R0401: Cyclic import (AutoSplit -> error_messages) (cyclic-import)\r\nsrc\\gen\\update_checker.py:1:0: R0401: Cyclic import (error_messages -> user_profile -> region_selection) (cyclic-import)\r\nsrc\\gen\\update_checker.py:1:0: R0401: Cyclic import (error_messages -> user_profile) (cyclic-import)\r\nsrc\\gen\\update_checker.py:1:0: R0401: Cyclic import (AutoSplitImage -> split_parser -> error_messages -> user_profile) (cyclic-import)\r\nsrc\\gen\\update_checker.py:1:0: R0401: Cyclic import (AutoSplit -> menu_bar -> region_selection -> error_messages) (cyclic-import)\r\nsrc\\gen\\update_checker.py:1:0: R0401: Cyclic import (AutoSplit -> menu_bar -> error_messages) (cyclic-import)\r\n\r\n--------------------------------------------------------------------------\r\nYour code has been rated at -158.32/10 (previous run: -285.20/10, +126.88)\r\n```\r\n\r\n\r\n### Expected behavior\r\n\r\nsrc\\gen\\* should not be checked\r\n\r\n### Pylint version\r\n\r\n```shell\r\npylint 2.14.1\r\nastroid 2.11.5\r\nPython 3.9.6 (tags/v3.9.6:db3ff76, Jun 28 2021, 15:26:21) [MSC v.1929 64 bit (AMD64)]\r\n```\r\n\r\n\r\n### OS / Environment\r\n\r\nWindows 10.0.19044\r\n\r\n\r\n### Additional dependencies\r\n\r\n_No response_\n",
+  "model": "qwen/qwen3-coder-30b-a3b-instruct-fp8",
+  "server": "http://localhost:8000",
+  "workdir": "/tmp/swe_workspaces/pylint-dev__pylint-7080",
+  "started_at": "2026-04-18T02:06:47.123910",
+  "finished_at": "2026-04-18T02:08:58.866716",
+  "turns": [
+    {
+      "turn": 1,
+      "isl": 34978,
+      "osl": 68,
+      "delta": 34978,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Glob"
+      ],
+      "snippet": "I'll investigate this issue with pylint's `ignore-paths` configuration b"
+    },
+    {
+      "turn": 2,
+      "isl": 35065,
+      "osl": 46,
+      "delta": 87,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Glob"
+      ],
+      "snippet": "Let me check the main pylint source code to understand how ignore paths "
+    },
+    {
+      "turn": 3,
+      "isl": 35131,
+      "osl": 43,
+      "delta": 66,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 4,
+      "isl": 35297,
+      "osl": 46,
+      "delta": 166,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Glob"
+      ],
+      "snippet": "Let me look at the main pylint module to understand how it processes arg"
+    },
+    {
+      "turn": 5,
+      "isl": 35360,
+      "osl": 336,
+      "delta": 63,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Glob"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 6,
+      "isl": 35452,
+      "osl": 29,
+      "delta": 92,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Glob"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 7,
+      "isl": 35498,
+      "osl": 29,
+      "delta": 46,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Glob"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 8,
+      "isl": 35657,
+      "osl": 29,
+      "delta": 159,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Glob"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 9,
+      "isl": 35706,
+      "osl": 29,
+      "delta": 49,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 10,
+      "isl": 38381,
+      "osl": 43,
+      "delta": 2675,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Glob"
+      ],
+      "snippet": "Now let me look at the PyLinter class to understand how it handles file "
+    },
+    {
+      "turn": 11,
+      "isl": 38455,
+      "osl": 52,
+      "delta": 74,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 12,
+      "isl": 44026,
+      "osl": 57,
+      "delta": 5571,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": "Let me look at the check method in the PyLinter class to understand how "
+    },
+    {
+      "turn": 13,
+      "isl": 44131,
+      "osl": 336,
+      "delta": 105,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 14,
+      "isl": 44232,
+      "osl": 78,
+      "delta": 101,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 15,
+      "isl": 46076,
+      "osl": 66,
+      "delta": 1844,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": "Let me look at the `_discover_files` method and `should_analyze_file` me"
+    },
+    {
+      "turn": 16,
+      "isl": 46286,
+      "osl": 69,
+      "delta": 210,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 17,
+      "isl": 46371,
+      "osl": 83,
+      "delta": 85,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 18,
+      "isl": 46456,
+      "osl": 336,
+      "delta": 85,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 19,
+      "isl": 46540,
+      "osl": 64,
+      "delta": 84,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Let me look at the expand_modules file which seems to be where file expa"
+    },
+    {
+      "turn": 20,
+      "isl": 48272,
+      "osl": 58,
+      "delta": 1732,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Glob"
+      ],
+      "snippet": "Now I need to examine how the configuration is processed and where the i"
+    },
+    {
+      "turn": 21,
+      "isl": 48350,
+      "osl": 66,
+      "delta": 78,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 22,
+      "isl": 49338,
+      "osl": 57,
+      "delta": 988,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": "Let me look at how the configuration is parsed and where ignore paths ar"
+    },
+    {
+      "turn": 23,
+      "isl": 49525,
+      "osl": 74,
+      "delta": 187,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Glob"
+      ],
+      "snippet": "Let me check the configuration files to understand how ignore paths are "
+    },
+    {
+      "turn": 24,
+      "isl": 49587,
+      "osl": 63,
+      "delta": 62,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Glob"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 25,
+      "isl": 49662,
+      "osl": 62,
+      "delta": 75,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 26,
+      "isl": 50733,
+      "osl": 57,
+      "delta": 1071,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Glob"
+      ],
+      "snippet": "Let me look at the base options to understand how ignore paths are defin"
+    },
+    {
+      "turn": 27,
+      "isl": 50799,
+      "osl": 68,
+      "delta": 66,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 28,
+      "isl": 56443,
+      "osl": 336,
+      "delta": 5644,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Now I can see that `ignore-paths` is defined as an option in the base op"
+    },
+    {
+      "turn": 29,
+      "isl": 57616,
+      "osl": 56,
+      "delta": 1173,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": "Now I need to understand how the ignore paths are used in the file disco"
+    },
+    {
+      "turn": 30,
+      "isl": 57833,
+      "osl": 64,
+      "delta": 217,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 31,
+      "isl": 57917,
+      "osl": 70,
+      "delta": 84,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 32,
+      "isl": 59234,
+      "osl": 45,
+      "delta": 1317,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": "Let me search for the _discover_files method properly:"
+    },
+    {
+      "turn": 33,
+      "isl": 59330,
+      "osl": 69,
+      "delta": 96,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": "Let me search for the method in a different way:"
+    },
+    {
+      "turn": 34,
+      "isl": 59423,
+      "osl": 30,
+      "delta": 93,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": "Let me look at the method that expands files:"
+    },
+    {
+      "turn": 35,
+      "isl": 59515,
+      "osl": 56,
+      "delta": 92,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 36,
+      "isl": 60711,
+      "osl": 74,
+      "delta": 1196,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Let me find the _expand_files method:"
+    },
+    {
+      "turn": 37,
+      "isl": 61484,
+      "osl": 45,
+      "delta": 773,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": "Let me search for the _expand_files method in the file:"
+    },
+    {
+      "turn": 38,
+      "isl": 61581,
+      "osl": 336,
+      "delta": 97,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": "Let me search for the method by looking at the line numbers around where"
+    },
+    {
+      "turn": 39,
+      "isl": 61682,
+      "osl": 44,
+      "delta": 101,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Let me look at the check method more closely to see how it calls _expand"
+    },
+    {
+      "turn": 40,
+      "isl": 62939,
+      "osl": 104,
+      "delta": 1257,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": "I can see that on line 635, when `self.config.recursive` is True, it cal"
+    },
+    {
+      "turn": 41,
+      "isl": 63066,
+      "osl": 292,
+      "delta": 127,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": "Let me search for the method in a different way:"
+    },
+    {
+      "turn": 42,
+      "isl": 63265,
+      "osl": 90,
+      "delta": 199,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 43,
+      "isl": 63855,
+      "osl": 57,
+      "delta": 590,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Perfect! Now I can see the issue. Looking at the `_discover_files` metho"
+    },
+    {
+      "turn": 44,
+      "isl": 64696,
+      "osl": 92,
+      "delta": 841,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Write"
+      ],
+      "snippet": "Now I can see the issue! In the `_expand_files` method on line 778, it's"
+    },
+    {
+      "turn": 45,
+      "isl": 65664,
+      "osl": 336,
+      "delta": 968,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 46,
+      "isl": 65722,
+      "osl": 70,
+      "delta": 58,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 47,
+      "isl": 65919,
+      "osl": 69,
+      "delta": 197,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 48,
+      "isl": 66200,
+      "osl": 66,
+      "delta": 281,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Edit"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 49,
+      "isl": 66413,
+      "osl": 297,
+      "delta": 213,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 50,
+      "isl": 73249,
+      "osl": 65,
+      "delta": 6836,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "The test environment is complex due to the installed pylint. Let me appr"
+    },
+    {
+      "turn": 51,
+      "isl": 74411,
+      "osl": 336,
+      "delta": 1162,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "TodoWrite"
+      ],
+      "snippet": "I think I've found the issue! Looking at the `expand_modules` function, "
+    },
+    {
+      "turn": 52,
+      "isl": 75028,
+      "osl": 80,
+      "delta": 617,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Edit"
+      ],
+      "snippet": "Looking at the code more carefully, I believe I've identified the root c"
+    },
+    {
+      "turn": 53,
+      "isl": 76133,
+      "osl": 67,
+      "delta": 1105,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Edit"
+      ],
+      "snippet": "Wait, I need to be more careful. Looking at the code more carefully, I r"
+    },
+    {
+      "turn": 54,
+      "isl": 76790,
+      "osl": 79,
+      "delta": 657,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Edit"
+      ],
+      "snippet": "Let me carefully re-read the issue and the code to understand what's hap"
+    },
+    {
+      "turn": 55,
+      "isl": 78719,
+      "osl": 70,
+      "delta": 1929,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "TodoWrite"
+      ],
+      "snippet": "Actually, I think I'm overcomplicating this. Looking at the code more ca"
+    },
+    {
+      "turn": 56,
+      "isl": 79472,
+      "osl": 106,
+      "delta": 753,
+      "types": [
+        "text"
+      ],
+      "tool_names": [],
+      "snippet": "Based on my analysis of the code, I've identified the issue and implemen"
+    }
+  ],
+  "summary": {
+    "total_turns": 56,
+    "peak_isl": 79472,
+    "total_osl": 5845,
+    "total_output_tokens": 9975,
+    "total_tool_calls": 55,
+    "avg_tools_per_turn": 0.98,
+    "patch_lines": 12
+  },
+  "final_usage": {
+    "input_tokens": 3049674,
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 0,
+    "output_tokens": 9975,
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 0,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "",
+    "iterations": [],
+    "speed": "standard"
+  }
+}

@@ -1,0 +1,190 @@
+{
+  "instance_id": "django__django-13344",
+  "repo": "django/django",
+  "base_commit": "e39e727ded673e74016b5d3658d23cbe20234d11",
+  "difficulty": "1-4 hours",
+  "problem_statement": "Coroutine passed to the first middleware's process_response() instead of HttpResponse.\nDescription\n\t\nLike the title says, using ASGI (+ uvicorn in my case), the first middleware (according to the list in settings.py) receives a coroutine as its response parameter, while all other middlewares down the line receive a django.http.response.HttpResponse object.\nThis seems to have caused an issue in the django-cors-headers package which is often placed first in order:\n\u200bhttps://github.com/adamchainz/django-cors-headers/issues/558\nHow to reproduce:\nSet up a django 3.1 project with an async server (uvicorn in my case)\nCreate a dummy class-based middleware that prints the types of arguments it receives in its process_response method:\nclass DummyMiddleware(MiddlewareMixin):\n\tdef process_response(self, request, response):\n\t\tprint(request.__class__, response.__class__)\nSet up the middleware as the first one in settings.py:\nMIDDLEWARE = [\n\t'django_uvicorn_test.middleware.DummyMiddleware',\n\t'django.middleware.security.SecurityMiddleware',\n ...\nLaunch the server and perform any request, observe console output:\n <class 'django.core.handlers.asgi.ASGIRequest'> <class 'coroutine'> \nMove the middleware down on the list, restart the server and perform a request again:\n <class 'django.core.handlers.asgi.ASGIRequest'> <class 'django.http.response.HttpResponse'>\n",
+  "model": "qwen/qwen3-coder-30b-a3b-instruct-fp8",
+  "server": "http://localhost:8000",
+  "workdir": "/tmp/swe_workspaces/django__django-13344",
+  "started_at": "2026-04-18T02:13:50.156610",
+  "finished_at": "2026-04-18T02:14:11.242545",
+  "turns": [
+    {
+      "turn": 1,
+      "isl": 27560,
+      "osl": 81,
+      "delta": 27560,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Glob"
+      ],
+      "snippet": "I'll investigate this Django ASGI middleware issue where the first middl"
+    },
+    {
+      "turn": 2,
+      "isl": 27733,
+      "osl": 37,
+      "delta": 173,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Glob"
+      ],
+      "snippet": "Let me look at the core middleware handling code in Django:"
+    },
+    {
+      "turn": 3,
+      "isl": 27862,
+      "osl": 53,
+      "delta": 129,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": "Let me search for the core middleware processing logic:"
+    },
+    {
+      "turn": 4,
+      "isl": 28062,
+      "osl": 59,
+      "delta": 200,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": "Let me look at the core middleware handling in Django's ASGI implementat"
+    },
+    {
+      "turn": 5,
+      "isl": 28145,
+      "osl": 42,
+      "delta": 83,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 6,
+      "isl": 29641,
+      "osl": 46,
+      "delta": 1496,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Glob"
+      ],
+      "snippet": "Now let me look at how Django handles ASGI requests and middleware in th"
+    },
+    {
+      "turn": 7,
+      "isl": 29815,
+      "osl": 45,
+      "delta": 174,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 8,
+      "isl": 32946,
+      "osl": 58,
+      "delta": 3131,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Let me also check the base handler to understand how middleware is proce"
+    },
+    {
+      "turn": 9,
+      "isl": 36589,
+      "osl": 98,
+      "delta": 3643,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Now let me look at the specific issue with the middleware chain construc"
+    },
+    {
+      "turn": 10,
+      "isl": 37153,
+      "osl": 1220,
+      "delta": 564,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Write"
+      ],
+      "snippet": "Based on my investigation of the Django ASGI middleware handling code, I"
+    },
+    {
+      "turn": 11,
+      "isl": 38075,
+      "osl": 78,
+      "delta": 922,
+      "types": [
+        "text"
+      ],
+      "tool_names": [],
+      "snippet": "I've analyzed the Django ASGI middleware issue and created a detailed ex"
+    }
+  ],
+  "summary": {
+    "total_turns": 11,
+    "peak_isl": 38075,
+    "total_osl": 1817,
+    "total_output_tokens": 1737,
+    "total_tool_calls": 10,
+    "avg_tools_per_turn": 0.91,
+    "patch_lines": 0
+  },
+  "final_usage": {
+    "input_tokens": 343581,
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 0,
+    "output_tokens": 1737,
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 0,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "",
+    "iterations": [],
+    "speed": "standard"
+  }
+}

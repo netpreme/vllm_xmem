@@ -1,0 +1,558 @@
+{
+  "instance_id": "sympy__sympy-17630",
+  "repo": "sympy/sympy",
+  "base_commit": "58e78209c8577b9890e957b624466e5beed7eb08",
+  "difficulty": "1-4 hours",
+  "problem_statement": "Exception when multiplying BlockMatrix containing ZeroMatrix blocks\nWhen a block matrix with zero blocks is defined\r\n\r\n```\r\n>>> from sympy import *\r\n>>> a = MatrixSymbol(\"a\", 2, 2)\r\n>>> z = ZeroMatrix(2, 2)\r\n>>> b = BlockMatrix([[a, z], [z, z]])\r\n```\r\n\r\nthen block-multiplying it once seems to work fine:\r\n\r\n```\r\n>>> block_collapse(b * b)\r\nMatrix([\r\n[a**2, 0],\r\n[0, 0]])\r\n>>> b._blockmul(b)\r\nMatrix([\r\n[a**2, 0],\r\n[0, 0]])\r\n```\r\n\r\nbut block-multiplying twice throws an exception:\r\n\r\n```\r\n>>> block_collapse(b * b * b)\r\nTraceback (most recent call last):\r\n  File \"<stdin>\", line 1, in <module>\r\n  File \"/home/jan/.pyenv/versions/3.7.4/lib/python3.7/site-packages/sympy/matrices/expressions/blockmatrix.py\", line 297, in block_collapse\r\n    result = rule(expr)\r\n  File \"/home/jan/.pyenv/versions/3.7.4/lib/python3.7/site-packages/sympy/strategies/core.py\", line 11, in exhaustive_rl\r\n    new, old = rule(expr), expr\r\n  File \"/home/jan/.pyenv/versions/3.7.4/lib/python3.7/site-packages/sympy/strategies/core.py\", line 44, in chain_rl\r\n    expr = rule(expr)\r\n  File \"/home/jan/.pyenv/versions/3.7.4/lib/python3.7/site-packages/sympy/strategies/core.py\", line 11, in exhaustive_rl\r\n    new, old = rule(expr), expr\r\n  File \"/home/jan/.pyenv/versions/3.7.4/lib/python3.7/site-packages/sympy/strategies/core.py\", line 33, in conditioned_rl\r\n    return rule(expr)\r\n  File \"/home/jan/.pyenv/versions/3.7.4/lib/python3.7/site-packages/sympy/strategies/core.py\", line 95, in switch_rl\r\n    return rl(expr)\r\n  File \"/home/jan/.pyenv/versions/3.7.4/lib/python3.7/site-packages/sympy/matrices/expressions/blockmatrix.py\", line 361, in bc_matmul\r\n    matrices[i] = A._blockmul(B)\r\n  File \"/home/jan/.pyenv/versions/3.7.4/lib/python3.7/site-packages/sympy/matrices/expressions/blockmatrix.py\", line 91, in _blockmul\r\n    self.colblocksizes == other.rowblocksizes):\r\n  File \"/home/jan/.pyenv/versions/3.7.4/lib/python3.7/site-packages/sympy/matrices/expressions/blockmatrix.py\", line 80, in colblocksizes\r\n    return [self.blocks[0, i].cols for i in range(self.blockshape[1])]\r\n  File \"/home/jan/.pyenv/versions/3.7.4/lib/python3.7/site-packages/sympy/matrices/expressions/blockmatrix.py\", line 80, in <listcomp>\r\n    return [self.blocks[0, i].cols for i in range(self.blockshape[1])]\r\nAttributeError: 'Zero' object has no attribute 'cols'\r\n>>> b._blockmul(b)._blockmul(b)\r\nTraceback (most recent call last):\r\n  File \"<stdin>\", line 1, in <module>\r\n  File \"/home/jan/.pyenv/versions/3.7.4/lib/python3.7/site-packages/sympy/matrices/expressions/blockmatrix.py\", line 91, in _blockmul\r\n    self.colblocksizes == other.rowblocksizes):\r\n  File \"/home/jan/.pyenv/versions/3.7.4/lib/python3.7/site-packages/sympy/matrices/expressions/blockmatrix.py\", line 80, in colblocksizes\r\n    return [self.blocks[0, i].cols for i in range(self.blockshape[1])]\r\n  File \"/home/jan/.pyenv/versions/3.7.4/lib/python3.7/site-packages/sympy/matrices/expressions/blockmatrix.py\", line 80, in <listcomp>\r\n    return [self.blocks[0, i].cols for i in range(self.blockshape[1])]\r\nAttributeError: 'Zero' object has no attribute 'cols'\r\n```\r\n\r\nThis seems to be caused by the fact that the zeros in `b._blockmul(b)` are not `ZeroMatrix` but `Zero`:\r\n\r\n```\r\n>>> type(b._blockmul(b).blocks[0, 1])\r\n<class 'sympy.core.numbers.Zero'>\r\n```\r\n\r\nHowever, I don't understand SymPy internals well enough to find out why this happens. I use Python 3.7.4 and sympy 1.4 (installed with pip).\n",
+  "model": "qwen/qwen3-coder-30b-a3b-instruct-fp8",
+  "server": "http://localhost:8000",
+  "workdir": "/tmp/swe_workspaces/sympy__sympy-17630",
+  "started_at": "2026-04-18T01:59:10.992134",
+  "finished_at": "2026-04-18T02:00:26.631593",
+  "turns": [
+    {
+      "turn": 1,
+      "isl": 28371,
+      "osl": 55,
+      "delta": 28371,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Glob"
+      ],
+      "snippet": "I'll investigate this SymPy issue with BlockMatrix multiplication involv"
+    },
+    {
+      "turn": 2,
+      "isl": 28451,
+      "osl": 68,
+      "delta": 80,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Let me examine the blockmatrix.py file to understand how BlockMatrix mul"
+    },
+    {
+      "turn": 3,
+      "isl": 34915,
+      "osl": 353,
+      "delta": 6464,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Write"
+      ],
+      "snippet": "Now let me create a test script to reproduce the issue described in the "
+    },
+    {
+      "turn": 4,
+      "isl": 35309,
+      "osl": 47,
+      "delta": 394,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 5,
+      "isl": 35367,
+      "osl": 34,
+      "delta": 58,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": "Let me check what Python executables are available:"
+    },
+    {
+      "turn": 6,
+      "isl": 35419,
+      "osl": 26,
+      "delta": 52,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 7,
+      "isl": 36117,
+      "osl": 87,
+      "delta": 698,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": "I see the issue is occurring in the `_blockmul` method. Let me examine t"
+    },
+    {
+      "turn": 8,
+      "isl": 36222,
+      "osl": 343,
+      "delta": 105,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Write"
+      ],
+      "snippet": "Let me create a simpler test to understand the issue better:"
+    },
+    {
+      "turn": 9,
+      "isl": 36606,
+      "osl": 26,
+      "delta": 384,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 10,
+      "isl": 36801,
+      "osl": 32000,
+      "delta": 195,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Interesting! The direct matrix multiplication works fine. Let me look mo"
+    },
+    {
+      "turn": 11,
+      "isl": 37351,
+      "osl": 151,
+      "delta": 550,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 12,
+      "isl": 37801,
+      "osl": 74,
+      "delta": 450,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Let me look at the properties that are causing the issue:"
+    },
+    {
+      "turn": 13,
+      "isl": 38189,
+      "osl": 87,
+      "delta": 388,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Write"
+      ],
+      "snippet": "Now I can see the issue! In line 155, the `colblocksizes` property tries"
+    },
+    {
+      "turn": 14,
+      "isl": 38827,
+      "osl": 596,
+      "delta": 638,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 15,
+      "isl": 39192,
+      "osl": 27,
+      "delta": 365,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "I see the issue now. The problem is in the `_blockmul` method. When we d"
+    },
+    {
+      "turn": 16,
+      "isl": 39453,
+      "osl": 141,
+      "delta": 261,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Write"
+      ],
+      "snippet": "The issue is that when we do `self.blocks * other.blocks`, it's doing ma"
+    },
+    {
+      "turn": 17,
+      "isl": 39937,
+      "osl": 444,
+      "delta": 484,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 18,
+      "isl": 40295,
+      "osl": 27,
+      "delta": 358,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Now I understand the core issue! The problem is that when we do `self.bl"
+    },
+    {
+      "turn": 19,
+      "isl": 41007,
+      "osl": 276,
+      "delta": 712,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Write"
+      ],
+      "snippet": "I see the issue now. The problem is in the `_blockmul` method. When we d"
+    },
+    {
+      "turn": 20,
+      "isl": 41580,
+      "osl": 536,
+      "delta": 573,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 21,
+      "isl": 42998,
+      "osl": 27,
+      "delta": 1418,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Glob"
+      ],
+      "snippet": "I see the issue now. The problem is that the `_blockmul` method is funda"
+    },
+    {
+      "turn": 22,
+      "isl": 43160,
+      "osl": 135,
+      "delta": 162,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 23,
+      "isl": 46376,
+      "osl": 54,
+      "delta": 3216,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Write"
+      ],
+      "snippet": "Looking at the test file, I can see that there are tests for `bc_matmul`"
+    },
+    {
+      "turn": 24,
+      "isl": 47151,
+      "osl": 732,
+      "delta": 775,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 25,
+      "isl": 47299,
+      "osl": 27,
+      "delta": 148,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Now I understand the issue completely. The problem is in the `_blockmul`"
+    },
+    {
+      "turn": 26,
+      "isl": 47781,
+      "osl": 153,
+      "delta": 482,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Now I can see the exact problem. The `_blockmul` method is fundamentally"
+    },
+    {
+      "turn": 27,
+      "isl": 48183,
+      "osl": 146,
+      "delta": 402,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "TodoWrite"
+      ],
+      "snippet": "I can see that `BlockDiagMatrix` has a correct implementation of `_block"
+    },
+    {
+      "turn": 28,
+      "isl": 48398,
+      "osl": 187,
+      "delta": 215,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Edit"
+      ],
+      "snippet": "Based on my analysis, I've identified the root cause of the issue:  1. T"
+    },
+    {
+      "turn": 29,
+      "isl": 48887,
+      "osl": 426,
+      "delta": 489,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": "Now let's test our fix:"
+    },
+    {
+      "turn": 30,
+      "isl": 50648,
+      "osl": 34,
+      "delta": 1761,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Edit"
+      ],
+      "snippet": "I have an error in my implementation. The issue is with how I'm construc"
+    },
+    {
+      "turn": 31,
+      "isl": 51219,
+      "osl": 519,
+      "delta": 571,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 32,
+      "isl": 51460,
+      "osl": 27,
+      "delta": 241,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Write"
+      ],
+      "snippet": "Great! The fix is working now. Let me also test with the original issue'"
+    },
+    {
+      "turn": 33,
+      "isl": 51786,
+      "osl": 283,
+      "delta": 326,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 34,
+      "isl": 52090,
+      "osl": 27,
+      "delta": 304,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": "Perfect! The fix is working correctly. Let me also run the existing test"
+    },
+    {
+      "turn": 35,
+      "isl": 53304,
+      "osl": 64,
+      "delta": 1214,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": "There's an issue with the pytest setup, but that's unrelated to my fix. "
+    },
+    {
+      "turn": 36,
+      "isl": 53596,
+      "osl": 251,
+      "delta": 292,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": "Perfect! Let me also make sure I haven't introduced any regressions by t"
+    },
+    {
+      "turn": 37,
+      "isl": 53971,
+      "osl": 72,
+      "delta": 375,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "TodoWrite"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 38,
+      "isl": 54126,
+      "osl": 59,
+      "delta": 155,
+      "types": [
+        "text"
+      ],
+      "tool_names": [],
+      "snippet": "## Summary  I have successfully identified and fixed the issue with Bloc"
+    }
+  ],
+  "summary": {
+    "total_turns": 38,
+    "peak_isl": 54126,
+    "total_osl": 38621,
+    "total_output_tokens": 7377,
+    "total_tool_calls": 37,
+    "avg_tools_per_turn": 0.97,
+    "patch_lines": 29
+  },
+  "final_usage": {
+    "input_tokens": 1629643,
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 0,
+    "output_tokens": 7377,
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 0,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "",
+    "iterations": [],
+    "speed": "standard"
+  }
+}

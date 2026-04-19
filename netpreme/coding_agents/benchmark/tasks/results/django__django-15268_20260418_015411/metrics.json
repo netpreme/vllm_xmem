@@ -1,0 +1,536 @@
+{
+  "instance_id": "django__django-15268",
+  "repo": "django/django",
+  "base_commit": "0ab58c120939093fea90822f376e1866fc714d1f",
+  "difficulty": "1-4 hours",
+  "problem_statement": "Optimize multiple AlterFooTogether operations into one\nDescription\n\t\nHi,\nIn #31503 we split the AlterFooTogether (AlterUniqueTogether and AlterIndexTogether) operations into two types of operations.\nFirst, a migration will have operations to remove constraints, and then other operations adds the new constraints. This allows field alterations to work as expected during in between operations.\nIn some cases, this introduced two operations that can actually easily be reduced to one.\nSee for instance the test case: \u200bhttps://github.com/django/django/pull/14722/files#diff-506caa00017053ff8278de6efc2e59cc0c5cea22da9461482bdf16a9fc50af9eR1573-R1592\nExample:\n operations = [\n\t migrations.AlterUniqueTogether(\n\t\t name='mymodel',\n\t\t unique_together=set(),\n\t ),\n\t migrations.AlterIndexTogether(\n\t\t name='mymodel',\n\t\t index_together=set(),\n\t ),\n\t migrations.AlterUniqueTogether(\n\t\t name='mymodel',\n\t\t unique_together={(\"col\",)},\n\t ),\n\t migrations.AlterIndexTogether(\n\t\t name='mymodel',\n\t\t index_together={(\"col\",)},\n\t ),\n ]\nshould be optimized to\n operations = [\n\t migrations.AlterUniqueTogether(\n\t\t name='mymodel',\n\t\t unique_together={(\"col\",)},\n\t ),\n\t migrations.AlterIndexTogether(\n\t\t name='mymodel',\n\t\t index_together={(\"col\",)},\n\t ),\n ]\nSo that we don't do two operations on each constraint, but only one.\n",
+  "model": "qwen/qwen3-coder-30b-a3b-instruct-fp8",
+  "server": "http://localhost:8000",
+  "workdir": "/tmp/swe_workspaces/django__django-15268",
+  "started_at": "2026-04-18T01:51:48.632579",
+  "finished_at": "2026-04-18T01:54:11.827968",
+  "turns": [
+    {
+      "turn": 1,
+      "isl": 27612,
+      "osl": 79,
+      "delta": 27612,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Glob"
+      ],
+      "snippet": "I'll help you optimize multiple AlterFooTogether operations into one. Le"
+    },
+    {
+      "turn": 2,
+      "isl": 29342,
+      "osl": 44,
+      "delta": 1730,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Glob"
+      ],
+      "snippet": "Let me look at the migrations module to understand the AlterFooTogether "
+    },
+    {
+      "turn": 3,
+      "isl": 29406,
+      "osl": 315,
+      "delta": 64,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Let me look at the main migrations directory to find the operation class"
+    },
+    {
+      "turn": 4,
+      "isl": 29506,
+      "osl": 59,
+      "delta": 100,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 5,
+      "isl": 29793,
+      "osl": 47,
+      "delta": 287,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Now let me examine the operations implementation to understand how Alter"
+    },
+    {
+      "turn": 6,
+      "isl": 39054,
+      "osl": 64,
+      "delta": 9261,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Now let me look at the optimizer to understand how operations are optimi"
+    },
+    {
+      "turn": 7,
+      "isl": 39952,
+      "osl": 58,
+      "delta": 898,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "WebSearch"
+      ],
+      "snippet": "Let me look at the test case mentioned in the issue to better understand"
+    },
+    {
+      "turn": 8,
+      "isl": 40249,
+      "osl": 47,
+      "delta": 297,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "WebFetch"
+      ],
+      "snippet": "Let me search for the specific PR mentioned in the issue:"
+    },
+    {
+      "turn": 9,
+      "isl": 40504,
+      "osl": 355,
+      "delta": 255,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": "Let me look at the test files to understand the optimization better:"
+    },
+    {
+      "turn": 10,
+      "isl": 40599,
+      "osl": 154,
+      "delta": 95,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 11,
+      "isl": 49409,
+      "osl": 89,
+      "delta": 8810,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Now I need to understand the issue better. Looking at the problem statem"
+    },
+    {
+      "turn": 12,
+      "isl": 56986,
+      "osl": 60,
+      "delta": 7577,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Edit"
+      ],
+      "snippet": "Based on my analysis of the code and the issue description, I now unders"
+    },
+    {
+      "turn": 13,
+      "isl": 59033,
+      "osl": 42,
+      "delta": 2047,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "I need to import the required classes in the optimizer.py file. Let me c"
+    },
+    {
+      "turn": 14,
+      "isl": 60429,
+      "osl": 516,
+      "delta": 1396,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "I see that I need to import the required classes. Let me check the impor"
+    },
+    {
+      "turn": 15,
+      "isl": 60618,
+      "osl": 118,
+      "delta": 189,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Edit"
+      ],
+      "snippet": "I need to add the proper imports to the optimizer.py file. Let me revert"
+    },
+    {
+      "turn": 16,
+      "isl": 62928,
+      "osl": 373,
+      "delta": 2310,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Actually, let me reconsider the approach. My implementation is overly co"
+    },
+    {
+      "turn": 17,
+      "isl": 63112,
+      "osl": 1106,
+      "delta": 184,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": "Let me look at the test case that shows the optimization issue more care"
+    },
+    {
+      "turn": 18,
+      "isl": 63286,
+      "osl": 49,
+      "delta": 174,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 19,
+      "isl": 63343,
+      "osl": 50,
+      "delta": 57,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 20,
+      "isl": 63416,
+      "osl": 96,
+      "delta": 73,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 21,
+      "isl": 63880,
+      "osl": 33,
+      "delta": 464,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Now I understand the issue better. The problem is that when we have a se"
+    },
+    {
+      "turn": 22,
+      "isl": 64345,
+      "osl": 84,
+      "delta": 465,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Let me look at the reduce method of the AlterTogetherOptionOperation:"
+    },
+    {
+      "turn": 23,
+      "isl": 64952,
+      "osl": 1894,
+      "delta": 607,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Edit"
+      ],
+      "snippet": "I think I misunderstood the problem. Looking at the issue description mo"
+    },
+    {
+      "turn": 24,
+      "isl": 66870,
+      "osl": 100,
+      "delta": 1918,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Edit"
+      ],
+      "snippet": "Now I need to add the optimization logic to the `AlterTogetherOptionOper"
+    },
+    {
+      "turn": 25,
+      "isl": 68410,
+      "osl": 70,
+      "delta": 1540,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": "Actually, I think I'm overcomplicating this. Let me step back and unders"
+    },
+    {
+      "turn": 26,
+      "isl": 69154,
+      "osl": 81,
+      "delta": 744,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Edit"
+      ],
+      "snippet": "Let me try a simpler approach to test. Let me create a proper test to un"
+    },
+    {
+      "turn": 27,
+      "isl": 70823,
+      "osl": 85,
+      "delta": 1669,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "I need to import the required classes in the optimizer file. Let me chec"
+    },
+    {
+      "turn": 28,
+      "isl": 71979,
+      "osl": 497,
+      "delta": 1156,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "I need to add the imports for the operation classes. Let me check what's"
+    },
+    {
+      "turn": 29,
+      "isl": 72100,
+      "osl": 96,
+      "delta": 121,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 30,
+      "isl": 72260,
+      "osl": 83,
+      "delta": 160,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Edit"
+      ],
+      "snippet": "I need to add the imports to the optimizer.py file. Let me add the impor"
+    },
+    {
+      "turn": 31,
+      "isl": 72521,
+      "osl": 73,
+      "delta": 261,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Now let me create a simple test to verify that our optimization works. S"
+    },
+    {
+      "turn": 32,
+      "isl": 72949,
+      "osl": 69,
+      "delta": 428,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": "Let me create a simple test to validate that our optimization works corr"
+    },
+    {
+      "turn": 33,
+      "isl": 73312,
+      "osl": 73,
+      "delta": 363,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Edit"
+      ],
+      "snippet": "The environment doesn't have all the dependencies installed, but that's "
+    },
+    {
+      "turn": 34,
+      "isl": 74554,
+      "osl": 73,
+      "delta": 1242,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Let me also make sure I have the right imports by checking the current s"
+    },
+    {
+      "turn": 35,
+      "isl": 75707,
+      "osl": 73,
+      "delta": 1153,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "TodoWrite"
+      ],
+      "snippet": "My implementation looks correct. Let me summarize what I've done to solv"
+    },
+    {
+      "turn": 36,
+      "isl": 76267,
+      "osl": 68,
+      "delta": 560,
+      "types": [
+        "text"
+      ],
+      "tool_names": [],
+      "snippet": "I've successfully implemented the optimization for consecutive AlterUniq"
+    }
+  ],
+  "summary": {
+    "total_turns": 36,
+    "peak_isl": 76267,
+    "total_osl": 7173,
+    "total_output_tokens": 13937,
+    "total_tool_calls": 35,
+    "avg_tools_per_turn": 0.97,
+    "patch_lines": 97
+  },
+  "final_usage": {
+    "input_tokens": 2078660,
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 0,
+    "output_tokens": 13937,
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 0,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "",
+    "iterations": [],
+    "speed": "standard"
+  }
+}

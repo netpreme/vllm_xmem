@@ -1,0 +1,470 @@
+{
+  "instance_id": "django__django-14007",
+  "repo": "django/django",
+  "base_commit": "619f26d2895d121854b1bed1b535d42b722e2eba",
+  "difficulty": "1-4 hours",
+  "problem_statement": "Database converters (from_db_value) not called for returning_fields on insert\nDescription\n\t\nMaking a subclass of BigAutoField, I've found that, unlike all other query pathways, on insert the returned integer is not passed through any database converters defined for the field - including the from_db_value hook.\nThis means that a field which would normally use a wrapper class has instead a plain integer.\nTake this field:\nclass MyAutoField(models.BigAutoField):\n\tdef from_db_value(self, value, expression, connection):\n\t\tif value is None:\n\t\t\treturn None\n\t\treturn MyIntWrapper(value)\n\tdef get_prep_value(self, value):\n\t\tif value is None:\n\t\t\treturn None\n\t\treturn int(value)\nAnd a model that uses it:\nclass AutoModel(models.Model):\n\tid = MyAutoField(primary_key=True)\nQueried instances have the wrapper class for id:\n>>> am = AutoModel.objects.first()\n>>> am.id\n<MyIntWrapper: 1>\nBut on creation, the returned integer is directly set as an attribute on the class:\n>>> am2 = AutoModel.objects.create()\n>>> am2.id\n2\nThis also affects bulk_create on backends that support fetching the primary key value:\n>>> ams = [AutoModel()]\n>>> AutoModel.objects.bulk_create(ams)\n[<AutoModel: AutoModel object (2)>]\n>>> ams[0].id\n2\n",
+  "model": "qwen/qwen3-coder-30b-a3b-instruct-fp8",
+  "server": "http://localhost:8000",
+  "workdir": "/tmp/swe_workspaces/django__django-14007",
+  "started_at": "2026-04-18T01:42:12.656708",
+  "finished_at": "2026-04-18T01:43:39.919587",
+  "turns": [
+    {
+      "turn": 1,
+      "isl": 27553,
+      "osl": 847,
+      "delta": 27553,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Glob"
+      ],
+      "snippet": "I'll investigate this issue with database converters not being called fo"
+    },
+    {
+      "turn": 2,
+      "isl": 27732,
+      "osl": 29,
+      "delta": 179,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Glob"
+      ],
+      "snippet": "Let me also look at the core models directory to understand how field co"
+    },
+    {
+      "turn": 3,
+      "isl": 28293,
+      "osl": 80,
+      "delta": 561,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Glob"
+      ],
+      "snippet": "Let me look at the database operations and query execution code to under"
+    },
+    {
+      "turn": 4,
+      "isl": 28470,
+      "osl": 42,
+      "delta": 177,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Let me also check the base query implementation to understand how field "
+    },
+    {
+      "turn": 5,
+      "isl": 53319,
+      "osl": 46,
+      "delta": 24849,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Glob"
+      ],
+      "snippet": "Now let me look at the SQL compiler and how it handles returning fields "
+    },
+    {
+      "turn": 6,
+      "isl": 53557,
+      "osl": 44,
+      "delta": 238,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Let me examine the SQL compiler to understand how it handles returning f"
+    },
+    {
+      "turn": 7,
+      "isl": 73560,
+      "osl": 46,
+      "delta": 20003,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Now let me look at the base model implementation to understand how `from"
+    },
+    {
+      "turn": 8,
+      "isl": 79101,
+      "osl": 146,
+      "delta": 5541,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Let me continue reading the base.py file to understand how `from_db` wor"
+    },
+    {
+      "turn": 9,
+      "isl": 85352,
+      "osl": 62,
+      "delta": 6251,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Let me look at the field definitions to understand how `from_db_value` i"
+    },
+    {
+      "turn": 10,
+      "isl": 90746,
+      "osl": 95,
+      "delta": 5394,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Let me continue reading to find the `from_db_value` method:"
+    },
+    {
+      "turn": 11,
+      "isl": 96497,
+      "osl": 67,
+      "delta": 5751,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": "Let me search for the `from_db_value` method in the field classes:"
+    },
+    {
+      "turn": 12,
+      "isl": 96577,
+      "osl": 62,
+      "delta": 80,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": "Let me search more broadly for this method:"
+    },
+    {
+      "turn": 13,
+      "isl": 96659,
+      "osl": 68,
+      "delta": 82,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Let me check the json.py file to see how from_db_value is implemented th"
+    },
+    {
+      "turn": 14,
+      "isl": 102470,
+      "osl": 54,
+      "delta": 5811,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": "Now I need to understand how the field conversion works in the database "
+    },
+    {
+      "turn": 15,
+      "isl": 102575,
+      "osl": 46,
+      "delta": 105,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": "Let me look at the entire file to see if there's a from_db_value method "
+    },
+    {
+      "turn": 16,
+      "isl": 102758,
+      "osl": 45,
+      "delta": 183,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Let me look at the base Field class in the __init__.py file to see if it"
+    },
+    {
+      "turn": 17,
+      "isl": 113896,
+      "osl": 429,
+      "delta": 11138,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "TodoWrite"
+      ],
+      "snippet": "Based on my investigation of the Django codebase, I've identified the ro"
+    },
+    {
+      "turn": 18,
+      "isl": 114311,
+      "osl": 77,
+      "delta": 415,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Let me examine the `SQLInsertCompiler.execute_sql` method more closely t"
+    },
+    {
+      "turn": 19,
+      "isl": 116886,
+      "osl": 66,
+      "delta": 2575,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Now I need to understand how field converters are applied elsewhere in t"
+    },
+    {
+      "turn": 20,
+      "isl": 117203,
+      "osl": 82,
+      "delta": 317,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "I need to understand how field conversion works in the database operatio"
+    },
+    {
+      "turn": 21,
+      "isl": 117383,
+      "osl": 397,
+      "delta": 180,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Edit"
+      ],
+      "snippet": "Now I understand the issue better. Looking at the code, I can see that t"
+    },
+    {
+      "turn": 22,
+      "isl": 118178,
+      "osl": 36,
+      "delta": 795,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Now I need to also make sure that the bulk_create method properly handle"
+    },
+    {
+      "turn": 23,
+      "isl": 119204,
+      "osl": 373,
+      "delta": 1026,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "I see that there's already some logic in the bulk_create method that att"
+    },
+    {
+      "turn": 24,
+      "isl": 120022,
+      "osl": 146,
+      "delta": 818,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "TodoWrite"
+      ],
+      "snippet": "I see that the bulk_create method already has some field conversion logi"
+    },
+    {
+      "turn": 25,
+      "isl": 120278,
+      "osl": 88,
+      "delta": 256,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Write"
+      ],
+      "snippet": "Now let me create a test to verify that our fix works correctly. First, "
+    },
+    {
+      "turn": 26,
+      "isl": 121156,
+      "osl": 103,
+      "delta": 878,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 27,
+      "isl": 122004,
+      "osl": 81,
+      "delta": 848,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 28,
+      "isl": 122088,
+      "osl": 117,
+      "delta": 84,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": "Let me run the test in the Django project directory instead:"
+    },
+    {
+      "turn": 29,
+      "isl": 123066,
+      "osl": 758,
+      "delta": 978,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "TodoWrite"
+      ],
+      "snippet": "Let me create a simpler test that doesn't require full Django setup, and"
+    },
+    {
+      "turn": 30,
+      "isl": 123263,
+      "osl": 749,
+      "delta": 197,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "ExitPlanMode"
+      ],
+      "snippet": "Let me create a summary of what I've done to fix the issue:  ## Summary "
+    },
+    {
+      "turn": 31,
+      "isl": 123811,
+      "osl": 52,
+      "delta": 548,
+      "types": [
+        "text"
+      ],
+      "tool_names": [],
+      "snippet": "I've successfully identified and fixed the issue with database converter"
+    }
+  ],
+  "summary": {
+    "total_turns": 31,
+    "peak_isl": 123811,
+    "total_osl": 5333,
+    "total_output_tokens": 6154,
+    "total_tool_calls": 30,
+    "avg_tools_per_turn": 0.97,
+    "patch_lines": 70
+  },
+  "final_usage": {
+    "input_tokens": 2937968,
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 0,
+    "output_tokens": 6154,
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 0,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "",
+    "iterations": [],
+    "speed": "standard"
+  }
+}

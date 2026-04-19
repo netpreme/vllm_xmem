@@ -1,0 +1,16 @@
+diff --git a/django/db/models/fields/json.py b/django/db/models/fields/json.py
+index fdca700..88d9a49 100644
+--- a/django/db/models/fields/json.py
++++ b/django/db/models/fields/json.py
+@@ -135,7 +135,10 @@ def compile_json_path(key_transforms, include_root=True):
+             path.append(".")
+             path.append(json.dumps(key_transform))
+         else:
+-            path.append("[%s]" % num)
++            # For JSON object keys, even if they're numeric, treat them as string keys
++            # to avoid confusion with array indices
++            path.append(".")
++            path.append(json.dumps(str(num)))
+     return "".join(path)
+ 
+ 

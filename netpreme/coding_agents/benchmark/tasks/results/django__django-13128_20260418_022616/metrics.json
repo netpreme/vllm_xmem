@@ -1,0 +1,328 @@
+{
+  "instance_id": "django__django-13128",
+  "repo": "django/django",
+  "base_commit": "2d67222472f80f251607ae1b720527afceba06ad",
+  "difficulty": "1-4 hours",
+  "problem_statement": "make temporal subtraction work without ExpressionWrapper\nDescription\n\t\nclass Experiment(models.Model):\n\tstart = models.DateTimeField()\n\tend = models.DateTimeField()\nExperiment.objects.annotate(\n\tdelta=F('end') - F('start') + Value(datetime.timedelta(), output_field=DurationField())\n)\nThis gives:\ndjango.core.exceptions.FieldError: Expression contains mixed types: DateTimeField, DurationField. You must set output_field.\n",
+  "model": "qwen/qwen3-coder-30b-a3b-instruct-fp8",
+  "server": "http://localhost:8000",
+  "workdir": "/tmp/swe_workspaces/django__django-13128",
+  "started_at": "2026-04-18T02:25:47.832421",
+  "finished_at": "2026-04-18T02:26:16.688959",
+  "turns": [
+    {
+      "turn": 1,
+      "isl": 27309,
+      "osl": 104,
+      "delta": 27309,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Glob"
+      ],
+      "snippet": "I'll help you solve this Django temporal subtraction issue. Let me analy"
+    },
+    {
+      "turn": 2,
+      "isl": 27436,
+      "osl": 53,
+      "delta": 127,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": "Let me look at the DurationField implementation to understand how to pro"
+    },
+    {
+      "turn": 3,
+      "isl": 27517,
+      "osl": 69,
+      "delta": 81,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 4,
+      "isl": 38434,
+      "osl": 399,
+      "delta": 10917,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": "Let me search for the DurationField class specifically:"
+    },
+    {
+      "turn": 5,
+      "isl": 38523,
+      "osl": 57,
+      "delta": 89,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 6,
+      "isl": 39703,
+      "osl": 71,
+      "delta": 1180,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Glob"
+      ],
+      "snippet": "Now let me look at how expressions work in Django to understand how to p"
+    },
+    {
+      "turn": 7,
+      "isl": 39880,
+      "osl": 56,
+      "delta": 177,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 8,
+      "isl": 40854,
+      "osl": 87,
+      "delta": 974,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": "Let me search for how to properly handle datetime subtraction in Django "
+    },
+    {
+      "turn": 9,
+      "isl": 40954,
+      "osl": 66,
+      "delta": 100,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": "Let me search for examples of temporal operations in Django:"
+    },
+    {
+      "turn": 10,
+      "isl": 41042,
+      "osl": 48,
+      "delta": 88,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Glob"
+      ],
+      "snippet": "Let me look at how the database backends handle datetime arithmetic:"
+    },
+    {
+      "turn": 11,
+      "isl": 41108,
+      "osl": 66,
+      "delta": 66,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Let me examine how Django handles temporal operations in expressions by "
+    },
+    {
+      "turn": 12,
+      "isl": 42457,
+      "osl": 44,
+      "delta": 1349,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": "Let me look at the base operations to understand how expressions are han"
+    },
+    {
+      "turn": 13,
+      "isl": 42743,
+      "osl": 71,
+      "delta": 286,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Let me look at how Django handles datetime subtraction in the base opera"
+    },
+    {
+      "turn": 14,
+      "isl": 43976,
+      "osl": 40,
+      "delta": 1233,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": "Let me search for how Django handles datetime arithmetic in expressions "
+    },
+    {
+      "turn": 15,
+      "isl": 44159,
+      "osl": 43,
+      "delta": 183,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Great! Now I found the key class. Let me examine the TemporalSubtraction"
+    },
+    {
+      "turn": 16,
+      "isl": 45296,
+      "osl": 50,
+      "delta": 1137,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": "Now I need to understand how the subtraction works. Let me also look at "
+    },
+    {
+      "turn": 17,
+      "isl": 45454,
+      "osl": 43,
+      "delta": 158,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 18,
+      "isl": 46591,
+      "osl": 85,
+      "delta": 1137,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "TodoWrite"
+      ],
+      "snippet": "Now I understand the issue better. Let me create a proper solution for t"
+    },
+    {
+      "turn": 19,
+      "isl": 46804,
+      "osl": 53,
+      "delta": 213,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "TodoWrite"
+      ],
+      "snippet": "Based on my investigation of Django's expression system, I now understan"
+    },
+    {
+      "turn": 20,
+      "isl": 46990,
+      "osl": 73,
+      "delta": 186,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "TodoWrite"
+      ],
+      "snippet": "Looking at the Django codebase, I can see that Django has a `TemporalSub"
+    },
+    {
+      "turn": 21,
+      "isl": 47601,
+      "osl": 71,
+      "delta": 611,
+      "types": [
+        "text"
+      ],
+      "tool_names": [],
+      "snippet": "Based on my analysis of the Django codebase, I've identified the correct"
+    }
+  ],
+  "summary": {
+    "total_turns": 21,
+    "peak_isl": 47601,
+    "total_osl": 1649,
+    "total_output_tokens": 2435,
+    "total_tool_calls": 20,
+    "avg_tools_per_turn": 0.95,
+    "patch_lines": 0
+  },
+  "final_usage": {
+    "input_tokens": 854831,
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 0,
+    "output_tokens": 2435,
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 0,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "",
+    "iterations": [],
+    "speed": "standard"
+  }
+}

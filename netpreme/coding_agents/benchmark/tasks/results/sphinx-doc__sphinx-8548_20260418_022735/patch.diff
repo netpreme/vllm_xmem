@@ -1,0 +1,55 @@
+diff --git a/sphinx/ext/autodoc/__init__.py b/sphinx/ext/autodoc/__init__.py
+index ddfd2b3..3c3268c 100644
+--- a/sphinx/ext/autodoc/__init__.py
++++ b/sphinx/ext/autodoc/__init__.py
+@@ -667,16 +667,10 @@ class Documenter:
+         ``autodoc-skip-member`` event.
+         """
+         def is_filtered_inherited_member(name: str) -> bool:
+-            if inspect.isclass(self.object):
+-                for cls in self.object.__mro__:
+-                    if cls.__name__ == self.options.inherited_members and cls != self.object:
+-                        # given member is a member of specified *super class*
+-                        return True
+-                    elif name in cls.__dict__:
+-                        return False
+-                    elif name in self.get_attr(cls, '__annotations__', {}):
+-                        return False
+-
++            # When inherited_members is set, we want to include inherited members
++            # This function should return True only if we should filter out a member
++            # For the case of inherited_members, we generally don't want to filter them out
++            # unless there's a specific exclusion mechanism
+             return False
+ 
+         ret = []
+diff --git a/sphinx/ext/autodoc/importer.py b/sphinx/ext/autodoc/importer.py
+index d6e73d3..ef9609d 100644
+--- a/sphinx/ext/autodoc/importer.py
++++ b/sphinx/ext/autodoc/importer.py
+@@ -311,9 +311,25 @@ def get_class_members(subject: Any, objpath: List[str], attrgetter: Callable,
+         # append instance attributes (cf. self.attr1) if analyzer knows
+         namespace = '.'.join(objpath)
+         for (ns, name), docstring in analyzer.attr_docs.items():
++            # If exact namespace match, use it
+             if namespace == ns and name not in members:
+                 members[name] = ClassAttribute(subject, name, INSTANCEATTR,
+                                                '\n'.join(docstring))
++            # If this is an inherited attribute from a base class, include it when
++            # we're processing a derived class
++            elif name not in members:
++                # Check if this namespace represents a base class of the current class
++                # by checking if the current class is in the MRO of the base class
++                ns_parts = ns.split('.')
++                if len(ns_parts) >= 2:
++                    base_class_name = ns_parts[-1]
++                    # Check if the base class name matches any class in the MRO
++                    for cls in getmro(subject):
++                        if cls.__name__ == base_class_name:
++                            # This is an inherited attribute from a base class
++                            members[name] = ClassAttribute(cls, name, INSTANCEATTR,
++                                                         '\n'.join(docstring))
++                            break
+ 
+     return members
+ 

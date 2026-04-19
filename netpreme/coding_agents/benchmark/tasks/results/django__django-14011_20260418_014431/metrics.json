@@ -1,0 +1,261 @@
+{
+  "instance_id": "django__django-14011",
+  "repo": "django/django",
+  "base_commit": "e4430f22c8e3d29ce5d9d0263fba57121938d06d",
+  "difficulty": "1-4 hours",
+  "problem_statement": "LiveServerTestCase's ThreadedWSGIServer doesn't close database connections after each thread\nDescription\n\t\nIn Django 2.2.17, I'm seeing the reappearance of #22414 after it was fixed in 1.11. #22414 is the issue where the following error will occur at the conclusion of a test run when destroy_test_db() is called:\nOperationalError: database \"test_myapp\" is being accessed by other users\nThis error happens when not all of the database connections are closed. In my case today, I'm seeing this when running a single test that is a LiveServerTestCase. I see it in approximately half of my test runs, so it's not wholly deterministic (it's a race condition).\nThere weren't a whole lot of changes in the LiveServerTestCase-related code between 1.11 and 2.2, so I looked at them individually.\nIssue #20238 added threading support to LiveServerTestCase. One of the changes it made \u200bwas changing LiveServerThread to use ThreadedWSGIServer instead of WSGIServer. LiveServerThread is used by LiveServerTestCase.\nWhen I tried modifying LiveServerThread to use the old WSGIServer, I could no longer reproduce the above error. My changes were as follows:\nclass NonThreadedLiveServerThread(LiveServerThread):\n\tdef _create_server(self):\n\t\treturn WSGIServer((self.host, self.port), QuietWSGIRequestHandler, allow_reuse_address=False)\nclass MyTest(LiveServerTestCase):\n\tserver_thread_class = NonThreadedLiveServerThread\nThe CPython docs \u200bdescribe ThreadingMixIn as defining an attribute \"which indicates whether or not the server should wait for thread termination.\"\nConsistent with what I described above, Aymeric said the following on ticket #20238, seeming to foreshadow issues like this one:\nmore threading will certainly create more race conditions on shutdown, especially when it comes to the database connections \u2014 it's taken months to eliminate most from LiveServerTestCase, and I'm sure there are still some left,\n",
+  "model": "qwen/qwen3-coder-30b-a3b-instruct-fp8",
+  "server": "http://localhost:8000",
+  "workdir": "/tmp/swe_workspaces/django__django-14011",
+  "started_at": "2026-04-18T01:43:55.154070",
+  "finished_at": "2026-04-18T01:44:31.876433",
+  "turns": [
+    {
+      "turn": 1,
+      "isl": 27700,
+      "osl": 125,
+      "delta": 27700,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Glob"
+      ],
+      "snippet": "I'll investigate this issue with LiveServerTestCase's ThreadedWSGIServer"
+    },
+    {
+      "turn": 2,
+      "isl": 28582,
+      "osl": 60,
+      "delta": 882,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": "Let me look specifically for LiveServerTestCase related code:"
+    },
+    {
+      "turn": 3,
+      "isl": 28678,
+      "osl": 44,
+      "delta": 96,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Let me examine the main testcases.py file where LiveServerTestCase is de"
+    },
+    {
+      "turn": 4,
+      "isl": 47415,
+      "osl": 58,
+      "delta": 18737,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Now let me look at the specific issue with ThreadedWSGIServer not closin"
+    },
+    {
+      "turn": 5,
+      "isl": 49852,
+      "osl": 87,
+      "delta": 2437,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": "Now I need to understand the issue better. Let me also check the git his"
+    },
+    {
+      "turn": 6,
+      "isl": 50083,
+      "osl": 129,
+      "delta": 231,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": "Let me search for information about the specific issue in the codebase:"
+    },
+    {
+      "turn": 7,
+      "isl": 50164,
+      "osl": 517,
+      "delta": 81,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Edit"
+      ],
+      "snippet": "Based on the issue description and code analysis, I can see the problem "
+    },
+    {
+      "turn": 8,
+      "isl": 51265,
+      "osl": 49,
+      "delta": 1101,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Let me read the file again to get the current state:"
+    },
+    {
+      "turn": 9,
+      "isl": 52490,
+      "osl": 138,
+      "delta": 1225,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": "I see that the file has already been modified. Let me revert to the orig"
+    },
+    {
+      "turn": 10,
+      "isl": 52562,
+      "osl": 124,
+      "delta": 72,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Edit"
+      ],
+      "snippet": "Now let me make a proper fix by examining the exact issue and implementi"
+    },
+    {
+      "turn": 11,
+      "isl": 53282,
+      "osl": 61,
+      "delta": 720,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Let me read the file again to get the current state:"
+    },
+    {
+      "turn": 12,
+      "isl": 53720,
+      "osl": 46,
+      "delta": 438,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Edit"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 13,
+      "isl": 53936,
+      "osl": 30,
+      "delta": 216,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Edit"
+      ],
+      "snippet": "Now I also need to improve the terminate method to ensure proper cleanup"
+    },
+    {
+      "turn": 14,
+      "isl": 54214,
+      "osl": 45,
+      "delta": 278,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Let me also add a comment to the LiveServerTestCase class to document th"
+    },
+    {
+      "turn": 15,
+      "isl": 54662,
+      "osl": 136,
+      "delta": 448,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Edit"
+      ],
+      "snippet": "Let me also add a comment to the class documentation to explain the fix:"
+    },
+    {
+      "turn": 16,
+      "isl": 55056,
+      "osl": 1042,
+      "delta": 394,
+      "types": [
+        "text"
+      ],
+      "tool_names": [],
+      "snippet": "## Summary of the Fix  I've implemented a fix for the issue where `LiveS"
+    }
+  ],
+  "summary": {
+    "total_turns": 16,
+    "peak_isl": 55056,
+    "total_osl": 2691,
+    "total_output_tokens": 3459,
+    "total_tool_calls": 15,
+    "avg_tools_per_turn": 0.94,
+    "patch_lines": 51
+  },
+  "final_usage": {
+    "input_tokens": 763661,
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 0,
+    "output_tokens": 3459,
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 0,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "",
+    "iterations": [],
+    "speed": "standard"
+  }
+}

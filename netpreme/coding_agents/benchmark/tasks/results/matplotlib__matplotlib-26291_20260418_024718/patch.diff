@@ -1,0 +1,36 @@
+diff --git a/lib/mpl_toolkits/axes_grid1/inset_locator.py b/lib/mpl_toolkits/axes_grid1/inset_locator.py
+index 9d350510..0dd7fc8c 100644
+--- a/lib/mpl_toolkits/axes_grid1/inset_locator.py
++++ b/lib/mpl_toolkits/axes_grid1/inset_locator.py
+@@ -68,8 +68,31 @@ class AnchoredLocatorBase(AnchoredOffsetbox):
+     def draw(self, renderer):
+         raise RuntimeError("No draw method should be called")
+ 
++    def get_window_extent(self, renderer=None):
++        # Handle case where self.figure is None to prevent AttributeError
++        # This can happen when the locator is called during drawing setup
++        if renderer is None and self.figure is None:
++            # Try to get renderer from the axes if available
++            if hasattr(self, 'axes') and hasattr(self.axes, 'figure'):
++                # Temporarily set the figure to avoid the error
++                temp_figure = self.axes.figure
++                if temp_figure is not None:
++                    self.figure = temp_figure
++                    try:
++                        return super().get_window_extent(renderer)
++                    finally:
++                        # Restore original figure state
++                        self.figure = None
++            # Fallback to the original behavior
++            return super().get_window_extent(renderer)
++        else:
++            return super().get_window_extent(renderer)
++
+     def __call__(self, ax, renderer):
+         self.axes = ax
++        # Ensure the figure is properly set for the locator to work correctly
++        if hasattr(ax, 'figure') and ax.figure is not None:
++            self.figure = ax.figure
+         bbox = self.get_window_extent(renderer)
+         px, py = self.get_offset(bbox.width, bbox.height, 0, 0, renderer)
+         bbox_canvas = Bbox.from_bounds(px, py, bbox.width, bbox.height)

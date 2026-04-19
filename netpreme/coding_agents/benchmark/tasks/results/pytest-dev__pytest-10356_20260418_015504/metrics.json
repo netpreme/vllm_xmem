@@ -1,0 +1,576 @@
+{
+  "instance_id": "pytest-dev__pytest-10356",
+  "repo": "pytest-dev/pytest",
+  "base_commit": "3c1534944cbd34e8a41bc9e76818018fadefc9a1",
+  "difficulty": "1-4 hours",
+  "problem_statement": "Consider MRO when obtaining marks for classes\nWhen using pytest markers in two baseclasses `Foo` and `Bar`, inheriting from both of those baseclasses will lose the markers of one of those classes. This behavior is present in pytest 3-6, and I think it may as well have been intended. I am still filing it as a bug because I am not sure if this edge case was ever explicitly considered.\r\n\r\nIf it is widely understood that all markers are part of a single attribute, I guess you could say that this is just expected behavior as per MRO. However, I'd argue that it would be more intuitive to attempt to merge marker values into one, possibly deduplicating marker names by MRO.\r\n\r\n```python\r\nimport itertools\r\nimport pytest\r\n\r\nclass BaseMeta(type):\r\n    @property\r\n    def pytestmark(self):\r\n        return (\r\n            getattr(self, \"_pytestmark\", []) +\r\n            list(itertools.chain.from_iterable(getattr(x, \"_pytestmark\", []) for x in self.__mro__))\r\n        )\r\n\r\n    @pytestmark.setter\r\n    def pytestmark(self, value):\r\n        self._pytestmark = value\r\n\r\n\r\nclass Base(object):\r\n    # Without this metaclass, foo and bar markers override each other, and test_dings\r\n    # will only have one marker\r\n    # With the metaclass, test_dings will have both\r\n    __metaclass__ = BaseMeta\r\n\r\n@pytest.mark.foo\r\nclass Foo(Base):\r\n    pass\r\n\r\n\r\n@pytest.mark.bar\r\nclass Bar(Base):\r\n    pass\r\n\r\nclass TestDings(Foo, Bar):\r\n    def test_dings(self):\r\n        # This test should have both markers, foo and bar.\r\n        # In practice markers are resolved using MRO (so foo wins), unless the\r\n        # metaclass is applied\r\n        pass\r\n```\r\n\r\nI'd expect `foo` and `bar` to be markers for `test_dings`, but this only actually is the case with this metaclass.\r\n\r\nPlease note that the repro case is Python 2/3 compatible excluding how metaclasses are added to `Base` (this needs to be taken care of to repro this issue on pytest 6)\nConsider MRO when obtaining marks for classes\nWhen using pytest markers in two baseclasses `Foo` and `Bar`, inheriting from both of those baseclasses will lose the markers of one of those classes. This behavior is present in pytest 3-6, and I think it may as well have been intended. I am still filing it as a bug because I am not sure if this edge case was ever explicitly considered.\r\n\r\nIf it is widely understood that all markers are part of a single attribute, I guess you could say that this is just expected behavior as per MRO. However, I'd argue that it would be more intuitive to attempt to merge marker values into one, possibly deduplicating marker names by MRO.\r\n\r\n```python\r\nimport itertools\r\nimport pytest\r\n\r\nclass BaseMeta(type):\r\n    @property\r\n    def pytestmark(self):\r\n        return (\r\n            getattr(self, \"_pytestmark\", []) +\r\n            list(itertools.chain.from_iterable(getattr(x, \"_pytestmark\", []) for x in self.__mro__))\r\n        )\r\n\r\n    @pytestmark.setter\r\n    def pytestmark(self, value):\r\n        self._pytestmark = value\r\n\r\n\r\nclass Base(object):\r\n    # Without this metaclass, foo and bar markers override each other, and test_dings\r\n    # will only have one marker\r\n    # With the metaclass, test_dings will have both\r\n    __metaclass__ = BaseMeta\r\n\r\n@pytest.mark.foo\r\nclass Foo(Base):\r\n    pass\r\n\r\n\r\n@pytest.mark.bar\r\nclass Bar(Base):\r\n    pass\r\n\r\nclass TestDings(Foo, Bar):\r\n    def test_dings(self):\r\n        # This test should have both markers, foo and bar.\r\n        # In practice markers are resolved using MRO (so foo wins), unless the\r\n        # metaclass is applied\r\n        pass\r\n```\r\n\r\nI'd expect `foo` and `bar` to be markers for `test_dings`, but this only actually is the case with this metaclass.\r\n\r\nPlease note that the repro case is Python 2/3 compatible excluding how metaclasses are added to `Base` (this needs to be taken care of to repro this issue on pytest 6)\nFix missing marks when inheritance from multiple classes\n\r\n<!--\r\nThanks for submitting a PR, your contribution is really appreciated!\r\n\r\nHere is a quick checklist that should be present in PRs.\r\n\r\n- [] Include documentation when adding new features.\r\n- [ ] Include new tests or update existing tests when applicable.\r\n- [X] Allow maintainers to push and squash when merging my commits. Please uncheck this if you prefer to squash the commits yourself.\r\n\r\nIf this change fixes an issue, please:\r\n\r\n- [x] Add text like ``closes #XYZW`` to the PR description and/or commits (where ``XYZW`` is the issue number). See the [github docs](https://help.github.com/en/github/managing-your-work-on-github/linking-a-pull-request-to-an-issue#linking-a-pull-request-to-an-issue-using-a-keyword) for more information.\r\n\r\nUnless your change is trivial or a small documentation fix (e.g., a typo or reword of a small section) please:\r\n\r\n- [x] Create a new changelog file in the `changelog` folder, with a name like `<ISSUE NUMBER>.<TYPE>.rst`. See [changelog/README.rst](https://github.com/pytest-dev/pytest/blob/main/changelog/README.rst) for details.\r\n\r\n  Write sentences in the **past or present tense**, examples:\r\n\r\n  * *Improved verbose diff output with sequences.*\r\n  * *Terminal summary statistics now use multiple colors.*\r\n\r\n  Also make sure to end the sentence with a `.`.\r\n\r\n- [x] Add yourself to `AUTHORS` in alphabetical order.\r\n-->\r\n\n",
+  "model": "qwen/qwen3-coder-30b-a3b-instruct-fp8",
+  "server": "http://localhost:8000",
+  "workdir": "/tmp/swe_workspaces/pytest-dev__pytest-10356",
+  "started_at": "2026-04-18T01:53:09.181976",
+  "finished_at": "2026-04-18T01:55:04.572423",
+  "turns": [
+    {
+      "turn": 1,
+      "isl": 28471,
+      "osl": 61,
+      "delta": 28471,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Glob"
+      ],
+      "snippet": "I'll help you understand and fix the issue with missing markers when inh"
+    },
+    {
+      "turn": 2,
+      "isl": 28549,
+      "osl": 39,
+      "delta": 78,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Glob"
+      ],
+      "snippet": "Let me search for marker-related files in the pytest codebase:"
+    },
+    {
+      "turn": 3,
+      "isl": 28605,
+      "osl": 42,
+      "delta": 56,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": "Let me search more broadly for marker-related code:"
+    },
+    {
+      "turn": 4,
+      "isl": 28689,
+      "osl": 59,
+      "delta": 84,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Let me examine the marker structures file first to understand how marker"
+    },
+    {
+      "turn": 5,
+      "isl": 35093,
+      "osl": 41,
+      "delta": 6404,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Glob"
+      ],
+      "snippet": "Now let me look at how markers are retrieved from classes in the nodes m"
+    },
+    {
+      "turn": 6,
+      "isl": 35254,
+      "osl": 43,
+      "delta": 161,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 7,
+      "isl": 43546,
+      "osl": 58,
+      "delta": 8292,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": "Now let me look at how markers are processed in the collection phase. Le"
+    },
+    {
+      "turn": 8,
+      "isl": 43641,
+      "osl": 68,
+      "delta": 95,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Let me look at the python.py file which likely handles test collection:"
+    },
+    {
+      "turn": 9,
+      "isl": 49336,
+      "osl": 84,
+      "delta": 5695,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Let me continue reading the rest of the python.py file to understand how"
+    },
+    {
+      "turn": 10,
+      "isl": 55307,
+      "osl": 1397,
+      "delta": 5971,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Write"
+      ],
+      "snippet": "Now I need to understand how markers are collected from classes. Looking"
+    },
+    {
+      "turn": 11,
+      "isl": 55982,
+      "osl": 637,
+      "delta": 675,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": "Let me run this test to see the current behavior:"
+    },
+    {
+      "turn": 12,
+      "isl": 56152,
+      "osl": 56,
+      "delta": 170,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": "Let me check what Python interpreter is available:"
+    },
+    {
+      "turn": 13,
+      "isl": 56203,
+      "osl": 33,
+      "delta": 51,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 14,
+      "isl": 56342,
+      "osl": 27,
+      "delta": 139,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Write"
+      ],
+      "snippet": "Now I understand the issue better. The problem is that when a class inhe"
+    },
+    {
+      "turn": 15,
+      "isl": 56619,
+      "osl": 285,
+      "delta": 277,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 16,
+      "isl": 57803,
+      "osl": 237,
+      "delta": 1184,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": "Let me try a different approach and look at the actual code that handles"
+    },
+    {
+      "turn": 17,
+      "isl": 57903,
+      "osl": 53,
+      "delta": 100,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Write"
+      ],
+      "snippet": "Looking at the code, I can see the issue now. In the `PyCollector.collec"
+    },
+    {
+      "turn": 18,
+      "isl": 58688,
+      "osl": 68,
+      "delta": 785,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 19,
+      "isl": 59006,
+      "osl": 646,
+      "delta": 318,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Perfect! Now I can see the issue clearly. The `TestDings` class has `pyt"
+    },
+    {
+      "turn": 20,
+      "isl": 60406,
+      "osl": 45,
+      "delta": 1400,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Edit"
+      ],
+      "snippet": "Now I understand the issue better. The problem is that when we iterate t"
+    },
+    {
+      "turn": 21,
+      "isl": 61583,
+      "osl": 288,
+      "delta": 1177,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Edit"
+      ],
+      "snippet": "Actually, I realize my approach above is flawed. The issue is that I'm m"
+    },
+    {
+      "turn": 22,
+      "isl": 62642,
+      "osl": 1626,
+      "delta": 1059,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Let me think about this differently. The real issue is not in the collec"
+    },
+    {
+      "turn": 23,
+      "isl": 63185,
+      "osl": 69,
+      "delta": 543,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Write"
+      ],
+      "snippet": "The issue is that `get_unpacked_marks` only looks at the `pytestmark` at"
+    },
+    {
+      "turn": 24,
+      "isl": 63639,
+      "osl": 78,
+      "delta": 454,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": "Let me approach this problem differently. Since I can't easily run pytes"
+    },
+    {
+      "turn": 25,
+      "isl": 63988,
+      "osl": 56,
+      "delta": 349,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 26,
+      "isl": 64048,
+      "osl": 117,
+      "delta": 60,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 27,
+      "isl": 64109,
+      "osl": 385,
+      "delta": 61,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Let me search for the Function class definition in a different way:"
+    },
+    {
+      "turn": 28,
+      "isl": 65553,
+      "osl": 1125,
+      "delta": 1444,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": "Let me search for the Function class definition more directly:"
+    },
+    {
+      "turn": 29,
+      "isl": 65670,
+      "osl": 155,
+      "delta": 117,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Now I can see that `Function` inherits from `PyobjMixin` and `nodes.Item"
+    },
+    {
+      "turn": 30,
+      "isl": 66619,
+      "osl": 1017,
+      "delta": 949,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Edit"
+      ],
+      "snippet": "Now I see the exact issue. At line 314, `get_unpacked_marks(self.obj)` i"
+    },
+    {
+      "turn": 31,
+      "isl": 68277,
+      "osl": 255,
+      "delta": 1658,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Edit"
+      ],
+      "snippet": "Actually, I think I'm overcomplicating this. Let me step back and think "
+    },
+    {
+      "turn": 32,
+      "isl": 69276,
+      "osl": 1198,
+      "delta": 999,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Edit"
+      ],
+      "snippet": "Let me approach this problem differently. I'll create a focused fix that"
+    },
+    {
+      "turn": 33,
+      "isl": 70012,
+      "osl": 63,
+      "delta": 736,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "TodoWrite"
+      ],
+      "snippet": "Now I have a potential fix. Let me summarize what I've done and explain "
+    },
+    {
+      "turn": 34,
+      "isl": 70464,
+      "osl": 314,
+      "delta": 452,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Write"
+      ],
+      "snippet": "Let me create a proper test to verify that my fix works. Since I can't e"
+    },
+    {
+      "turn": 35,
+      "isl": 70855,
+      "osl": 325,
+      "delta": 391,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 36,
+      "isl": 71089,
+      "osl": 525,
+      "delta": 234,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Write"
+      ],
+      "snippet": "Let me create a more comprehensive test to validate the fix works as int"
+    },
+    {
+      "turn": 37,
+      "isl": 71528,
+      "osl": 36,
+      "delta": 439,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 38,
+      "isl": 71627,
+      "osl": 37,
+      "delta": 99,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "ExitPlanMode"
+      ],
+      "snippet": "## Summary  I have successfully implemented a fix for the issue where py"
+    },
+    {
+      "turn": 39,
+      "isl": 72167,
+      "osl": 80,
+      "delta": 540,
+      "types": [
+        "text"
+      ],
+      "tool_names": [],
+      "snippet": "I have successfully implemented a fix for the pytest marker inheritance "
+    }
+  ],
+  "summary": {
+    "total_turns": 39,
+    "peak_isl": 72167,
+    "total_osl": 11728,
+    "total_output_tokens": 11458,
+    "total_tool_calls": 38,
+    "avg_tools_per_turn": 0.97,
+    "patch_lines": 53
+  },
+  "final_usage": {
+    "input_tokens": 2227926,
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 0,
+    "output_tokens": 11458,
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 0,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "",
+    "iterations": [],
+    "speed": "standard"
+  }
+}

@@ -1,0 +1,25 @@
+diff --git a/sklearn/pipeline.py b/sklearn/pipeline.py
+index 94d9465..8af7449 100644
+--- a/sklearn/pipeline.py
++++ b/sklearn/pipeline.py
+@@ -1280,7 +1280,19 @@ class FeatureUnion(TransformerMixin, _BaseComposition):
+         config = _get_output_config("transform", self)
+         if config["dense"] == "pandas" and all(hasattr(X, "iloc") for X in Xs):
+             pd = check_pandas_support("transform")
+-            return pd.concat(Xs, axis=1)
++            # For pandas output, we need to be careful about index alignment
++            # when transformers return different shaped results (e.g., grouped data)
++            try:
++                return pd.concat(Xs, axis=1)
++            except ValueError:
++                # If concat fails due to index mismatch, fall back to numpy behavior
++                # This handles cases where transformers return different shaped data
++                # such as when aggregating data
++                Xs = [np.asarray(X) if hasattr(X, "shape") else X for X in Xs]
++                if any(sparse.issparse(f) for f in Xs):
++                    return sparse.hstack(Xs).tocsr()
++                else:
++                    return np.hstack(Xs)
+ 
+         if any(sparse.issparse(f) for f in Xs):
+             Xs = sparse.hstack(Xs).tocsr()

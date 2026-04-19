@@ -1,0 +1,31 @@
+diff --git a/astropy/wcs/wcsapi/wrappers/sliced_wcs.py b/astropy/wcs/wcsapi/wrappers/sliced_wcs.py
+index d7605b07..ef467145 100644
+--- a/astropy/wcs/wcsapi/wrappers/sliced_wcs.py
++++ b/astropy/wcs/wcsapi/wrappers/sliced_wcs.py
+@@ -251,7 +251,25 @@ class SlicedLowLevelWCS(BaseWCSWrapper):
+                 iworld_curr += 1
+                 world_arrays_new.append(world_arrays[iworld_curr])
+             else:
+-                world_arrays_new.append(1.)
++                # For dropped world dimensions, we need to determine the correct value
++                # based on the slice that was applied to the pixel dimension.
++                # Find the corresponding pixel dimension that was sliced to get this world dimension
++                slice_value = 0
++                for ipixel in range(self._wcs.pixel_n_dim):
++                    # Check if this world dimension is correlated with this pixel dimension
++                    if self._wcs.axis_correlation_matrix[iworld, ipixel]:
++                        # This world dimension is related to this pixel dimension
++                        # Now check what slice was applied to this pixel dimension
++                        slice_obj = self._slices_pixel[ipixel]
++                        if isinstance(slice_obj, numbers.Integral):
++                            # This pixel dimension was sliced to an integer
++                            slice_value = slice_obj
++                            break
++                        elif hasattr(slice_obj, 'start') and slice_obj.start is not None:
++                            # This pixel dimension was sliced with a range, use start
++                            slice_value = slice_obj.start
++                            break
++                world_arrays_new.append(slice_value)
+ 
+         world_arrays_new = np.broadcast_arrays(*world_arrays_new)
+         pixel_arrays = list(self._wcs.world_to_pixel_values(*world_arrays_new))

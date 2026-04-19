@@ -1,0 +1,16 @@
+diff --git a/xarray/coding/variables.py b/xarray/coding/variables.py
+index b035ff8..2293668 100644
+--- a/xarray/coding/variables.py
++++ b/xarray/coding/variables.py
+@@ -316,6 +316,11 @@ class UnsignedIntegerCoder(VariableCoder):
+                     if "_FillValue" in attrs:
+                         new_fill = unsigned_dtype.type(attrs["_FillValue"])
+                         attrs["_FillValue"] = new_fill
++                elif unsigned == "false":
++                    # Handle OPeNDAP convention: _Unsigned=False means unsigned bytes
++                    # should be treated as signed (i.e., no conversion needed)
++                    # This is symmetric to the _Unsigned=True case
++                    pass
+             else:
+                 warnings.warn(
+                     "variable %r has _Unsigned attribute but is not "

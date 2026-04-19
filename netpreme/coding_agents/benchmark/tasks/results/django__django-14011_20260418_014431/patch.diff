@@ -1,0 +1,51 @@
+diff --git a/django/test/testcases.py b/django/test/testcases.py
+index 92f566b7..6b1de97d 100644
+--- a/django/test/testcases.py
++++ b/django/test/testcases.py
+@@ -1511,7 +1511,17 @@ class LiveServerThread(threading.Thread):
+             self.error = e
+             self.is_ready.set()
+         finally:
+-            connections.close_all()
++            # Ensure all database connections are properly closed to prevent
++            # "database is being accessed by other users" errors with ThreadedWSGIServer
++            # This is particularly important because threads may hold connections
++            # that don't get properly cleaned up on shutdown
++            for conn in connections.all():
++                try:
++                    conn.close()
++                except Exception:
++                    # Ignore errors when closing connections to avoid masking
++                    # the original exception
++                    pass
+ 
+     def _create_server(self):
+         return self.server_class(
+@@ -1526,6 +1536,15 @@ class LiveServerThread(threading.Thread):
+             self.httpd.shutdown()
+             self.httpd.server_close()
+         self.join()
++        # Ensure database connections are closed after thread termination
++        # This is particularly important for ThreadedWSGIServer to prevent
++        # connection leaks that cause "database is being accessed by other users" errors
++        for conn in connections.all():
++            try:
++                conn.close()
++            except Exception:
++                # Ignore errors when closing connections
++                pass
+ 
+ 
+ class LiveServerTestCase(TransactionTestCase):
+@@ -1538,6 +1557,11 @@ class LiveServerTestCase(TransactionTestCase):
+     threads don't share the same transactions (unless if using in-memory sqlite)
+     and each thread needs to commit all their transactions so that the other
+     thread can see the changes.
++
++    Note: This class uses ThreadedWSGIServer which creates multiple threads.
++    Database connections opened in these threads must be explicitly closed
++    to prevent "database is being accessed by other users" errors during
++    test cleanup.
+     """
+     host = 'localhost'
+     port = 0

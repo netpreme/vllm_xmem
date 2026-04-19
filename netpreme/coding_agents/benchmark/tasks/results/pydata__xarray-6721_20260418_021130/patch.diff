@@ -1,0 +1,35 @@
+diff --git a/xarray/core/common.py b/xarray/core/common.py
+index 3c328f4..2934c89 100644
+--- a/xarray/core/common.py
++++ b/xarray/core/common.py
+@@ -2023,14 +2023,22 @@ def get_chunksizes(
+ 
+     chunks: dict[Any, tuple[int, ...]] = {}
+     for v in variables:
+-        if hasattr(v.data, "chunks"):
+-            for dim, c in v.chunksizes.items():
+-                if dim in chunks and c != chunks[dim]:
+-                    raise ValueError(
+-                        f"Object has inconsistent chunks along dimension {dim}. "
+-                        "This can be fixed by calling unify_chunks()."
+-                    )
+-                chunks[dim] = c
++        # Check if the underlying data has chunks without triggering full array loading
++        if hasattr(v._data, "chunks"):
++            # Access chunksizes from the underlying data directly to avoid loading entire array
++            try:
++                # Use the chunksizes property which already handles this safely
++                v_chunksizes = v.chunksizes
++                for dim, c in v_chunksizes.items():
++                    if dim in chunks and c != chunks[dim]:
++                        raise ValueError(
++                            f"Object has inconsistent chunks along dimension {dim}. "
++                            "This can be fixed by calling unify_chunks()."
++                        )
++                    chunks[dim] = c
++            except (AttributeError, KeyError):
++                # If chunksizes access fails, fall back gracefully
++                pass
+     return Frozen(chunks)
+ 
+ 

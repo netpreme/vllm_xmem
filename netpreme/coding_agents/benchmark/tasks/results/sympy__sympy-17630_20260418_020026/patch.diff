@@ -1,0 +1,29 @@
+diff --git a/sympy/matrices/expressions/blockmatrix.py b/sympy/matrices/expressions/blockmatrix.py
+index 95302a05c..28a9aa166 100644
+--- a/sympy/matrices/expressions/blockmatrix.py
++++ b/sympy/matrices/expressions/blockmatrix.py
+@@ -164,7 +164,23 @@ def structurally_equal(self, other):
+     def _blockmul(self, other):
+         if (isinstance(other, BlockMatrix) and
+                 self.colblocksizes == other.rowblocksizes):
+-            return BlockMatrix(self.blocks*other.blocks)
++            # Perform block-wise matrix multiplication
++            from sympy.matrices.immutable import ImmutableDenseMatrix
++            # Flatten the result_data properly for ImmutableDenseMatrix
++            result_data = []
++            for i in range(self.blockshape[0]):
++                for j in range(other.blockshape[1]):
++                    # Compute sum of products of corresponding blocks
++                    summand = None
++                    for k in range(self.blockshape[1]):
++                        product = self.blocks[i, k] * other.blocks[k, j]
++                        if summand is None:
++                            summand = product
++                        else:
++                            summand = summand + product
++                    result_data.append(summand)
++            result_matrix = ImmutableDenseMatrix(self.blockshape[0], other.blockshape[1], result_data)
++            return BlockMatrix(result_matrix)
+ 
+         return self * other
+ 

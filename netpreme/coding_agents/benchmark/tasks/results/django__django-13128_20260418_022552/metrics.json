@@ -1,0 +1,353 @@
+{
+  "instance_id": "django__django-13128",
+  "repo": "django/django",
+  "base_commit": "2d67222472f80f251607ae1b720527afceba06ad",
+  "difficulty": "1-4 hours",
+  "problem_statement": "make temporal subtraction work without ExpressionWrapper\nDescription\n\t\nclass Experiment(models.Model):\n\tstart = models.DateTimeField()\n\tend = models.DateTimeField()\nExperiment.objects.annotate(\n\tdelta=F('end') - F('start') + Value(datetime.timedelta(), output_field=DurationField())\n)\nThis gives:\ndjango.core.exceptions.FieldError: Expression contains mixed types: DateTimeField, DurationField. You must set output_field.\n",
+  "model": "qwen/qwen3-coder-30b-a3b-instruct-fp8",
+  "server": "http://localhost:8000",
+  "workdir": "/tmp/swe_workspaces/django__django-13128",
+  "started_at": "2026-04-18T02:25:21.767105",
+  "finished_at": "2026-04-18T02:25:52.115237",
+  "turns": [
+    {
+      "turn": 1,
+      "isl": 27309,
+      "osl": 211,
+      "delta": 27309,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Glob"
+      ],
+      "snippet": "I'll help you solve this Django temporal subtraction issue. Let me analy"
+    },
+    {
+      "turn": 2,
+      "isl": 27436,
+      "osl": 104,
+      "delta": 127,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": "Let me look at the DurationField implementation to understand how to pro"
+    },
+    {
+      "turn": 3,
+      "isl": 27519,
+      "osl": 134,
+      "delta": 83,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 4,
+      "isl": 54487,
+      "osl": 55,
+      "delta": 26968,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Glob"
+      ],
+      "snippet": "Now let me look at how expressions work in Django to understand how to p"
+    },
+    {
+      "turn": 5,
+      "isl": 54553,
+      "osl": 46,
+      "delta": 66,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 6,
+      "isl": 59705,
+      "osl": 45,
+      "delta": 5152,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Let me continue reading the expressions file to understand how temporal "
+    },
+    {
+      "turn": 7,
+      "isl": 65430,
+      "osl": 56,
+      "delta": 5725,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "TodoWrite"
+      ],
+      "snippet": "Based on my investigation of the Django codebase, I now understand the i"
+    },
+    {
+      "turn": 8,
+      "isl": 65614,
+      "osl": 320,
+      "delta": 184,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": "Looking at the Django code, I can see that the issue occurs because when"
+    },
+    {
+      "turn": 9,
+      "isl": 65743,
+      "osl": 82,
+      "delta": 129,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": "Let me look at how temporal subtraction is handled in the Django codebas"
+    },
+    {
+      "turn": 10,
+      "isl": 65868,
+      "osl": 75,
+      "delta": 125,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Let me check how the temporal subtraction is implemented in the base ope"
+    },
+    {
+      "turn": 11,
+      "isl": 67045,
+      "osl": 142,
+      "delta": 1177,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": "Let me search for the specific subtract_temporals method:"
+    },
+    {
+      "turn": 12,
+      "isl": 67160,
+      "osl": 72,
+      "delta": 115,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Let me check how the temporal subtraction is implemented in one of the b"
+    },
+    {
+      "turn": 13,
+      "isl": 67993,
+      "osl": 60,
+      "delta": 833,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": "Let me search for the subtract_temporals method in the base operations:"
+    },
+    {
+      "turn": 14,
+      "isl": 68076,
+      "osl": 103,
+      "delta": 83,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 15,
+      "isl": 68344,
+      "osl": 63,
+      "delta": 268,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": "Let me search for the method definition in a different way:"
+    },
+    {
+      "turn": 16,
+      "isl": 68461,
+      "osl": 50,
+      "delta": 117,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Let me look at the base operations file to see if it has a default imple"
+    },
+    {
+      "turn": 17,
+      "isl": 68595,
+      "osl": 73,
+      "delta": 134,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 18,
+      "isl": 69877,
+      "osl": 83,
+      "delta": 1282,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Write"
+      ],
+      "snippet": "Now I understand the issue better. Looking at the Django code, I can see"
+    },
+    {
+      "turn": 19,
+      "isl": 70827,
+      "osl": 78,
+      "delta": 950,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "TodoWrite"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 20,
+      "isl": 70959,
+      "osl": 48,
+      "delta": 132,
+      "cache_read": null,
+      "cache_hit_pct": null,
+      "types": [
+        "text"
+      ],
+      "tool_names": [],
+      "snippet": "Based on my investigation of the Django codebase, I've identified the is"
+    }
+  ],
+  "summary": {
+    "total_turns": 20,
+    "peak_isl": 70959,
+    "total_osl": 1900,
+    "total_output_tokens": 2483,
+    "total_tool_calls": 19,
+    "avg_tools_per_turn": 0.95,
+    "patch_lines": 0
+  },
+  "final_usage": {
+    "input_tokens": 1201001,
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 0,
+    "output_tokens": 2483,
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 0,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "",
+    "iterations": [],
+    "speed": "standard"
+  }
+}

@@ -1,0 +1,338 @@
+{
+  "instance_id": "django__django-13837",
+  "repo": "django/django",
+  "base_commit": "415f50298f97fb17f841a9df38d995ccf347dfcc",
+  "difficulty": "1-4 hours",
+  "problem_statement": "Allow autoreloading of `python -m pkg_other_than_django runserver`\nDescription\n\t \n\t\t(last modified by William Schwartz)\n\t \n\u200bdjango.utils.autoreload.get_child_arguments detects if Python was launched as python -m django. Currently it detects only when \u200b-m was passed specifically django (and only in Python environments in which __file__ is set on modules, which is \u200bnot true of all Python environments). Like #32177, this ticket aims to remove one impediment to creating Django-based command-line utilities that have their own \u200b__main__ sub-module while overriding Django's built-in management commands\u2014in this case, runserver.\nThe fix, which I have submitted in the \u200battached PR, is to use Python's \u200bdocumented way of determining if -m was used in get_child_arguments:\nThe top-level __main__ module is always the entry point of a \u200bcomplete Python program.\n __main__.__spec__ is not None \u200bif and only if Python was launched with -m or the name of a \"directory, zipfile or other sys.path entry.\" In the latter cases, the \u200bdocumentation says\nIf the script name refers to a directory or zipfile, the script name is added to the start of sys.path and the __main__.py file in that location is executed as the __main__ module.\nHence __main__.__spec__.parent (which is \u200busually but not always __main__.__package__) exists and is the empty string when Python is started with the name of a directory or zip file.\nTherefore Python was started with -m pkg if and only if __main__.__spec__.parent == \"pkg\".\nFollowing this algorithm is guaranteed to work as long as Python obeys its own documentation, and has the side benefit of avoiding use of __file__.\n",
+  "model": "qwen/qwen3-coder-30b-a3b-instruct-fp8",
+  "server": "http://localhost:8000",
+  "workdir": "/tmp/swe_workspaces/django__django-13837",
+  "started_at": "2026-04-18T01:40:14.808604",
+  "finished_at": "2026-04-18T01:41:13.279702",
+  "turns": [
+    {
+      "turn": 1,
+      "isl": 27626,
+      "osl": 157,
+      "delta": 27626,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Glob"
+      ],
+      "snippet": "I'll help you with this Django autoreload issue. Let me first understand"
+    },
+    {
+      "turn": 2,
+      "isl": 27742,
+      "osl": 87,
+      "delta": 116,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Let me examine the main autoreload.py file to understand the current imp"
+    },
+    {
+      "turn": 3,
+      "isl": 34833,
+      "osl": 60,
+      "delta": 7091,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": "Now I need to look at the issue description more carefully. The problem "
+    },
+    {
+      "turn": 4,
+      "isl": 35067,
+      "osl": 1853,
+      "delta": 234,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Let me check the test file to understand the expected behavior:"
+    },
+    {
+      "turn": 5,
+      "isl": 44433,
+      "osl": 138,
+      "delta": 9366,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Edit"
+      ],
+      "snippet": "Now I understand the issue better. Looking at the current implementation"
+    },
+    {
+      "turn": 6,
+      "isl": 46284,
+      "osl": 359,
+      "delta": 1851,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": "I've implemented the fix for the Django autoreload issue. The solution m"
+    },
+    {
+      "turn": 7,
+      "isl": 46736,
+      "osl": 56,
+      "delta": 452,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": "Let me check what Python interpreter is available:"
+    },
+    {
+      "turn": 8,
+      "isl": 46787,
+      "osl": 92,
+      "delta": 51,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 9,
+      "isl": 47977,
+      "osl": 107,
+      "delta": 1190,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Write"
+      ],
+      "snippet": "The test environment seems to have some issues. Let me instead run a sim"
+    },
+    {
+      "turn": 10,
+      "isl": 48385,
+      "osl": 242,
+      "delta": 408,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 11,
+      "isl": 48473,
+      "osl": 151,
+      "delta": 88,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": "Great! The function is properly defined and can be imported. Let me also"
+    },
+    {
+      "turn": 12,
+      "isl": 48655,
+      "osl": 179,
+      "delta": 182,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Write"
+      ],
+      "snippet": "Perfect! The syntax check passed, which means our code is syntactically "
+    },
+    {
+      "turn": 13,
+      "isl": 49097,
+      "osl": 77,
+      "delta": 442,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 14,
+      "isl": 49213,
+      "osl": 88,
+      "delta": 116,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Let me also verify that we haven't introduced any syntax errors by looki"
+    },
+    {
+      "turn": 15,
+      "isl": 49878,
+      "osl": 94,
+      "delta": 665,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Let me also check the rest of the function to make sure it's complete:"
+    },
+    {
+      "turn": 16,
+      "isl": 50409,
+      "osl": 230,
+      "delta": 531,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 17,
+      "isl": 50771,
+      "osl": 111,
+      "delta": 362,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 18,
+      "isl": 51085,
+      "osl": 111,
+      "delta": 314,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 19,
+      "isl": 51436,
+      "osl": 154,
+      "delta": 351,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 20,
+      "isl": 51638,
+      "osl": 429,
+      "delta": 202,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "TodoWrite"
+      ],
+      "snippet": "Perfect! I can see that our implementation is complete and properly stru"
+    },
+    {
+      "turn": 21,
+      "isl": 52255,
+      "osl": 199,
+      "delta": 617,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "TodoWrite"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 22,
+      "isl": 52370,
+      "osl": 157,
+      "delta": 115,
+      "types": [
+        "text"
+      ],
+      "tool_names": [],
+      "snippet": "I've successfully implemented the fix for the Django autoreload issue. H"
+    }
+  ],
+  "summary": {
+    "total_turns": 22,
+    "peak_isl": 52370,
+    "total_osl": 5131,
+    "total_output_tokens": 4999,
+    "total_tool_calls": 21,
+    "avg_tools_per_turn": 0.95,
+    "patch_lines": 130
+  },
+  "final_usage": {
+    "input_tokens": 1011150,
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 0,
+    "output_tokens": 4999,
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 0,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "",
+    "iterations": [],
+    "speed": "standard"
+  }
+}

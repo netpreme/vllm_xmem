@@ -1,0 +1,23 @@
+diff --git a/sphinx/ext/autodoc/__init__.py b/sphinx/ext/autodoc/__init__.py
+index 1f4c982..9c3f43a 100644
+--- a/sphinx/ext/autodoc/__init__.py
++++ b/sphinx/ext/autodoc/__init__.py
+@@ -1797,9 +1797,16 @@ class GenericAliasMixin(DataDocumenterMixinBase):
+                 super().should_suppress_directive_header())
+ 
+     def update_content(self, more_content: StringList) -> None:
++        # Only show "alias of..." when there's no docstring to display
++        # This prevents overriding properly documented type aliases
+         if inspect.isgenericalias(self.object):
+-            more_content.append(_('alias of %s') % restify(self.object), '')
+-            more_content.append('', '')
++            # Check if there's already a docstring in the content
++            has_existing_docstring = any(line.strip() for line in more_content)
++
++            # Only override with "alias of..." if there's no existing docstring
++            if not has_existing_docstring:
++                more_content.append(_('alias of %s') % restify(self.object), '')
++                more_content.append('', '')
+ 
+         super().update_content(more_content)
+ 

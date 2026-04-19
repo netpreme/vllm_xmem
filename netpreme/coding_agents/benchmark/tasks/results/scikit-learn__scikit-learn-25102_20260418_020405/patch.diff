@@ -1,0 +1,80 @@
+diff --git a/sklearn/utils/_set_output.py b/sklearn/utils/_set_output.py
+index 335773c..b4bae36 100644
+--- a/sklearn/utils/_set_output.py
++++ b/sklearn/utils/_set_output.py
+@@ -12,6 +12,7 @@ def _wrap_in_pandas_container(
+     *,
+     columns,
+     index=None,
++    dtypes=None,
+ ):
+     """Create a Pandas DataFrame.
+ 
+@@ -36,6 +37,9 @@ def _wrap_in_pandas_container(
+     index : array-like, default=None
+         Index for data.
+ 
++    dtypes : dict, default=None
++        Dictionary mapping column names to dtypes to preserve in the output DataFrame.
++
+     Returns
+     -------
+     dataframe : DataFrame
+@@ -57,9 +61,32 @@ def _wrap_in_pandas_container(
+             data_to_wrap.columns = columns
+         if index is not None:
+             data_to_wrap.index = index
++        # Preserve dtypes if provided
++        if dtypes is not None:
++            try:
++                # Apply dtypes to preserve them
++                for col, dtype in dtypes.items():
++                    if col in data_to_wrap.columns:
++                        data_to_wrap[col] = data_to_wrap[col].astype(dtype)
++            except (ValueError, TypeError):
++                # If dtype conversion fails, keep original behavior
++                pass
+         return data_to_wrap
+ 
+-    return pd.DataFrame(data_to_wrap, index=index, columns=columns)
++    df = pd.DataFrame(data_to_wrap, index=index, columns=columns)
++
++    # Preserve dtypes if provided
++    if dtypes is not None:
++        try:
++            # Apply dtypes to preserve them
++            for col, dtype in dtypes.items():
++                if col in df.columns:
++                    df[col] = df[col].astype(dtype)
++        except (ValueError, TypeError):
++            # If dtype conversion fails, keep original behavior
++            pass
++
++    return df
+ 
+ 
+ def _get_output_config(method, estimator=None):
+@@ -126,11 +153,23 @@ def _wrap_data_with_container(method, data_to_wrap, original_input, estimator):
+     if output_config["dense"] == "default" or not _auto_wrap_is_configured(estimator):
+         return data_to_wrap
+ 
++    # Check if we should preserve dtypes
++    preserve_dtypes = output_config.get("preserve_dtypes", False)
++
++    # Prepare dtypes dictionary for preservation
++    dtypes_to_preserve = None
++    if preserve_dtypes and isinstance(original_input, pd.DataFrame):
++        # Create a mapping of column names to their dtypes
++        dtypes_to_preserve = {}
++        for col in original_input.columns:
++            dtypes_to_preserve[col] = original_input[col].dtype
++
+     # dense_config == "pandas"
+     return _wrap_in_pandas_container(
+         data_to_wrap=data_to_wrap,
+         index=getattr(original_input, "index", None),
+         columns=estimator.get_feature_names_out,
++        dtypes=dtypes_to_preserve,
+     )
+ 
+ 

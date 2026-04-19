@@ -1,0 +1,521 @@
+{
+  "instance_id": "django__django-15503",
+  "repo": "django/django",
+  "base_commit": "859a87d873ce7152af73ab851653b4e1c3ffea4c",
+  "difficulty": "1-4 hours",
+  "problem_statement": "has_key, has_keys, and has_any_keys JSONField() lookups don't handle numeric keys on SQLite, MySQL, and Oracle.\nDescription\n\t \n\t\t(last modified by TheTerrasque)\n\t \nProblem\nWhen using models.\u200bJSONField() \u200bhas_key lookup with numerical keys on SQLite database it fails to find the keys.\nVersions:\nDjango: 4.0.3\nPython: 3.9.6 (tags/v3.9.6:db3ff76, Jun 28 2021, 15:26:21) [MSC v.1929 64 bit (AMD64)] on win32\nsqlite3.version: '2.6.0'\nsqlite3.sqlite_version: '3.35.5'\nExample:\nDatabase\nDATABASES = {\n\t'default': {\n\t\t'ENGINE': 'django.db.backends.sqlite3',\n\t\t'NAME': 'db.sqlite3',\n\t}\n}\nModel\nclass JsonFieldHasKeyTest(models.Model):\n\tdata = models.JSONField()\nTest\nfrom django.test import TestCase\nfrom .models import JsonFieldHasKeyTest\nclass JsonFieldHasKeyTestCase(TestCase):\n\tdef setUp(self) -> None:\n\t\ttest = JsonFieldHasKeyTest(data={'foo': 'bar'})\n\t\ttest2 = JsonFieldHasKeyTest(data={'1111': 'bar'})\n\t\ttest.save()\n\t\ttest2.save()\n\tdef test_json_field_has_key(self):\n\t\tc1 = JsonFieldHasKeyTest.objects.filter(data__has_key='foo').count()\n\t\tc2 = JsonFieldHasKeyTest.objects.filter(data__has_key='1111').count()\n\t\tself.assertEqual(c1, 1, \"Should have found 1 entry with key 'foo'\")\n\t\tself.assertEqual(c2, 1, \"Should have found 1 entry with key '1111'\")\nResult\nFAIL: test_json_field_has_key (markers.tests.JsonFieldHasKeyTestCase)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n File \"H:\\Files\\Projects\\Electaco\\Webservice\\elecserve\\markers\\tests.py\", line 16, in test_json_field_has_key\t \n\tself.assertEqual(c2, 1, \"Should have found 1 entry with key '1111'\")\nAssertionError: 0 != 1 : Should have found 1 entry with key '1111'\nAdditional info\nThis has been tested on SQLite and Postgresql backend, it works on postgresql but fails on sqlite.\n",
+  "model": "qwen/qwen3-coder-30b-a3b-instruct-fp8",
+  "server": "http://localhost:8000",
+  "workdir": "/tmp/swe_workspaces/django__django-15503",
+  "started_at": "2026-04-18T02:11:50.324657",
+  "finished_at": "2026-04-18T02:13:50.093580",
+  "turns": [
+    {
+      "turn": 1,
+      "isl": 27765,
+      "osl": 66,
+      "delta": 27765,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Glob"
+      ],
+      "snippet": "I'll investigate this issue with JSONField has_key lookups failing with "
+    },
+    {
+      "turn": 2,
+      "isl": 27877,
+      "osl": 63,
+      "delta": 112,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Let me examine the JSONField implementation in Django to understand how "
+    },
+    {
+      "turn": 3,
+      "isl": 33843,
+      "osl": 64,
+      "delta": 5966,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Glob"
+      ],
+      "snippet": "Now let me look at the database-specific implementations to understand h"
+    },
+    {
+      "turn": 4,
+      "isl": 33978,
+      "osl": 65,
+      "delta": 135,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Glob"
+      ],
+      "snippet": "Let me check the SQLite operations to understand how JSON operations are"
+    },
+    {
+      "turn": 5,
+      "isl": 34039,
+      "osl": 57,
+      "delta": 61,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Glob"
+      ],
+      "snippet": "Let me search for the database operations files:"
+    },
+    {
+      "turn": 6,
+      "isl": 34307,
+      "osl": 57,
+      "delta": 268,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 7,
+      "isl": 39143,
+      "osl": 44,
+      "delta": 4836,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Now let me look at the SQLite database features to understand how JSON f"
+    },
+    {
+      "turn": 8,
+      "isl": 40763,
+      "osl": 44,
+      "delta": 1620,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Now let me look at the SQLite database connection to understand how JSON"
+    },
+    {
+      "turn": 9,
+      "isl": 44922,
+      "osl": 37,
+      "delta": 4159,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Now let me look at the `_functions.py` file to understand how SQLite fun"
+    },
+    {
+      "turn": 10,
+      "isl": 50537,
+      "osl": 621,
+      "delta": 5615,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Write"
+      ],
+      "snippet": "Now I need to create a test to reproduce the issue described in the bug "
+    },
+    {
+      "turn": 11,
+      "isl": 51168,
+      "osl": 37,
+      "delta": 631,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 12,
+      "isl": 51467,
+      "osl": 47,
+      "delta": 299,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Glob"
+      ],
+      "snippet": "Let me create a simpler test that focuses on the core issue. Let me firs"
+    },
+    {
+      "turn": 13,
+      "isl": 51607,
+      "osl": 47,
+      "delta": 140,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 14,
+      "isl": 57010,
+      "osl": 64,
+      "delta": 5403,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": "Let me look further into the test file to find the has_key tests:"
+    },
+    {
+      "turn": 15,
+      "isl": 57104,
+      "osl": 119,
+      "delta": 94,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 16,
+      "isl": 57640,
+      "osl": 53,
+      "delta": 536,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Let me look at the specific has_key test methods:"
+    },
+    {
+      "turn": 17,
+      "isl": 58984,
+      "osl": 66,
+      "delta": 1344,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Write"
+      ],
+      "snippet": "Now I understand the issue better. Looking at the code, I can see that t"
+    },
+    {
+      "turn": 18,
+      "isl": 60043,
+      "osl": 436,
+      "delta": 1059,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Write"
+      ],
+      "snippet": "Let me run a simpler test to understand the issue better by examining th"
+    },
+    {
+      "turn": 19,
+      "isl": 60664,
+      "osl": 66,
+      "delta": 621,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 20,
+      "isl": 60859,
+      "osl": 66,
+      "delta": 195,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "TodoWrite"
+      ],
+      "snippet": "Let me approach this differently and analyze the code directly. Based on"
+    },
+    {
+      "turn": 21,
+      "isl": 60997,
+      "osl": 67,
+      "delta": 138,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Based on my analysis of the Django JSONField implementation, I've identi"
+    },
+    {
+      "turn": 22,
+      "isl": 61633,
+      "osl": 47,
+      "delta": 636,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Now I understand the exact issue. The problem is in the `compile_json_pa"
+    },
+    {
+      "turn": 23,
+      "isl": 62340,
+      "osl": 55,
+      "delta": 707,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "The issue is deeper than I initially thought. The problem is in how the "
+    },
+    {
+      "turn": 24,
+      "isl": 62873,
+      "osl": 591,
+      "delta": 533,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Now I understand the issue better. The problem is that when we have a si"
+    },
+    {
+      "turn": 25,
+      "isl": 63400,
+      "osl": 50,
+      "delta": 527,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Edit"
+      ],
+      "snippet": "The issue is that the `compile_json_path` function is designed to work w"
+    },
+    {
+      "turn": 26,
+      "isl": 64392,
+      "osl": 57,
+      "delta": 992,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Edit"
+      ],
+      "snippet": "Wait, I realize my approach above is incorrect. I'm overcomplicating the"
+    },
+    {
+      "turn": 27,
+      "isl": 64986,
+      "osl": 55,
+      "delta": 594,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Write"
+      ],
+      "snippet": "Let me approach this differently. The real issue is in the `compile_json"
+    },
+    {
+      "turn": 28,
+      "isl": 65744,
+      "osl": 68,
+      "delta": 758,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Edit"
+      ],
+      "snippet": "Let me approach this problem from a different angle. Looking at the code"
+    },
+    {
+      "turn": 29,
+      "isl": 67102,
+      "osl": 63,
+      "delta": 1358,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "TodoWrite"
+      ],
+      "snippet": "Now let me create a proper test to verify this fix works:"
+    },
+    {
+      "turn": 30,
+      "isl": 67226,
+      "osl": 78,
+      "delta": 124,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Write"
+      ],
+      "snippet": "Let me create a simple test to validate that our fix works. Since we can"
+    },
+    {
+      "turn": 31,
+      "isl": 67634,
+      "osl": 926,
+      "delta": 408,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 32,
+      "isl": 67914,
+      "osl": 1367,
+      "delta": 280,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Write"
+      ],
+      "snippet": "Let me create a standalone test that doesn't require Django to be instal"
+    },
+    {
+      "turn": 33,
+      "isl": 68542,
+      "osl": 462,
+      "delta": 628,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 34,
+      "isl": 68690,
+      "osl": 585,
+      "delta": 148,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "TodoWrite"
+      ],
+      "snippet": "Perfect! This shows that our fix works correctly:  1. **Original behavio"
+    },
+    {
+      "turn": 35,
+      "isl": 69294,
+      "osl": 43,
+      "delta": 604,
+      "types": [
+        "text"
+      ],
+      "tool_names": [],
+      "snippet": "I've analyzed and fixed the issue with `JSONField().has_key` lookups fai"
+    }
+  ],
+  "summary": {
+    "total_turns": 35,
+    "peak_isl": 69294,
+    "total_osl": 6633,
+    "total_output_tokens": 9826,
+    "total_tool_calls": 34,
+    "avg_tools_per_turn": 0.97,
+    "patch_lines": 16
+  },
+  "final_usage": {
+    "input_tokens": 1916487,
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 0,
+    "output_tokens": 9826,
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 0,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "",
+    "iterations": [],
+    "speed": "standard"
+  }
+}

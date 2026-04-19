@@ -1,0 +1,150 @@
+{
+  "instance_id": "django__django-11400",
+  "repo": "django/django",
+  "base_commit": "1f8382d34d54061eddc41df6994e20ee38c60907",
+  "difficulty": "1-4 hours",
+  "problem_statement": "Ordering problem in admin.RelatedFieldListFilter and admin.RelatedOnlyFieldListFilter\nDescription\n\t\nRelatedFieldListFilter doesn't fall back to the ordering defined in Model._meta.ordering. \nOrdering gets set to an empty tuple in \u200bhttps://github.com/django/django/blob/2.2.1/django/contrib/admin/filters.py#L196 and unless ordering is defined on the related model's ModelAdmin class it stays an empty tuple. IMHO it should fall back to the ordering defined in the related model's Meta.ordering field.\nRelatedOnlyFieldListFilter doesn't order the related model at all, even if ordering is defined on the related model's ModelAdmin class.\nThat's because the call to field.get_choices \u200bhttps://github.com/django/django/blob/2.2.1/django/contrib/admin/filters.py#L422 omits the ordering kwarg entirely.\n",
+  "model": "qwen/qwen3-coder-30b-a3b-instruct-fp8",
+  "server": "http://localhost:8000",
+  "workdir": "/tmp/swe_workspaces/django__django-11400",
+  "started_at": "2026-04-18T01:36:24.884793",
+  "finished_at": "2026-04-18T01:36:41.199002",
+  "turns": [
+    {
+      "turn": 1,
+      "isl": 27456,
+      "osl": 97,
+      "delta": 27456,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Glob"
+      ],
+      "snippet": "I'll investigate the ordering issue in Django's admin filters. Let me fi"
+    },
+    {
+      "turn": 2,
+      "isl": 27574,
+      "osl": 69,
+      "delta": 118,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Now let me read the filters.py file to examine the current implementatio"
+    },
+    {
+      "turn": 3,
+      "isl": 32558,
+      "osl": 281,
+      "delta": 4984,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "TodoWrite"
+      ],
+      "snippet": "Based on my examination of the Django admin filters code, I can now iden"
+    },
+    {
+      "turn": 4,
+      "isl": 32881,
+      "osl": 63,
+      "delta": 323,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Let me first check what version of Django we're working with to make sur"
+    },
+    {
+      "turn": 5,
+      "isl": 33179,
+      "osl": 1138,
+      "delta": 298,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Edit"
+      ],
+      "snippet": "Now I'll implement the fix for the ordering issue in the admin filters. "
+    },
+    {
+      "turn": 6,
+      "isl": 33538,
+      "osl": 78,
+      "delta": 359,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Edit"
+      ],
+      "snippet": "Now I need to fix the `RelatedOnlyFieldListFilter` class to properly han"
+    },
+    {
+      "turn": 7,
+      "isl": 33939,
+      "osl": 304,
+      "delta": 401,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "TodoWrite"
+      ],
+      "snippet": "Let me update the todo list to reflect that these tasks are now complete"
+    },
+    {
+      "turn": 8,
+      "isl": 34109,
+      "osl": 33,
+      "delta": 170,
+      "types": [
+        "text"
+      ],
+      "tool_names": [],
+      "snippet": "I've successfully implemented the fix for the ordering issue in Django's"
+    }
+  ],
+  "summary": {
+    "total_turns": 8,
+    "peak_isl": 34109,
+    "total_osl": 2063,
+    "total_output_tokens": 1723,
+    "total_tool_calls": 7,
+    "avg_tools_per_turn": 0.88,
+    "patch_lines": 132
+  },
+  "final_usage": {
+    "input_tokens": 255234,
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 0,
+    "output_tokens": 1723,
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 0,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "",
+    "iterations": [],
+    "speed": "standard"
+  }
+}

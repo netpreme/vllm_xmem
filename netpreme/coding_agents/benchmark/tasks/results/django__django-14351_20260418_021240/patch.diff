@@ -1,0 +1,15 @@
+diff --git a/django/db/models/fields/related_lookups.py b/django/db/models/fields/related_lookups.py
+index d745ecd5..06f6e0e0 100644
+--- a/django/db/models/fields/related_lookups.py
++++ b/django/db/models/fields/related_lookups.py
+@@ -97,6 +97,10 @@ class RelatedIn(In):
+                     target_field = self.lhs.field.name
+                 else:
+                     target_field = self.lhs.field.target_field.name
++                # Ensure we only select the primary key field for related lookups
++                # to prevent "subquery must return only one column" errors
++                if hasattr(self.rhs, 'model') and hasattr(self.rhs.model._meta, 'pk'):
++                    target_field = self.rhs.model._meta.pk.name
+                 self.rhs.add_fields([target_field], True)
+             return super().as_sql(compiler, connection)
+ 

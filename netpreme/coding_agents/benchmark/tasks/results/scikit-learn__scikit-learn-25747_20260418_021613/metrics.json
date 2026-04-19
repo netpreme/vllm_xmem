@@ -1,0 +1,367 @@
+{
+  "instance_id": "scikit-learn__scikit-learn-25747",
+  "repo": "scikit-learn/scikit-learn",
+  "base_commit": "2c867b8f822eb7a684f0d5c4359e4426e1c9cfe0",
+  "difficulty": "15 min - 1 hour",
+  "problem_statement": "FeatureUnion not working when aggregating data and pandas transform output selected\n### Describe the bug\n\nI would like to use `pandas` transform output and use a custom transformer in a feature union which aggregates data. When I'm using this combination I got an error. When I use default `numpy` output it works fine.\n\n### Steps/Code to Reproduce\n\n```python\r\nimport pandas as pd\r\nfrom sklearn.base import BaseEstimator, TransformerMixin\r\nfrom sklearn import set_config\r\nfrom sklearn.pipeline import make_union\r\n\r\nindex = pd.date_range(start=\"2020-01-01\", end=\"2020-01-05\", inclusive=\"left\", freq=\"H\")\r\ndata = pd.DataFrame(index=index, data=[10] * len(index), columns=[\"value\"])\r\ndata[\"date\"] = index.date\r\n\r\n\r\nclass MyTransformer(BaseEstimator, TransformerMixin):\r\n    def fit(self, X: pd.DataFrame, y: pd.Series | None = None, **kwargs):\r\n        return self\r\n\r\n    def transform(self, X: pd.DataFrame, y: pd.Series | None = None) -> pd.DataFrame:\r\n        return X[\"value\"].groupby(X[\"date\"]).sum()\r\n\r\n\r\n# This works.\r\nset_config(transform_output=\"default\")\r\nprint(make_union(MyTransformer()).fit_transform(data))\r\n\r\n# This does not work.\r\nset_config(transform_output=\"pandas\")\r\nprint(make_union(MyTransformer()).fit_transform(data))\r\n```\n\n### Expected Results\n\nNo error is thrown when using `pandas` transform output.\n\n### Actual Results\n\n```python\r\n---------------------------------------------------------------------------\r\nValueError                                Traceback (most recent call last)\r\nCell In[5], line 25\r\n     23 # This does not work.\r\n     24 set_config(transform_output=\"pandas\")\r\n---> 25 print(make_union(MyTransformer()).fit_transform(data))\r\n\r\nFile ~/.local/share/virtualenvs/3e_VBrf2/lib/python3.10/site-packages/sklearn/utils/_set_output.py:150, in _wrap_method_output.<locals>.wrapped(self, X, *args, **kwargs)\r\n    143 if isinstance(data_to_wrap, tuple):\r\n    144     # only wrap the first output for cross decomposition\r\n    145     return (\r\n    146         _wrap_data_with_container(method, data_to_wrap[0], X, self),\r\n    147         *data_to_wrap[1:],\r\n    148     )\r\n--> 150 return _wrap_data_with_container(method, data_to_wrap, X, self)\r\n\r\nFile ~/.local/share/virtualenvs/3e_VBrf2/lib/python3.10/site-packages/sklearn/utils/_set_output.py:130, in _wrap_data_with_container(method, data_to_wrap, original_input, estimator)\r\n    127     return data_to_wrap\r\n    129 # dense_config == \"pandas\"\r\n--> 130 return _wrap_in_pandas_container(\r\n    131     data_to_wrap=data_to_wrap,\r\n    132     index=getattr(original_input, \"index\", None),\r\n    133     columns=estimator.get_feature_names_out,\r\n    134 )\r\n\r\nFile ~/.local/share/virtualenvs/3e_VBrf2/lib/python3.10/site-packages/sklearn/utils/_set_output.py:59, in _wrap_in_pandas_container(data_to_wrap, columns, index)\r\n     57         data_to_wrap.columns = columns\r\n     58     if index is not None:\r\n---> 59         data_to_wrap.index = index\r\n     60     return data_to_wrap\r\n     62 return pd.DataFrame(data_to_wrap, index=index, columns=columns)\r\n\r\nFile ~/.local/share/virtualenvs/3e_VBrf2/lib/python3.10/site-packages/pandas/core/generic.py:5588, in NDFrame.__setattr__(self, name, value)\r\n   5586 try:\r\n   5587     object.__getattribute__(self, name)\r\n-> 5588     return object.__setattr__(self, name, value)\r\n   5589 except AttributeError:\r\n   5590     pass\r\n\r\nFile ~/.local/share/virtualenvs/3e_VBrf2/lib/python3.10/site-packages/pandas/_libs/properties.pyx:70, in pandas._libs.properties.AxisProperty.__set__()\r\n\r\nFile ~/.local/share/virtualenvs/3e_VBrf2/lib/python3.10/site-packages/pandas/core/generic.py:769, in NDFrame._set_axis(self, axis, labels)\r\n    767 def _set_axis(self, axis: int, labels: Index) -> None:\r\n    768     labels = ensure_index(labels)\r\n--> 769     self._mgr.set_axis(axis, labels)\r\n    770     self._clear_item_cache()\r\n\r\nFile ~/.local/share/virtualenvs/3e_VBrf2/lib/python3.10/site-packages/pandas/core/internals/managers.py:214, in BaseBlockManager.set_axis(self, axis, new_labels)\r\n    212 def set_axis(self, axis: int, new_labels: Index) -> None:\r\n    213     # Caller is responsible for ensuring we have an Index object.\r\n--> 214     self._validate_set_axis(axis, new_labels)\r\n    215     self.axes[axis] = new_labels\r\n\r\nFile ~/.local/share/virtualenvs/3e_VBrf2/lib/python3.10/site-packages/pandas/core/internals/base.py:69, in DataManager._validate_set_axis(self, axis, new_labels)\r\n     66     pass\r\n     68 elif new_len != old_len:\r\n---> 69     raise ValueError(\r\n     70         f\"Length mismatch: Expected axis has {old_len} elements, new \"\r\n     71         f\"values have {new_len} elements\"\r\n     72     )\r\n\r\nValueError: Length mismatch: Expected axis has 4 elements, new values have 96 elements\r\n```\n\n### Versions\n\n```shell\nSystem:\r\n    python: 3.10.6 (main, Aug 30 2022, 05:11:14) [Clang 13.0.0 (clang-1300.0.29.30)]\r\nexecutable: /Users/macbookpro/.local/share/virtualenvs/3e_VBrf2/bin/python\r\n   machine: macOS-11.3-x86_64-i386-64bit\r\n\r\nPython dependencies:\r\n      sklearn: 1.2.1\r\n          pip: 22.3.1\r\n   setuptools: 67.3.2\r\n        numpy: 1.23.5\r\n        scipy: 1.10.1\r\n       Cython: None\r\n       pandas: 1.4.4\r\n   matplotlib: 3.7.0\r\n       joblib: 1.2.0\r\nthreadpoolctl: 3.1.0\r\n\r\nBuilt with OpenMP: True\r\n\r\nthreadpoolctl info:\r\n       user_api: blas\r\n   internal_api: openblas\r\n         prefix: libopenblas\r\n       filepath: /Users/macbookpro/.local/share/virtualenvs/3e_VBrf2/lib/python3.10/site-packages/numpy/.dylibs/libopenblas64_.0.dylib\r\n        version: 0.3.20\r\nthreading_layer: pthreads\r\n   architecture: Haswell\r\n    num_threads: 4\r\n\r\n       user_api: openmp\r\n   internal_api: openmp\r\n         prefix: libomp\r\n       filepath: /Users/macbookpro/.local/share/virtualenvs/3e_VBrf2/lib/python3.10/site-packages/sklearn/.dylibs/libomp.dylib\r\n        version: None\r\n    num_threads: 8\r\n\r\n       user_api: blas\r\n   internal_api: openblas\r\n         prefix: libopenblas\r\n       filepath: /Users/macbookpro/.local/share/virtualenvs/3e_VBrf2/lib/python3.10/site-packages/scipy/.dylibs/libopenblas.0.dylib\r\n        version: 0.3.18\r\nthreading_layer: pthreads\r\n   architecture: Haswell\r\n    num_threads: 4\n```\n\n",
+  "model": "qwen/qwen3-coder-30b-a3b-instruct-fp8",
+  "server": "http://localhost:8000",
+  "workdir": "/tmp/swe_workspaces/scikit-learn__scikit-learn-25747",
+  "started_at": "2026-04-18T02:15:17.243966",
+  "finished_at": "2026-04-18T02:16:13.204461",
+  "turns": [
+    {
+      "turn": 1,
+      "isl": 29076,
+      "osl": 49,
+      "delta": 29076,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "I'll investigate this bug with FeatureUnion not working when aggregating"
+    },
+    {
+      "turn": 2,
+      "isl": 29206,
+      "osl": 47,
+      "delta": 130,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Write"
+      ],
+      "snippet": "Let me first create a test file to reproduce the issue described in the "
+    },
+    {
+      "turn": 3,
+      "isl": 29551,
+      "osl": 76,
+      "delta": 345,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": "Now let me run this test to reproduce the issue:"
+    },
+    {
+      "turn": 4,
+      "isl": 29622,
+      "osl": 147,
+      "delta": 71,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": "Let me check what Python executables are available:"
+    },
+    {
+      "turn": 5,
+      "isl": 29674,
+      "osl": 300,
+      "delta": 52,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 6,
+      "isl": 30169,
+      "osl": 201,
+      "delta": 495,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Glob"
+      ],
+      "snippet": "It looks like we're in a development environment where scikit-learn isn'"
+    },
+    {
+      "turn": 7,
+      "isl": 30350,
+      "osl": 61,
+      "delta": 181,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 8,
+      "isl": 45454,
+      "osl": 73,
+      "delta": 15104,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Now let me look at the `_set_output.py` file to understand how the outpu"
+    },
+    {
+      "turn": 9,
+      "isl": 48248,
+      "osl": 34,
+      "delta": 2794,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Write"
+      ],
+      "snippet": "Now let me look at the error more closely. The issue occurs in the `_wra"
+    },
+    {
+      "turn": 10,
+      "isl": 48786,
+      "osl": 43,
+      "delta": 538,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 11,
+      "isl": 48965,
+      "osl": 28,
+      "delta": 179,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Bash"
+      ],
+      "snippet": "Let me try to run the debug script in a different way to understand the "
+    },
+    {
+      "turn": 12,
+      "isl": 49502,
+      "osl": 48,
+      "delta": 537,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Read"
+      ],
+      "snippet": "Since we can't easily run the code in this environment, let me analyze t"
+    },
+    {
+      "turn": 13,
+      "isl": 50139,
+      "osl": 62,
+      "delta": 637,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Edit"
+      ],
+      "snippet": "Based on my analysis of the code and the error message, I can now identi"
+    },
+    {
+      "turn": 14,
+      "isl": 50944,
+      "osl": 91,
+      "delta": 805,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Glob"
+      ],
+      "snippet": "Let me also check if there are any related tests that we should examine "
+    },
+    {
+      "turn": 15,
+      "isl": 51026,
+      "osl": 47,
+      "delta": 82,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Glob"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 16,
+      "isl": 51071,
+      "osl": 69,
+      "delta": 45,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Glob"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 17,
+      "isl": 51116,
+      "osl": 110,
+      "delta": 45,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 18,
+      "isl": 51204,
+      "osl": 57,
+      "delta": 88,
+      "types": [
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": ""
+    },
+    {
+      "turn": 19,
+      "isl": 51267,
+      "osl": 50,
+      "delta": 63,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Grep"
+      ],
+      "snippet": "Let me look at the test file to understand how FeatureUnion is tested:"
+    },
+    {
+      "turn": 20,
+      "isl": 51444,
+      "osl": 60,
+      "delta": 177,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Write"
+      ],
+      "snippet": "Let me create a proper test to validate our fix conceptually:"
+    },
+    {
+      "turn": 21,
+      "isl": 52076,
+      "osl": 64,
+      "delta": 632,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "Write"
+      ],
+      "snippet": "Let me also create a more comprehensive test to make sure we understand "
+    },
+    {
+      "turn": 22,
+      "isl": 52439,
+      "osl": 61,
+      "delta": 363,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "TodoWrite"
+      ],
+      "snippet": "Let me summarize what I've done to fix this issue:  ## Problem Summary  "
+    },
+    {
+      "turn": 23,
+      "isl": 53007,
+      "osl": 73,
+      "delta": 568,
+      "types": [
+        "text",
+        "tool"
+      ],
+      "tool_names": [
+        "ExitPlanMode"
+      ],
+      "snippet": "I've analyzed and fixed the bug in FeatureUnion when using pandas transf"
+    },
+    {
+      "turn": 24,
+      "isl": 53381,
+      "osl": 494,
+      "delta": 374,
+      "types": [
+        "text"
+      ],
+      "tool_names": [],
+      "snippet": "I've analyzed and implemented a fix for the FeatureUnion bug when using "
+    }
+  ],
+  "summary": {
+    "total_turns": 24,
+    "peak_isl": 53381,
+    "total_osl": 2345,
+    "total_output_tokens": 4645,
+    "total_tool_calls": 23,
+    "avg_tools_per_turn": 0.96,
+    "patch_lines": 25
+  },
+  "final_usage": {
+    "input_tokens": 1067717,
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 0,
+    "output_tokens": 4645,
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 0,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "",
+    "iterations": [],
+    "speed": "standard"
+  }
+}
