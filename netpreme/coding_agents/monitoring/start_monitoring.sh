@@ -44,6 +44,7 @@ prometheus \
     --config.file="$MONITORING_DIR/prometheus.yml" \
     --storage.tsdb.path="$PROM_DATA_DIR" \
     --storage.tsdb.retention.time=1d \
+    --web.listen-address="0.0.0.0:9090" \
     > /tmp/prometheus.log 2>&1 &
 PROM_PID=$!
 echo "Prometheus started (pid $PROM_PID) → http://localhost:9090"
@@ -63,6 +64,7 @@ mkdir -p "$GRAFANA_DATA_DIR"
 
 GF_PATHS_PROVISIONING="$MONITORING_DIR/grafana_provisioning" \
 GF_SERVER_HTTP_PORT=3000 \
+GF_SERVER_HTTP_ADDR="0.0.0.0" \
 GF_AUTH_ANONYMOUS_ENABLED=true \
 GF_AUTH_ANONYMOUS_ORG_NAME="Main Org." \
 GF_AUTH_ANONYMOUS_ORG_ROLE=Admin \
@@ -84,11 +86,21 @@ EXPORTER_PID=$!
 echo "KV exporter started (pid $EXPORTER_PID) → http://localhost:9091"
 echo "  log: /tmp/kv_exporter.log"
 
+PUBLIC_IP=$(curl -sf --max-time 3 http://checkip.amazonaws.com || curl -sf --max-time 3 https://api.ipify.org || hostname -I | awk '{print $1}')
+HOST=$(hostname -f 2>/dev/null || hostname)
+
 echo ""
-echo "Dashboard auto-loaded: 'vLLM + XMem — Unified'"
-echo "  Prometheus:   http://localhost:9090"
-echo "  Grafana:      http://localhost:3000  (no login required)"
-echo "  KV exporter:  http://localhost:9091/metrics"
+echo "════════════════════════════════════════════════════════"
+echo "  Dashboard auto-loaded: 'vLLM + XMem — Unified'"
+echo ""
+echo "  Direct access (if firewall allows ports 3000/9090):"
+echo "    Grafana:    http://${PUBLIC_IP}:3000  (no login)"
+echo "    Prometheus: http://${PUBLIC_IP}:9090"
+echo ""
+echo "  SSH tunnel (if direct access is blocked):"
+echo "    ssh -L 3000:localhost:3000 -L 9090:localhost:9090 ubuntu@${PUBLIC_IP}"
+echo "    Then open: http://localhost:3000"
+echo "════════════════════════════════════════════════════════"
 echo ""
 echo "Press Ctrl+C to stop all."
 
