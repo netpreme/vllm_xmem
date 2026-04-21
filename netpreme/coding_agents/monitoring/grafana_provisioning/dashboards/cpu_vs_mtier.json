@@ -1,0 +1,241 @@
+{
+  "annotations": { "list": [] },
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "id": 100, "panels": [], "title": "Latency", "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": { "custom": { "fillOpacity": 0, "lineWidth": 2 }, "unit": "s" },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "CPU p50" },   "properties": [{ "id": "color", "value": { "fixedColor": "#2196F3", "mode": "fixed" } }] },
+          { "matcher": { "id": "byName", "options": "CPU p99" },   "properties": [{ "id": "color", "value": { "fixedColor": "#2196F3", "mode": "fixed" } }, { "id": "custom.lineStyle", "value": { "dash": [6,4], "fill": "dash" } }] },
+          { "matcher": { "id": "byName", "options": "MTier p50" }, "properties": [{ "id": "color", "value": { "fixedColor": "#FF5722", "mode": "fixed" } }] },
+          { "matcher": { "id": "byName", "options": "MTier p99" }, "properties": [{ "id": "color", "value": { "fixedColor": "#FF5722", "mode": "fixed" } }, { "id": "custom.lineStyle", "value": { "dash": [6,4], "fill": "dash" } }] }
+        ]
+      },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 1 },
+      "id": 1,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi", "sort": "none" } },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "histogram_quantile(0.50, sum by(le) (rate(vllm:time_to_first_token_seconds_bucket{instance=\"localhost:8001\"}[$__rate_interval])))", "legendFormat": "CPU p50", "refId": "A" },
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "histogram_quantile(0.99, sum by(le) (rate(vllm:time_to_first_token_seconds_bucket{instance=\"localhost:8001\"}[$__rate_interval])))", "legendFormat": "CPU p99", "refId": "B" },
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "histogram_quantile(0.50, sum by(le) (rate(vllm:time_to_first_token_seconds_bucket{instance=\"localhost:8002\"}[$__rate_interval])))", "legendFormat": "MTier p50", "refId": "C" },
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "histogram_quantile(0.99, sum by(le) (rate(vllm:time_to_first_token_seconds_bucket{instance=\"localhost:8002\"}[$__rate_interval])))", "legendFormat": "MTier p99", "refId": "D" }
+      ],
+      "title": "TTFT (p50 solid / p99 dashed)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": { "custom": { "fillOpacity": 0, "lineWidth": 2 }, "unit": "s" },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "CPU p50" },   "properties": [{ "id": "color", "value": { "fixedColor": "#2196F3", "mode": "fixed" } }] },
+          { "matcher": { "id": "byName", "options": "CPU p99" },   "properties": [{ "id": "color", "value": { "fixedColor": "#2196F3", "mode": "fixed" } }, { "id": "custom.lineStyle", "value": { "dash": [6,4], "fill": "dash" } }] },
+          { "matcher": { "id": "byName", "options": "MTier p50" }, "properties": [{ "id": "color", "value": { "fixedColor": "#FF5722", "mode": "fixed" } }] },
+          { "matcher": { "id": "byName", "options": "MTier p99" }, "properties": [{ "id": "color", "value": { "fixedColor": "#FF5722", "mode": "fixed" } }, { "id": "custom.lineStyle", "value": { "dash": [6,4], "fill": "dash" } }] }
+        ]
+      },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 1 },
+      "id": 2,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi", "sort": "none" } },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "histogram_quantile(0.50, sum by(le) (rate(vllm:e2e_request_latency_seconds_bucket{instance=\"localhost:8001\"}[$__rate_interval])))", "legendFormat": "CPU p50", "refId": "A" },
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "histogram_quantile(0.99, sum by(le) (rate(vllm:e2e_request_latency_seconds_bucket{instance=\"localhost:8001\"}[$__rate_interval])))", "legendFormat": "CPU p99", "refId": "B" },
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "histogram_quantile(0.50, sum by(le) (rate(vllm:e2e_request_latency_seconds_bucket{instance=\"localhost:8002\"}[$__rate_interval])))", "legendFormat": "MTier p50", "refId": "C" },
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "histogram_quantile(0.99, sum by(le) (rate(vllm:e2e_request_latency_seconds_bucket{instance=\"localhost:8002\"}[$__rate_interval])))", "legendFormat": "MTier p99", "refId": "D" }
+      ],
+      "title": "E2E Latency (p50 solid / p99 dashed)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": { "custom": { "fillOpacity": 0, "lineWidth": 2 }, "unit": "s" },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "CPU p50" },   "properties": [{ "id": "color", "value": { "fixedColor": "#2196F3", "mode": "fixed" } }] },
+          { "matcher": { "id": "byName", "options": "CPU p99" },   "properties": [{ "id": "color", "value": { "fixedColor": "#2196F3", "mode": "fixed" } }, { "id": "custom.lineStyle", "value": { "dash": [6,4], "fill": "dash" } }] },
+          { "matcher": { "id": "byName", "options": "MTier p50" }, "properties": [{ "id": "color", "value": { "fixedColor": "#FF5722", "mode": "fixed" } }] },
+          { "matcher": { "id": "byName", "options": "MTier p99" }, "properties": [{ "id": "color", "value": { "fixedColor": "#FF5722", "mode": "fixed" } }, { "id": "custom.lineStyle", "value": { "dash": [6,4], "fill": "dash" } }] }
+        ]
+      },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 1 },
+      "id": 7,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi", "sort": "none" } },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "histogram_quantile(0.50, sum by(le) (rate(vllm:inter_token_latency_seconds_bucket{instance=\"localhost:8001\"}[$__rate_interval])))", "legendFormat": "CPU p50", "refId": "A" },
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "histogram_quantile(0.99, sum by(le) (rate(vllm:inter_token_latency_seconds_bucket{instance=\"localhost:8001\"}[$__rate_interval])))", "legendFormat": "CPU p99", "refId": "B" },
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "histogram_quantile(0.50, sum by(le) (rate(vllm:inter_token_latency_seconds_bucket{instance=\"localhost:8002\"}[$__rate_interval])))", "legendFormat": "MTier p50", "refId": "C" },
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "histogram_quantile(0.99, sum by(le) (rate(vllm:inter_token_latency_seconds_bucket{instance=\"localhost:8002\"}[$__rate_interval])))", "legendFormat": "MTier p99", "refId": "D" }
+      ],
+      "title": "ITL (p50 solid / p99 dashed)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": { "custom": { "fillOpacity": 0, "lineWidth": 2 }, "unit": "s" },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "CPU p50" },   "properties": [{ "id": "color", "value": { "fixedColor": "#2196F3", "mode": "fixed" } }] },
+          { "matcher": { "id": "byName", "options": "CPU p99" },   "properties": [{ "id": "color", "value": { "fixedColor": "#2196F3", "mode": "fixed" } }, { "id": "custom.lineStyle", "value": { "dash": [6,4], "fill": "dash" } }] },
+          { "matcher": { "id": "byName", "options": "MTier p50" }, "properties": [{ "id": "color", "value": { "fixedColor": "#FF5722", "mode": "fixed" } }] },
+          { "matcher": { "id": "byName", "options": "MTier p99" }, "properties": [{ "id": "color", "value": { "fixedColor": "#FF5722", "mode": "fixed" } }, { "id": "custom.lineStyle", "value": { "dash": [6,4], "fill": "dash" } }] }
+        ]
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 9 },
+      "id": 8,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi", "sort": "none" } },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "histogram_quantile(0.50, sum by(le) (rate(vllm:request_queue_time_seconds_bucket{instance=\"localhost:8001\"}[$__rate_interval])))", "legendFormat": "CPU p50", "refId": "A" },
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "histogram_quantile(0.99, sum by(le) (rate(vllm:request_queue_time_seconds_bucket{instance=\"localhost:8001\"}[$__rate_interval])))", "legendFormat": "CPU p99", "refId": "B" },
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "histogram_quantile(0.50, sum by(le) (rate(vllm:request_queue_time_seconds_bucket{instance=\"localhost:8002\"}[$__rate_interval])))", "legendFormat": "MTier p50", "refId": "C" },
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "histogram_quantile(0.99, sum by(le) (rate(vllm:request_queue_time_seconds_bucket{instance=\"localhost:8002\"}[$__rate_interval])))", "legendFormat": "MTier p99", "refId": "D" }
+      ],
+      "title": "Queue Wait (p50 solid / p99 dashed)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": { "custom": { "fillOpacity": 5, "lineWidth": 2 }, "unit": "short" },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "CPU ISL" },   "properties": [{ "id": "color", "value": { "fixedColor": "#2196F3", "mode": "fixed" } }] },
+          { "matcher": { "id": "byName", "options": "CPU OSL" },   "properties": [{ "id": "color", "value": { "fixedColor": "#64B5F6", "mode": "fixed" } }, { "id": "custom.lineStyle", "value": { "dash": [6,4], "fill": "dash" } }] },
+          { "matcher": { "id": "byName", "options": "MTier ISL" }, "properties": [{ "id": "color", "value": { "fixedColor": "#FF5722", "mode": "fixed" } }] },
+          { "matcher": { "id": "byName", "options": "MTier OSL" }, "properties": [{ "id": "color", "value": { "fixedColor": "#FFAB91", "mode": "fixed" } }, { "id": "custom.lineStyle", "value": { "dash": [6,4], "fill": "dash" } }] }
+        ]
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 9 },
+      "id": 9,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi", "sort": "none" } },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "vllm:prompt_tokens_total{instance=\"localhost:8001\"}", "legendFormat": "CPU ISL", "refId": "A" },
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "vllm:generation_tokens_total{instance=\"localhost:8001\"}", "legendFormat": "CPU OSL", "refId": "B" },
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "vllm:prompt_tokens_total{instance=\"localhost:8002\"}", "legendFormat": "MTier ISL", "refId": "C" },
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "vllm:generation_tokens_total{instance=\"localhost:8002\"}", "legendFormat": "MTier OSL", "refId": "D" }
+      ],
+      "title": "Cumulative ISL (solid) + OSL (dashed)",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 17 },
+      "id": 200, "panels": [], "title": "Cache", "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": { "custom": { "fillOpacity": 5, "lineWidth": 2 }, "unit": "percent", "min": 0, "max": 100 },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "CPU ext hit%" },   "properties": [{ "id": "color", "value": { "fixedColor": "#2196F3", "mode": "fixed" } }] },
+          { "matcher": { "id": "byName", "options": "MTier ext hit%" }, "properties": [{ "id": "color", "value": { "fixedColor": "#FF5722", "mode": "fixed" } }] },
+          { "matcher": { "id": "byName", "options": "CPU GPU hit%" },   "properties": [{ "id": "color", "value": { "fixedColor": "#64B5F6", "mode": "fixed" } }, { "id": "custom.lineStyle", "value": { "dash": [6,4], "fill": "dash" } }] },
+          { "matcher": { "id": "byName", "options": "MTier GPU hit%" }, "properties": [{ "id": "color", "value": { "fixedColor": "#FFAB91", "mode": "fixed" } }, { "id": "custom.lineStyle", "value": { "dash": [6,4], "fill": "dash" } }] }
+        ]
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 18 },
+      "id": 3,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi", "sort": "none" } },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "rate(vllm:external_prefix_cache_hits_total{instance=\"localhost:8001\"}[2m]) / rate(vllm:external_prefix_cache_queries_total{instance=\"localhost:8001\"}[2m]) * 100", "legendFormat": "CPU ext hit%", "refId": "A" },
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "rate(vllm:external_prefix_cache_hits_total{instance=\"localhost:8002\"}[2m]) / rate(vllm:external_prefix_cache_queries_total{instance=\"localhost:8002\"}[2m]) * 100", "legendFormat": "MTier ext hit%", "refId": "B" },
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "rate(vllm:prefix_cache_hits_total{instance=\"localhost:8001\"}[2m]) / rate(vllm:prefix_cache_queries_total{instance=\"localhost:8001\"}[2m]) * 100", "legendFormat": "CPU GPU hit%", "refId": "C" },
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "rate(vllm:prefix_cache_hits_total{instance=\"localhost:8002\"}[2m]) / rate(vllm:prefix_cache_queries_total{instance=\"localhost:8002\"}[2m]) * 100", "legendFormat": "MTier GPU hit%", "refId": "D" }
+      ],
+      "title": "Cache Hit Rate — ext (solid) / GPU HBM (dashed)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": { "custom": { "fillOpacity": 5, "lineWidth": 2 }, "unit": "percent", "min": 0, "max": 100 },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "CPU KV%" },   "properties": [{ "id": "color", "value": { "fixedColor": "#2196F3", "mode": "fixed" } }] },
+          { "matcher": { "id": "byName", "options": "MTier KV%" }, "properties": [{ "id": "color", "value": { "fixedColor": "#FF5722", "mode": "fixed" } }] }
+        ]
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 18 },
+      "id": 4,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi", "sort": "none" } },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "vllm:kv_cache_usage_perc{instance=\"localhost:8001\"} * 100", "legendFormat": "CPU KV%", "refId": "A" },
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "vllm:kv_cache_usage_perc{instance=\"localhost:8002\"} * 100", "legendFormat": "MTier KV%", "refId": "B" }
+      ],
+      "title": "GPU KV Cache Utilization %",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 26 },
+      "id": 300, "panels": [], "title": "Scheduler & Throughput", "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": { "custom": { "fillOpacity": 5, "lineWidth": 2 }, "unit": "short" },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "CPU running" },   "properties": [{ "id": "color", "value": { "fixedColor": "#2196F3", "mode": "fixed" } }] },
+          { "matcher": { "id": "byName", "options": "CPU waiting" },   "properties": [{ "id": "color", "value": { "fixedColor": "#64B5F6", "mode": "fixed" } }, { "id": "custom.lineStyle", "value": { "dash": [6,4], "fill": "dash" } }] },
+          { "matcher": { "id": "byName", "options": "MTier running" }, "properties": [{ "id": "color", "value": { "fixedColor": "#FF5722", "mode": "fixed" } }] },
+          { "matcher": { "id": "byName", "options": "MTier waiting" }, "properties": [{ "id": "color", "value": { "fixedColor": "#FFAB91", "mode": "fixed" } }, { "id": "custom.lineStyle", "value": { "dash": [6,4], "fill": "dash" } }] }
+        ]
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 27 },
+      "id": 5,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi", "sort": "none" } },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "vllm:num_requests_running{instance=\"localhost:8001\"}", "legendFormat": "CPU running", "refId": "A" },
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "vllm:num_requests_waiting{instance=\"localhost:8001\"}", "legendFormat": "CPU waiting", "refId": "B" },
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "vllm:num_requests_running{instance=\"localhost:8002\"}", "legendFormat": "MTier running", "refId": "C" },
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "vllm:num_requests_waiting{instance=\"localhost:8002\"}", "legendFormat": "MTier waiting", "refId": "D" }
+      ],
+      "title": "Scheduler — running (solid) / waiting (dashed)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": { "custom": { "fillOpacity": 5, "lineWidth": 2 }, "unit": "short" },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "CPU tok/s" },   "properties": [{ "id": "color", "value": { "fixedColor": "#2196F3", "mode": "fixed" } }] },
+          { "matcher": { "id": "byName", "options": "MTier tok/s" }, "properties": [{ "id": "color", "value": { "fixedColor": "#FF5722", "mode": "fixed" } }] }
+        ]
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 27 },
+      "id": 6,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi", "sort": "none" } },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum(rate(vllm:generation_tokens_total{instance=\"localhost:8001\"}[$__rate_interval]))", "legendFormat": "CPU tok/s", "refId": "A" },
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum(rate(vllm:generation_tokens_total{instance=\"localhost:8002\"}[$__rate_interval]))", "legendFormat": "MTier tok/s", "refId": "B" }
+      ],
+      "title": "Output Tokens/s",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "5s",
+  "schemaVersion": 39,
+  "tags": ["vllm", "comparison"],
+  "templating": {
+    "list": [
+      {
+        "hide": 0,
+        "includeAll": false,
+        "label": "datasource",
+        "multi": false,
+        "name": "DS_PROMETHEUS",
+        "query": "prometheus",
+        "refresh": 1,
+        "type": "datasource"
+      }
+    ]
+  },
+  "time": { "from": "now-15m", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "CPU vs MTier — Live Comparison",
+  "uid": "cpu-vs-mtier-v1"
+}

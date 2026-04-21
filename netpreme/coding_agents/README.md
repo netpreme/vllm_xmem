@@ -4,75 +4,110 @@ Quick reference for what to run and when.
 
 ---
 
-## Files at root (vLLM + Claude)
+## Root files
 
 | File | Purpose |
 |------|---------|
-| `start_server.sh` | Start a vLLM server (hybrid-cpu or hybrid-mtier) |
+| `start_server.sh` | Start a vLLM server in a given mode |
 | `run_claude.sh` | Run a single Claude Code session on a task |
-| `parse_stream.py` | Parse Claude stream output → TTFT / ISL / OSL per turn |
 | `watch_server.py` | Live tail of vLLM metrics (cache hit%, queue depth, tok/s) |
 
 ```bash
-# Start hybrid-mtier on GPU 0, port 8000
-CUDA_VISIBLE_DEVICES=0 PORT=8000 bash start_server.sh --hybrid-mtier # or --hybrid-cpu | --cpu-only | --mtier-only
+# Start server — choose one mode:
+bash start_server.sh --hybrid-cpu     # GPU HBM + CPU DRAM overflow  (port 8000)
+bash start_server.sh --hybrid-mtier   # GPU HBM + MTier overflow      (port 8000)
+bash start_server.sh --cpu-only       # CPU DRAM only (no GPU cache)
+bash start_server.sh --mtier-only     # MTier only (no GPU cache)
+bash start_server.sh --hbm-only       # GPU HBM only, no offload
 
-# Ask claude to do a task automatically
-bash run_claude.sh --auto "iterate through the vllm_xmem/netpreme codebase, open all the files, and give me a summary of each and write into /tmp/summary_{timestamp}.txt."
+# Optional overrides
+PORT=8001 bash start_server.sh --hybrid-cpu
+CUDA_VISIBLE_DEVICES=0 bash start_server.sh --hybrid-mtier
+
+# Run a task with Claude
+bash run_claude.sh --auto "fix the bug in vllm/v1/engine/core.py"
 ```
 
 ---
 
-## benchmark/ — concurrent user load test
+## benchmarks/ — two scripts, two purposes
 
-Run N Claude sessions in parallel against a live vLLM server.
-Records TTFT, E2E, ITL, ISL, OSL per turn. Starts/stops the server automatically.
+See `benchmarks/README.md` for full usage.
+
+### 1. `record_isl_osl.py` — ISL/OSL distribution recording
+
+Runs SWE-bench problems **sequentially**, one at a time. Records per-turn ISL, OSL, tool calls, and cache metrics per problem. Use this to characterise real-world token distributions.
 
 ```bash
-python3 benchmark/run_concurrent.py \
-    --setup (hybrid-mtier | hybrid-cpu) \ 
-    --concurrency 4 8 12 16 \
-    --sustained --sustained-mins 10 \
-    --gpus 0
+python3 benchmarks/record_isl_osl.py --all --skip-done
 ```
 
-Results land in `benchmark/results_benchmarks/bench_<setup>_<timestamp>/`.
+Results → `results/isl_osl/<instance_id>_<timestamp>/metrics.json`
 
-`benchmark/tasks/` contains the SWE-bench task runners used as the workload.
+Analysis → `python3 analysis/isl_osl_analysis.py`
+
+### 2. `bench_concurrent_users.py` — Concurrent user simulation
+
+Runs N sustained concurrent users. Recording starts only after external KV cache hit rate exceeds 1% (KV cache is warm). Starts and stops the server automatically.
+
+```bash
+# Use whatever server is running (default port 8000)
+python3 benchmarks/bench_concurrent_users.py --concurrency 4 8 16 --sustained-mins 30
+
+# Override port
+python3 benchmarks/bench_concurrent_users.py --port 8001 --concurrency 4 8 16 --sustained-mins 30
+python3 benchmarks/bench_concurrent_users.py --port 8002 --concurrency 4 8 16 --sustained-mins 30
+
+# Or auto-start + kill the server (--cpu-hybrid | --mtier-hybrid | --cpu-only | --mtier-only)
+python3 benchmarks/bench_concurrent_users.py --cpu-hybrid --concurrency 4 8 16 --sustained-mins 30
+```
+
+Results → `results/isl_osl/bench_<setup>_<timestamp>/`
+
+Analysis → `python3 analysis/generate_metrics.py`
 
 ---
+
+## analysis/ — figures
+
+| Script | Reads from | Produces |
+|--------|-----------|---------|
+| `isl_osl_analysis.py` | `results/isl_osl/<instance>/metrics.json` | ISL/OSL distribution + cache hit figures per difficulty level |
+| `generate_metrics.py` | `results/isl_osl/bench_combined_*/summary.csv` | TTFT/throughput/speedup comparison figures (CPU vs MTier) |
+
+---
+
+## demo/ — live MTier vs CPU comparison for TTFT
+
+Side-by-side TTFT comparison of hybrid-cpu vs hybrid-mtier using SWE-bench problems.
+
+```bash
+# Start both servers (GPU 0 = MTier port 8002, GPU 1 = CPU port 8001)
+bash demo/start_servers.sh
+
+# Run the demo
+python3 demo/demo_ttft_compare.py -c 4 -r 3
+```
+
+See `demo/README.md` for full details.
+
+---
+
 ## monitoring/ — Prometheus + Grafana
 
 ```bash
-bash monitoring/start_monitoring.sh   # start Prometheus + Grafana
-python3 monitoring/kv_exporter.py     # start KV bandwidth exporter (port 9091)
+bash monitoring/start_monitoring.sh   # Prometheus :9090, Grafana :3000, KV exporter :9091
 ```
 
-### Accessing Grafana
+Open **http://localhost:3000** — no login required.
 
-Open **http://localhost:3000** — default login is `admin / admin`.
-
-Two dashboards are provisioned automatically:
-
-**vLLM xmem** (main benchmark dashboard)
-- TTFT p50/p95/p99 over time — both setups
-- E2E request latency over time
-- Queue wait time
-- GPU HBM hit % and external cache hit %
-- Output tokens/s and KV offload bandwidth (CPU↔GPU GB/s)
-
-**MTier vs CPU — Live Demo** (side-by-side comparison)
-- Use during `demo/` runs to watch MTier vs CPU in real time
-- TTFT p50/p95, E2E p50/p95, queue wait, cache hit rates, throughput, KV recall bandwidth
-- Blue = hybrid-cpu, orange = hybrid-mtier
-
-### What each exporter provides
+Two dashboards auto-provisioned:
+- **vLLM xmem** — TTFT, E2E, queue wait, cache hit%, KV offload bandwidth
+- **MTier vs CPU — Live Demo** — side-by-side real-time comparison
 
 | Port | Source | Metrics |
 |------|--------|---------|
-| 8000 | vLLM frontend | TTFT, E2E, ITL, queue time, cache hits, token counts |
-| 8081 | vLLM worker | prefill/decode breakdown, KV block usage |
+| 8000 | vLLM server | TTFT, E2E, ITL, queue time, cache hits, token counts |
 | 9091 | `kv_exporter.py` | CPU↔GPU transfer bytes and bandwidth (GB/s) |
 
-`kv_exporter.py` tails the Dynamo worker log for `KV Transfer metrics:` lines and exposes them as Prometheus counters/gauges. Run it alongside the server whenever you need the KV offload panels in Grafana.
-
+`monitoring/parse_stream.py` — parses `claude --output-format stream-json` output into per-turn ISL/OSL/tool tables. Used automatically by `run_claude.sh`.

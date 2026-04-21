@@ -16,7 +16,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENV_FILE="${SCRIPT_DIR}/../.env"
-REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 PYTHON_BIN="${PYTHON_BIN:-${REPO_ROOT}/.venv/bin/python}"
 
 if [[ ! -x "$PYTHON_BIN" ]]; then
@@ -132,7 +132,7 @@ if [[ -n "$AUTO_TASK" ]]; then
                --verbose \
                --output-format stream-json \
                -p "$AUTO_TASK" \
-      | python3 "${SCRIPT_DIR}/parse_stream.py"
+      | python3 "${SCRIPT_DIR}/monitoring/parse_stream.py"
 else
     echo "Launching Claude Code"
     echo "  ANTHROPIC_BASE_URL = $BASE_URL"

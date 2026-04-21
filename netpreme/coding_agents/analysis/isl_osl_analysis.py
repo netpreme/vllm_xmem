@@ -2,13 +2,13 @@
 """
 Analyze ISL/OSL token distributions and cache hit rates from SWE-bench task results.
 
-Reads per-task metrics.json files produced by benchmark/tasks/run_swebench.py
+Reads per-task metrics.json files produced by benchmarks/record_isl_osl.py
 and generates figures broken down by difficulty level (<15 min, 15 min–1 hour,
 1–4 hours, >4 hours).
 
 What you need to run first:
-    python3 benchmark/tasks/run_swebench.py --all
-    # Results land in benchmark/tasks/results/<instance_id>_<timestamp>/metrics.json
+    python3 benchmarks/record_isl_osl.py --all
+    # Results land in coding_agents/results/isl_osl/<instance_id>_<timestamp>/metrics.json
 
 Figures produced (saved alongside the results directory):
   Per difficulty level:
@@ -24,9 +24,9 @@ Cache hit % is estimated per turn as:
 Turn 0 is always a cold start (0%). Turns where ISL drops (context compaction) are excluded.
 
 Usage:
-    python3 analysis/task_analysis.py                          # reads benchmark/tasks/results/
-    python3 analysis/task_analysis.py path/to/results/
-    python3 analysis/task_analysis.py dir1/ dir2/              # overlay two runs for comparison
+    python3 analysis/isl_osl_analysis.py                       # reads coding_agents/results/isl_osl/
+    python3 analysis/isl_osl_analysis.py path/to/results/
+    python3 analysis/isl_osl_analysis.py dir1/ dir2/           # overlay two runs for comparison
 """
 
 import json
@@ -39,7 +39,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 SCRIPT_DIR  = Path(__file__).resolve().parent
-DEFAULT_DIR = SCRIPT_DIR.parent / "benchmark" / "tasks" / "results"
+DEFAULT_DIR = SCRIPT_DIR.parent / "results" / "isl_osl"
 
 SELECTED_IDS: set[str] | None = None  # None = use all available results
 

@@ -1,30 +1,34 @@
 #!/usr/bin/env python3
 """
-Run SWE-bench Verified instances against the local vLLM server.
+Record ISL/OSL per turn for SWE-bench Verified instances.
 
-Measures per-turn context growth and token metrics. Correctness is NOT evaluated.
+Runs problems sequentially against a vLLM server and records per-turn
+input/output sequence lengths, tool calls, and cache metrics.
+Correctness is NOT evaluated — this is purely for token distribution analysis.
 
 Usage:
-    python3 run_swebench.py                                   # first instance (index 0)
-    python3 run_swebench.py --index 5                         # 5th instance
-    python3 run_swebench.py --id django__django-11099         # by instance_id
-    python3 run_swebench.py --list                            # list first 20 instances
-    python3 run_swebench.py --all                             # run every instance sequentially
-    python3 run_swebench.py --all --start 10 --end 50         # slice of the dataset
-    python3 run_swebench.py --all --skip-done                 # skip already-completed instances
-    python3 run_swebench.py --all --start 5 --skip-done       # resume from index 5, skip done
-    python3 run_swebench.py --no-clone                        # skip repo setup, run in cwd
+    python3 record_isl_osl.py                                   # first instance (index 0)
+    python3 record_isl_osl.py --index 5                         # 5th instance
+    python3 record_isl_osl.py --id django__django-11099         # by instance_id
+    python3 record_isl_osl.py --list                            # list first 20 instances
+    python3 record_isl_osl.py --all                             # run every instance sequentially
+    python3 record_isl_osl.py --all --start 10 --end 50         # slice of the dataset
+    python3 record_isl_osl.py --all --skip-done                 # skip already-completed instances
+    python3 record_isl_osl.py --all --start 5 --skip-done       # resume from index 5, skip done
+    python3 record_isl_osl.py --no-clone                        # skip repo setup, run in cwd
 
-Results saved per run to:
-    tasks/results/<instance_id>_<timestamp>/
-        metrics.json   — instance info, per-turn ISL/OSL/tools, summary, final usage
+Results saved per instance to:
+    coding_agents/results/isl_osl/<instance_id>_<timestamp>/
+        metrics.json   — per-turn ISL/OSL/tools, summary, final usage
         patch.diff     — git diff of changes Claude made in the workspace
 
-Run watch_vllm.py in a separate terminal for TTFT/ITL/cache/offload metrics.
+Analysis (run after):
+    python3 analysis/isl_osl_analysis.py
+    # Reads metrics.json files, produces ISL/OSL distribution figures per difficulty level
 
 Notes:
-    - Requires the vLLM server to be running (./start_vllm_server.sh)
-    - OSL per turn is scraped from vLLM /metrics (same method as watch_vllm.py)
+    - Requires the vLLM server to be running (./start_server.sh)
+    - OSL per turn is scraped from vLLM /metrics
     - claude --verbose emits 2 assistant events per request (text + tool_use);
       events with the same input_tokens are merged into one turn row
 """
@@ -50,7 +54,7 @@ BENCHMARKS_DIR  = SCRIPT_DIR.parent
 ENV_FILE        = BENCHMARKS_DIR.parent / ".env"
 WORKSPACE_ROOT  = Path("/tmp/swe_workspaces")
 TOOL_CALLS_FILE = Path("/tmp/vllm_tool_calls.json")   # shared with watch_vllm.py
-RESULTS_DIR     = SCRIPT_DIR / "results"
+RESULTS_DIR     = SCRIPT_DIR.parent / "results" / "isl_osl"
 
 # ── defaults ──────────────────────────────────────────────────────────────────
 DEFAULT_MODEL = "qwen/qwen3-coder-30b-a3b-instruct-fp8"

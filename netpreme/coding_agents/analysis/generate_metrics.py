@@ -2,25 +2,22 @@
 """
 Generate comparison figures for hybrid-cpu vs hybrid-mtier benchmark results.
 
-Produces 5 figures saved to benchmark/results_benchmarks/<run>/plots/:
+Produces 5 figures saved to results/isl_osl/<run>/plots/:
+    fig1  — 5 plot summary: cache hit rates, TTFT, throughput, E2E breakdown
     fig2  — TTFT speedup (CPU÷MTier) grouped bar, all percentiles (p50/p90/p95/p99)
     fig3  — Queue wait speedup grouped bar, all percentiles
     fig4  — TTFT p50 + p99 head-to-head line chart with speedup annotations
     fig5  — Throughput speedup: output tokens/s and tasks/hr (MTier÷CPU)
-    fig1  — Hero 6-panel summary: cache hit rates, TTFT, throughput, E2E breakdown
 
 What you need to run first:
-    1. Run the benchmark for both setups across concurrency levels:
-           python3 benchmark/run_concurrent.py --setup hybrid-cpu  --concurrency 4 8 12 16 20
-           python3 benchmark/run_concurrent.py --setup hybrid-mtier --concurrency 4 8 12 16 20
+    1. Run the concurrent users benchmark for both setups:
+           python3 benchmarks/bench_concurrent_users.py --cpu-hybrid   --concurrency 4 8 12 16 20
+           python3 benchmarks/bench_concurrent_users.py --mtier-hybrid --concurrency 4 8 12 16 20
 
-    2. Combine the per-run CSVs into a single summary (or point RESULTS_DIR at an
-       existing bench_combined_* directory that already has summary.csv + summary.json).
-
-    3. Update RESULTS_DIR below to point at the combined results directory.
+    2. Point RESULTS_DIR below at the bench_combined_* directory that has summary.csv + summary.json.
 
 Usage:
-    python3 analysis/generate_figures.py
+    python3 analysis/generate_metrics.py
 """
 import numpy as np
 import matplotlib
@@ -31,7 +28,7 @@ import matplotlib.patches as mpatches
 import pandas as pd
 from pathlib import Path
 
-RESULTS_DIR = Path(__file__).parent.parent / "benchmark" / "results_benchmarks" / "bench_combined_20260418_040848"
+RESULTS_DIR = Path(__file__).parent.parent / "results" / "isl_osl" / "bench_combined_20260418_040848"
 OUT_DIR = RESULTS_DIR / "plots"
 OUT_DIR.mkdir(exist_ok=True)
 
