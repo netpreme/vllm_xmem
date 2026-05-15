@@ -53,6 +53,22 @@ def wrap_data_with_event(data: str, event: str):
     return f"event: {event}\ndata: {data}\n\n"
 
 
+def _cached_tokens_from_usage(usage: Any) -> int:
+    """Return per-request prefix-cache hit count from a UsageInfo object.
+
+    Populated by vLLM's chat-completion serving when --enable-prompt-tokens-details
+    is set. Returns 0 when the field is missing so the Anthropic response keeps
+    a stable shape.
+    """
+    if usage is None:
+        return 0
+    details = getattr(usage, "prompt_tokens_details", None)
+    if details is None:
+        return 0
+    cached = getattr(details, "cached_tokens", None)
+    return int(cached or 0)
+
+
 class AnthropicServingMessages(OpenAIServingChat):
     """Handler for Anthropic Messages API requests"""
 
@@ -167,6 +183,14 @@ class AnthropicServingMessages(OpenAIServingChat):
                 openai_msg["content"] = msg.content
             else:
                 cls._convert_message_content(msg, openai_msg, openai_messages)
+
+            # Skip the wrapper if _convert_message_content consumed all blocks
+            # directly into openai_messages (e.g. tool_result blocks become
+            # role="tool" messages). In that case openai_msg has only "role"
+            # and no "content"/"tool_calls" — appending it would produce an
+            # empty user/assistant message that breaks chat-template rendering.
+            if "content" not in openai_msg and "tool_calls" not in openai_msg:
+                continue
 
             openai_messages.append(openai_msg)
 
@@ -417,6 +441,28 @@ class AnthropicServingMessages(OpenAIServingChat):
         """
         if logger.isEnabledFor(logging.DEBUG):
             logger.debug("Received messages request %s", request.model_dump_json())
+
+        # Claude Code fires a background title-generation request concurrently
+        # identified by "sentence-case title" in the system prompt.
+        # This request has nothing to do with the actual conversation — it only
+        # sets the sidebar label. We short-circuit it here and return a hardcoded
+        # {"title": "Chat"} so it never touches the vLLM engine or wastes a GPU slot.
+        if request.system and not isinstance(request.system, str) and any(
+            block.type == "text" and block.text and "sentence-case title" in block.text
+            for block in request.system
+        ):
+            logger.warning(
+                "Intercepted Claude Code title-generation request — returning canned "
+                'response {"title": "Chat"} without hitting vLLM. This is expected '
+                "behaviour: Claude Code fires this once per conversation."
+            )
+            return AnthropicMessagesResponse(
+                id=f"msg_{uuid.uuid4().hex[:24]}",
+                content=[AnthropicContentBlock(type="text", text='{"title": "Chat"}')],
+                model=request.model,
+                stop_reason="end_turn",
+                usage=AnthropicUsage(input_tokens=5, output_tokens=1),
+            )
         chat_req = self._convert_anthropic_to_openai_request(request)
         if logger.isEnabledFor(logging.DEBUG):
             logger.debug("Convert to OpenAI request %s", chat_req.model_dump_json())
@@ -434,13 +480,16 @@ class AnthropicServingMessages(OpenAIServingChat):
         self,
         generator: ChatCompletionResponse,
     ) -> AnthropicMessagesResponse:
+        prompt_total = generator.usage.prompt_tokens
+        cached = _cached_tokens_from_usage(generator.usage)
         result = AnthropicMessagesResponse(
             id=generator.id,
             content=[],
             model=generator.model,
             usage=AnthropicUsage(
-                input_tokens=generator.usage.prompt_tokens,
+                input_tokens=max(0, prompt_total - cached),
                 output_tokens=generator.usage.completion_tokens,
+                cache_read_input_tokens=cached if cached else None,
             ),
             kv_transfer_params=generator.kv_transfer_params,
         )
@@ -584,6 +633,9 @@ class AnthropicServingMessages(OpenAIServingChat):
                         )
 
                         if first_item:
+                            _u = origin_chunk.usage
+                            _prompt = _u.prompt_tokens if _u else 0
+                            _cached = _cached_tokens_from_usage(_u) if _u else 0
                             chunk = AnthropicStreamEvent(
                                 type="message_start",
                                 message=AnthropicMessagesResponse(
@@ -593,10 +645,9 @@ class AnthropicServingMessages(OpenAIServingChat):
                                     stop_reason=None,
                                     stop_sequence=None,
                                     usage=AnthropicUsage(
-                                        input_tokens=origin_chunk.usage.prompt_tokens
-                                        if origin_chunk.usage
-                                        else 0,
+                                        input_tokens=max(0, _prompt - _cached),
                                         output_tokens=0,
+                                        cache_read_input_tokens=_cached if _cached else None,
                                     ),
                                 ),
                             )
@@ -612,16 +663,16 @@ class AnthropicServingMessages(OpenAIServingChat):
                             stop_reason = self.stop_reason_map.get(
                                 finish_reason or "stop"
                             )
+                            _u2 = origin_chunk.usage
+                            _prompt2 = _u2.prompt_tokens if _u2 else 0
+                            _cached2 = _cached_tokens_from_usage(_u2) if _u2 else 0
                             chunk = AnthropicStreamEvent(
                                 type="message_delta",
                                 delta=AnthropicDelta(stop_reason=stop_reason),
                                 usage=AnthropicUsage(
-                                    input_tokens=origin_chunk.usage.prompt_tokens
-                                    if origin_chunk.usage
-                                    else 0,
-                                    output_tokens=origin_chunk.usage.completion_tokens
-                                    if origin_chunk.usage
-                                    else 0,
+                                    input_tokens=max(0, _prompt2 - _cached2),
+                                    output_tokens=_u2.completion_tokens if _u2 else 0,
+                                    cache_read_input_tokens=_cached2 if _cached2 else None,
                                 ),
                             )
                             data = chunk.model_dump_json(exclude_unset=True)
