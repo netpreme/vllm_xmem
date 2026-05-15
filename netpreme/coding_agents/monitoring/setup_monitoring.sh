@@ -5,9 +5,9 @@
 # ═══════════════════════════════════════════════════════════
 set -euo pipefail
 
-# ── 1. Install Prometheus ────────────────────────────────────
-echo "Installing Prometheus..."
-sudo apt-get install -y prometheus
+# ── 1. Install Prometheus + psmisc (provides `fuser` used by the bench) ──
+echo "Installing Prometheus and psmisc..."
+sudo apt-get install -y prometheus psmisc
 
 # Stop the default service — we run ours manually with our own config
 sudo systemctl stop prometheus 2>/dev/null || true

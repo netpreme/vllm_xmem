@@ -1,0 +1,998 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "type": "row",
+      "collapsed": false,
+      "id": 1,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "panels": [],
+      "title": "Latency  \u2014  p50 (light)  \u2022  p99 (dark)"
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "TTFT",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 1
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "fillOpacity": 0,
+            "lineWidth": 2
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "MTier p50"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#bcbddc",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "MTier p99"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#3f007d",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "CPU p50"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#fdae6b",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "CPU p99"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#7f2704",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "B",
+          "legendFormat": "MTier p99",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(vllm:time_to_first_token_seconds_bucket{setup=\"hybrid-mtier\"}[30s])))"
+        },
+        {
+          "refId": "A",
+          "legendFormat": "MTier p50",
+          "expr": "histogram_quantile(0.5,  sum by (le) (rate(vllm:time_to_first_token_seconds_bucket{setup=\"hybrid-mtier\"}[30s])))"
+        },
+        {
+          "refId": "D",
+          "legendFormat": "CPU p99",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(vllm:time_to_first_token_seconds_bucket{setup=\"hybrid-cpu\"}[30s])))"
+        },
+        {
+          "refId": "C",
+          "legendFormat": "CPU p50",
+          "expr": "histogram_quantile(0.5,  sum by (le) (rate(vllm:time_to_first_token_seconds_bucket{setup=\"hybrid-cpu\"}[30s])))"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "E2E latency",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 1
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "fillOpacity": 0,
+            "lineWidth": 2
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "MTier p50"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#bcbddc",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "MTier p99"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#3f007d",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "CPU p50"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#fdae6b",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "CPU p99"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#7f2704",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "B",
+          "legendFormat": "MTier p99",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(vllm:e2e_request_latency_seconds_bucket{setup=\"hybrid-mtier\"}[30s])))"
+        },
+        {
+          "refId": "A",
+          "legendFormat": "MTier p50",
+          "expr": "histogram_quantile(0.5,  sum by (le) (rate(vllm:e2e_request_latency_seconds_bucket{setup=\"hybrid-mtier\"}[30s])))"
+        },
+        {
+          "refId": "D",
+          "legendFormat": "CPU p99",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(vllm:e2e_request_latency_seconds_bucket{setup=\"hybrid-cpu\"}[30s])))"
+        },
+        {
+          "refId": "C",
+          "legendFormat": "CPU p50",
+          "expr": "histogram_quantile(0.5,  sum by (le) (rate(vllm:e2e_request_latency_seconds_bucket{setup=\"hybrid-cpu\"}[30s])))"
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "ITL  (inter-token latency)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 1
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "fillOpacity": 0,
+            "lineWidth": 2
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "MTier p50"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#bcbddc",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "MTier p99"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#3f007d",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "CPU p50"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#fdae6b",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "CPU p99"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#7f2704",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "B",
+          "legendFormat": "MTier p99",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(vllm:inter_token_latency_seconds_bucket{setup=\"hybrid-mtier\"}[30s])))"
+        },
+        {
+          "refId": "A",
+          "legendFormat": "MTier p50",
+          "expr": "histogram_quantile(0.5,  sum by (le) (rate(vllm:inter_token_latency_seconds_bucket{setup=\"hybrid-mtier\"}[30s])))"
+        },
+        {
+          "refId": "D",
+          "legendFormat": "CPU p99",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(vllm:inter_token_latency_seconds_bucket{setup=\"hybrid-cpu\"}[30s])))"
+        },
+        {
+          "refId": "C",
+          "legendFormat": "CPU p50",
+          "expr": "histogram_quantile(0.5,  sum by (le) (rate(vllm:inter_token_latency_seconds_bucket{setup=\"hybrid-cpu\"}[30s])))"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "collapsed": false,
+      "id": 2,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 9
+      },
+      "panels": [],
+      "title": "Throughput  &  Queue"
+    },
+    {
+      "id": 20,
+      "type": "timeseries",
+      "title": "Output tok/s",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 10
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "fillOpacity": 0,
+            "lineWidth": 2
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "MTier"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#3f007d",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "CPU"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#7f2704",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "legendFormat": "MTier",
+          "expr": "sum(rate(vllm:generation_tokens_total{setup=\"hybrid-mtier\"}[30s]))"
+        },
+        {
+          "refId": "B",
+          "legendFormat": "CPU",
+          "expr": "sum(rate(vllm:generation_tokens_total{setup=\"hybrid-cpu\"}[30s]))"
+        }
+      ]
+    },
+    {
+      "id": 21,
+      "type": "timeseries",
+      "title": "Queue wait",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 10
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "fillOpacity": 0,
+            "lineWidth": 2
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "MTier p50"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#bcbddc",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "MTier p99"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#3f007d",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "CPU p50"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#fdae6b",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "CPU p99"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#7f2704",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "B",
+          "legendFormat": "MTier p99",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(vllm:request_queue_time_seconds_bucket{setup=\"hybrid-mtier\"}[30s])))"
+        },
+        {
+          "refId": "A",
+          "legendFormat": "MTier p50",
+          "expr": "histogram_quantile(0.5,  sum by (le) (rate(vllm:request_queue_time_seconds_bucket{setup=\"hybrid-mtier\"}[30s])))"
+        },
+        {
+          "refId": "D",
+          "legendFormat": "CPU p99",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(vllm:request_queue_time_seconds_bucket{setup=\"hybrid-cpu\"}[30s])))"
+        },
+        {
+          "refId": "C",
+          "legendFormat": "CPU p50",
+          "expr": "histogram_quantile(0.5,  sum by (le) (rate(vllm:request_queue_time_seconds_bucket{setup=\"hybrid-cpu\"}[30s])))"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "collapsed": false,
+      "id": 3,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 18
+      },
+      "panels": [],
+      "title": "Prompt-token source breakdown (vllm:prompt_tokens_by_source_total) \u2014 HBM hit + Offload hit + Recompute = 100%"
+    },
+    {
+      "id": 30,
+      "type": "timeseries",
+      "title": "MTier \u2014 Cache Hit & KV util",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 19
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 5,
+            "lineWidth": 2
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "HBM hit %"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#76B900",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Offload hit %"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#5e3c99",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Recompute %"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#d62728",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "HBM KV util %"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#b0b0b0",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "legendFormat": "HBM hit %",
+          "expr": "sum(rate(vllm:prompt_tokens_by_source_total{setup=\"hybrid-mtier\",source=\"local_cache_hit\"}[2m])) / clamp_min(sum(rate(vllm:prompt_tokens_by_source_total{setup=\"hybrid-mtier\"}[2m])), 1e-9) * 100"
+        },
+        {
+          "refId": "B",
+          "legendFormat": "Offload hit %",
+          "expr": "sum(rate(vllm:prompt_tokens_by_source_total{setup=\"hybrid-mtier\",source=\"external_kv_transfer\"}[2m])) / clamp_min(sum(rate(vllm:prompt_tokens_by_source_total{setup=\"hybrid-mtier\"}[2m])), 1e-9) * 100"
+        },
+        {
+          "refId": "C",
+          "legendFormat": "Recompute %",
+          "expr": "sum(rate(vllm:prompt_tokens_by_source_total{setup=\"hybrid-mtier\",source=\"local_compute\"}[2m])) / clamp_min(sum(rate(vllm:prompt_tokens_by_source_total{setup=\"hybrid-mtier\"}[2m])), 1e-9) * 100"
+        },
+        {
+          "refId": "D",
+          "legendFormat": "HBM KV util %",
+          "expr": "avg_over_time(vllm:kv_cache_usage_perc{setup=\"hybrid-mtier\"}[2m]) * 100"
+        }
+      ]
+    },
+    {
+      "id": 31,
+      "type": "timeseries",
+      "title": "CPU \u2014 Cache Hit & KV util",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 19
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 5,
+            "lineWidth": 2
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "HBM hit %"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#76B900",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Offload hit %"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#e66101",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Recompute %"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#d62728",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "HBM KV util %"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#b0b0b0",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "legendFormat": "HBM hit %",
+          "expr": "sum(rate(vllm:prompt_tokens_by_source_total{setup=\"hybrid-cpu\",source=\"local_cache_hit\"}[2m])) / clamp_min(sum(rate(vllm:prompt_tokens_by_source_total{setup=\"hybrid-cpu\"}[2m])), 1e-9) * 100"
+        },
+        {
+          "refId": "B",
+          "legendFormat": "Offload hit %",
+          "expr": "sum(rate(vllm:prompt_tokens_by_source_total{setup=\"hybrid-cpu\",source=\"external_kv_transfer\"}[2m])) / clamp_min(sum(rate(vllm:prompt_tokens_by_source_total{setup=\"hybrid-cpu\"}[2m])), 1e-9) * 100"
+        },
+        {
+          "refId": "C",
+          "legendFormat": "Recompute %",
+          "expr": "sum(rate(vllm:prompt_tokens_by_source_total{setup=\"hybrid-cpu\",source=\"local_compute\"}[2m])) / clamp_min(sum(rate(vllm:prompt_tokens_by_source_total{setup=\"hybrid-cpu\"}[2m])), 1e-9) * 100"
+        },
+        {
+          "refId": "D",
+          "legendFormat": "HBM KV util %",
+          "expr": "avg_over_time(vllm:kv_cache_usage_perc{setup=\"hybrid-cpu\"}[2m]) * 100"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "collapsed": false,
+      "id": 4,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 28
+      },
+      "panels": [],
+      "title": "Utilization"
+    },
+    {
+      "id": 40,
+      "type": "timeseries",
+      "title": "HBM KV-cache occupancy",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 29
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "custom": {
+            "fillOpacity": 10,
+            "lineWidth": 2
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "MTier"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#3f007d",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "CPU"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#7f2704",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "legendFormat": "MTier",
+          "expr": "avg(vllm:kv_cache_usage_perc{setup=\"hybrid-mtier\"})"
+        },
+        {
+          "refId": "B",
+          "legendFormat": "CPU",
+          "expr": "avg(vllm:kv_cache_usage_perc{setup=\"hybrid-cpu\"})"
+        }
+      ]
+    },
+    {
+      "id": 41,
+      "type": "timeseries",
+      "title": "GPU SM utilization",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 29
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "custom": {
+            "fillOpacity": 0,
+            "lineWidth": 2
+          }
+        }
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "legendFormat": "GPU {{gpu}}",
+          "expr": "gpu_utilization_pct"
+        }
+      ]
+    }
+  ],
+  "refresh": "5s",
+  "schemaVersion": 39,
+  "tags": [
+    "vllm",
+    "mtier",
+    "cpu",
+    "sweep"
+  ],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-30m",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "",
+  "title": "MTier vs CPU \u2014 Sweep (live)",
+  "uid": "mtier-vs-cpu-sweep",
+  "version": 1,
+  "weekStart": ""
+}

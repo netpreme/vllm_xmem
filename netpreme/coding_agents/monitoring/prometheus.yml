@@ -22,17 +22,22 @@ scrape_configs:
     static_configs:
       - targets: ["localhost:9091"]
 
-  # ── Demo: two side-by-side instances with setup= label ────────────
-  - job_name: demo_hybrid_cpu
+  # Per-GPU utilization, memory, power, temp (from nvidia-smi)
+  - job_name: gpu_exporter
+    static_configs:
+      - targets: ["localhost:9092"]
+
+  # ── Sweep: mtier on :8001, cpu on :8002 (setup label on each) ────
+  - job_name: vllm_hybrid_mtier
     static_configs:
       - targets: ["localhost:8001"]
         labels:
-          setup: "hybrid-cpu"
+          setup: "hybrid-mtier"
     metrics_path: /metrics
 
-  - job_name: demo_hybrid_mtier
+  - job_name: vllm_hybrid_cpu
     static_configs:
       - targets: ["localhost:8002"]
         labels:
-          setup: "hybrid-mtier"
+          setup: "hybrid-cpu"
     metrics_path: /metrics

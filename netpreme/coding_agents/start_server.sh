@@ -161,7 +161,7 @@ MAX_MODEL_LEN="${MAX_MODEL_LEN:-262144}"
 # the startup check to pass with 9.33 GiB GPU KV for up to ~76K tokens.
 # At MAX_MODEL_LEN=65536 the check needs 8.0 GiB < 9.33 GiB available.
 KV_CACHE_DTYPE="${KV_CACHE_DTYPE:-fp8}"
-GPU_MEM_UTIL="${GPU_UTIL_OVERRIDE:-${GPU_MEMORY_UTILIZATION:-0.75}}"
+GPU_MEM_UTIL="${GPU_UTIL_OVERRIDE:-${GPU_MEMORY_UTILIZATION:-0.9}}"
 MAX_NUM_SEQS="${MAX_NUM_SEQS_OVERRIDE:-${MAX_NUM_SEQS:-256}}"
 NUM_GPU_BLOCKS_OVERRIDE="${NUM_GPU_BLOCKS_OVERRIDE:-}"   # empty = let vLLM decide
 
@@ -289,9 +289,11 @@ trap cleanup INT TERM
 echo "[1/2] Starting vLLM server on GPUs $CVD ..."
 CUDA_VISIBLE_DEVICES="$CVD" \
 PYTHONHASHSEED=0 \
+VLLM_BATCH_INVARIANT=1 \
+VLLM_ATTENTION_BACKEND="${VLLM_ATTENTION_BACKEND:-FLASH_ATTN}" \
 VLLM_ALLOW_LONG_MAX_MODEL_LEN=1 \
 VLLM_LOG_STATS_INTERVAL=1 \
-HF_HUB_OFFLINE=1 \
+HF_HUB_OFFLINE="${HF_HUB_OFFLINE:-1}" \
     "$PYTHON_BIN" -m vllm.entrypoints.openai.api_server \
         --model "$MODEL" \
         --served-model-name "$MODEL" \
@@ -311,6 +313,7 @@ HF_HUB_OFFLINE=1 \
         --max-num-batched-tokens 65536 \
         ${NUM_GPU_BLOCKS_OVERRIDE:+--num-gpu-blocks-override "$NUM_GPU_BLOCKS_OVERRIDE"} \
         --override-generation-config '{"temperature":0,"seed":42}' \
+        --attention-backend "${ATTENTION_BACKEND:-FLASH_ATTN}" \
         --enable-auto-tool-choice \
         --tool-call-parser qwen3_coder \
         > "$VLLM_LOG" 2>&1 &

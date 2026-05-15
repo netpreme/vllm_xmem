@@ -22,12 +22,13 @@ GRAFANA_DATA_DIR="/tmp/grafana_data"
 KEEP_DATA="${1:-}"
 
 # ── 1. Kill any existing instances ──────────────────────────
-echo "Stopping any running Prometheus / Grafana / kv_exporter..."
+echo "Stopping any running Prometheus / Grafana / kv_exporter / gpu_exporter..."
 pkill -f "prometheus --config.file" 2>/dev/null || true
 # The grafana binary spawns as "grafana server" (space, not hyphen).
 # Match on "grafana" broadly to catch manually started instances too.
 pkill -f "grafana"                  2>/dev/null || true
 pkill -f "kv_exporter.py"          2>/dev/null || true
+pkill -f "gpu_exporter.py"         2>/dev/null || true
 sleep 2  # wait for processes to die before wiping data dir
 
 # ── 2. Reset Prometheus data (unless --keep) ─────────────────
@@ -44,6 +45,7 @@ prometheus \
     --config.file="$MONITORING_DIR/prometheus.yml" \
     --storage.tsdb.path="$PROM_DATA_DIR" \
     --storage.tsdb.retention.time=1d \
+    --web.enable-admin-api \
     > /tmp/prometheus.log 2>&1 &
 PROM_PID=$!
 echo "Prometheus started (pid $PROM_PID) → http://localhost:9090"
@@ -84,6 +86,13 @@ EXPORTER_PID=$!
 echo "KV exporter started (pid $EXPORTER_PID) → http://localhost:9091"
 echo "  log: /tmp/kv_exporter.log"
 
+# ── 5b. Start GPU exporter (nvidia-smi → prom_client) ────────
+"$PYTHON_BIN" "$MONITORING_DIR/gpu_exporter.py" \
+    --port 9092 --interval 1.0 > /tmp/gpu_exporter.log 2>&1 &
+GPU_EXPORTER_PID=$!
+echo "GPU exporter started (pid $GPU_EXPORTER_PID) → http://localhost:9092"
+echo "  log: /tmp/gpu_exporter.log"
+
 echo ""
 echo "Dashboard auto-loaded: 'vLLM + XMem — Unified'"
 echo "  Prometheus:   http://localhost:9090"
@@ -95,15 +104,17 @@ echo "Press Ctrl+C to stop all."
 # ── 6. Stay in foreground — Ctrl+C kills all ─────────────────
 cleanup() {
     echo ""
-    echo "Stopping Prometheus / Grafana / kv_exporter..."
-    kill "$PROM_PID"     2>/dev/null || true
-    kill "$GRAFANA_PID"  2>/dev/null || true
-    kill "$EXPORTER_PID" 2>/dev/null || true
-    wait "$PROM_PID"     2>/dev/null || true
-    wait "$GRAFANA_PID"  2>/dev/null || true
-    wait "$EXPORTER_PID" 2>/dev/null || true
+    echo "Stopping Prometheus / Grafana / kv_exporter / gpu_exporter..."
+    kill "$PROM_PID"         2>/dev/null || true
+    kill "$GRAFANA_PID"      2>/dev/null || true
+    kill "$EXPORTER_PID"     2>/dev/null || true
+    kill "$GPU_EXPORTER_PID" 2>/dev/null || true
+    wait "$PROM_PID"         2>/dev/null || true
+    wait "$GRAFANA_PID"      2>/dev/null || true
+    wait "$EXPORTER_PID"     2>/dev/null || true
+    wait "$GPU_EXPORTER_PID" 2>/dev/null || true
     echo "Done."
 }
 trap cleanup INT TERM
 
-wait "$PROM_PID" "$GRAFANA_PID" "$EXPORTER_PID"
+wait "$PROM_PID" "$GRAFANA_PID" "$EXPORTER_PID" "$GPU_EXPORTER_PID"
