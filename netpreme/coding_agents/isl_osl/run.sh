@@ -1,17 +1,54 @@
 #!/usr/bin/env bash
-# Boots vLLM, runs claude -p over SWE-bench Verified problems, and reports
-# ISL/OSL distributions split by assistant-output shape (text/tool/mixed/empty).
+# Single entrypoint: boots vLLM, runs claude -p over a SWE-bench dataset,
+# writes per-turn telemetry, then runs analysis to produce figures.
 #
-# Usage:  bash run.sh                     # uses .env defaults
-#         SWE_LIMIT=20 bash run.sh        # override per-invocation
+# Examples:
+#   ./run.sh                                   # claude × Verified (defaults from .env)
+#   ./run.sh --dataset pro
+#   ./run.sh --limit 50
+#   ./run.sh --model my-served-name
+#   ./run.sh --no-analysis                     # skip analyze.sh at end
 #
 # Layout (under runs/<timestamp>/):
+#   config.json       - resolved run config (model, dataset, machine, etc.)
 #   server.log        - vllm stdout/stderr
-#   problems.jsonl    - SWE-bench verified rows
-#   usage.jsonl       - one row per assistant turn (ISL/OSL/category)
-#   solve_<id>.json   - per-problem run summary
-#   summary.json      - aggregate report (output of summarize.py)
+#   problems.jsonl    - SWE-bench rows
+#   usage.jsonl       - one row per assistant turn (ISL/OSL/category/...)
+#   per_problem/*.csv - per-problem turn-by-turn CSV (consumed by analyze.sh)
+#   solved.txt        - list of solved instance_ids
+#   summary.json      - aggregate stats (output of summarize.py)
+#   analysis/*.png    - figures from analyze.sh (unless --no-analysis)
 set -euo pipefail
+
+# --- flag parsing ------------------------------------------------------------
+BACKEND="vllm"
+DATASET_FLAG=""
+LIMIT_FLAG=""
+MODEL_FLAG=""
+RUN_ANALYSIS=1
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --backend)  BACKEND="$2"; shift 2 ;;
+        --dataset)  DATASET_FLAG="$2"; shift 2 ;;
+        --limit)    LIMIT_FLAG="$2"; shift 2 ;;
+        --model)    MODEL_FLAG="$2"; shift 2 ;;
+        --no-analysis) RUN_ANALYSIS=0; shift ;;
+        -h|--help)  sed -n '2,21p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        *) echo "unknown flag: $1" >&2; exit 2 ;;
+    esac
+done
+case "$BACKEND" in
+    vllm|anthropic) ;;
+    *) echo "unknown --backend (use vllm|anthropic): $BACKEND" >&2; exit 2 ;;
+esac
+case "${DATASET_FLAG:-}" in
+    "")        ;;
+    verified)  export SWE_DATASET="princeton-nlp/SWE-bench_Verified" ;;
+    pro)       export SWE_DATASET="ScaleAI/SWE-bench_Pro" ;;
+    *) echo "unknown --dataset (use verified|pro): $DATASET_FLAG" >&2; exit 2 ;;
+esac
+[[ -n "$LIMIT_FLAG" ]] && export SWE_LIMIT="$LIMIT_FLAG"
+[[ -n "$MODEL_FLAG" ]] && export SERVED_MODEL_NAME="$MODEL_FLAG"
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$HERE/.." && pwd)"
@@ -45,6 +82,32 @@ for __k in "${!__OV[@]}"; do export "$__k=${__OV[$__k]}"; done
 : "${SWE_LIMIT:=500}"
 : "${CLAUDE_MAX_TURNS:=30}"
 : "${CLAUDE_TIMEOUT_SECS:=600}"
+# Export so the Python heredoc + run_one.py subprocess inherit them.
+export SWE_DATASET SWE_SPLIT SWE_LIMIT CLAUDE_MAX_TURNS CLAUDE_TIMEOUT_SECS \
+       MAX_TOKENS_CAP SERVED_MODEL_NAME MODEL_NAME PORT PROXY_PORT HOST \
+       MAX_MODEL_LEN TENSOR_PARALLEL_SIZE GPU_MEMORY_UTILIZATION \
+       TOOL_CALL_PARSER ANTHROPIC_MODEL
+
+# --- resolve upstream (local vLLM vs Anthropic via claude OAuth) ------------
+if [[ "$BACKEND" == "anthropic" ]]; then
+    # Route claude → local proxy → api.anthropic.com. The proxy reuses the
+    # same SSE-parsing/timing path as the vLLM branch, so per-turn ttft_ms /
+    # decode_ms / itl_ms get captured. Authentication is whatever claude
+    # already uses (OAuth bearer from `claude login`), passed through.
+    : "${ANTHROPIC_MODEL:=claude-opus-4-7}"
+    SERVED_MODEL_NAME="$ANTHROPIC_MODEL"
+    UPSTREAM_URL="https://api.anthropic.com"
+else
+    UPSTREAM_URL="http://localhost:${PORT}"
+    # vLLM must already be running. Start it via the sibling server script:
+    #   bash $ROOT/server.sh > /tmp/vllm.log 2>&1 &
+    if ! curl -fsS "$UPSTREAM_URL/v1/models" >/dev/null 2>&1; then
+        echo "[run] vllm is not reachable at $UPSTREAM_URL" >&2
+        echo "       start it first:  bash $ROOT/server.sh" >&2
+        exit 1
+    fi
+fi
+export UPSTREAM_URL
 
 STAMP="$(date +%Y%m%d_%H%M%S)"
 RUN_DIR="$HERE/runs/$STAMP"
@@ -60,8 +123,108 @@ WORKDIRS="/tmp/swe_workdirs/$STAMP"
 mkdir -p "$WORKDIRS" "$PER_PROBLEM_CSV_DIR"
 : >"$SOLVED"
 
-# --- 1. start vLLM (skip if already up on this port) -------------------------
-VLLM_URL="http://localhost:${PORT}"
+# Snapshot resolved config into the run dir so later analysis can recover
+# exactly which model / dataset / agent caps produced these CSVs.
+AGENT_NAME=claude RUN_ID="$STAMP" BACKEND="$BACKEND" \
+    "$VENV_PY" - "$RUN_DIR/config.json" <<'PY'
+import json, os, platform, socket, subprocess, sys
+def g(k, cast=str, default=None):
+    v = os.environ.get(k)
+    if v is None or v == "":
+        return default
+    try: return cast(v)
+    except Exception: return v
+def gpu_info():
+    try:
+        out = subprocess.run(
+            ["nvidia-smi", "--query-gpu=name,memory.total",
+             "--format=csv,noheader"],
+            capture_output=True, text=True, timeout=5,
+        ).stdout.strip()
+        lines = [l.strip() for l in out.splitlines() if l.strip()]
+        if not lines: return None
+        name, mem = (x.strip() for x in lines[0].split(",", 1))
+        return {"name": name, "count": len(lines), "memory_per_gpu": mem}
+    except Exception:
+        return None
+backend = os.environ.get("BACKEND", "vllm")
+if backend == "anthropic":
+    model_block = {
+        "served_name": g("ANTHROPIC_MODEL") or g("SERVED_MODEL_NAME"),
+        "anthropic_version": g("ANTHROPIC_VERSION", default="2023-06-01"),
+    }
+else:
+    model_block = {
+        "hf_id": g("MODEL_NAME"),
+        "served_name": g("SERVED_MODEL_NAME"),
+        "tool_call_parser": g("TOOL_CALL_PARSER"),
+        "max_model_len": g("MAX_MODEL_LEN", int),
+        "tensor_parallel_size": g("TENSOR_PARALLEL_SIZE", int),
+        "gpu_memory_utilization": g("GPU_MEMORY_UTILIZATION", float),
+    }
+cfg = {
+    "run_id": os.environ["RUN_ID"],
+    "agent": os.environ["AGENT_NAME"],
+    "backend": backend,
+    "machine": {
+        "hostname": socket.gethostname(),
+        "platform": f"{platform.system()} {platform.release()}",
+        "gpu": gpu_info() if backend == "vllm" else None,
+    },
+    "model": model_block,
+    "dataset": {
+        "name": g("SWE_DATASET"),
+        "split": g("SWE_SPLIT"),
+        "limit": g("SWE_LIMIT", int),
+    },
+    "agent_settings": {
+        "claude_max_turns": g("CLAUDE_MAX_TURNS", int),
+        "claude_timeout_secs": g("CLAUDE_TIMEOUT_SECS", int),
+        "max_tokens_cap": g("MAX_TOKENS_CAP", int),
+    },
+    "server": {
+        "host": g("HOST"),
+        "port": g("PORT", int),
+        "proxy_port": g("PROXY_PORT", int),
+    },
+}
+with open(sys.argv[1], "w") as fh:
+    json.dump(cfg, fh, indent=2); fh.write("\n")
+
+# Console summary so the operator sees the resolved config at run start.
+def line(label, value):
+    print(f"  {label:<22} {value}")
+gpu = cfg["machine"]["gpu"]
+gpu_str = (f'{gpu["name"]} × {gpu["count"]} ({gpu["memory_per_gpu"]})'
+           if gpu else "n/a")
+print("[run] resolved config:")
+line("run_id",         cfg["run_id"])
+line("agent",          cfg["agent"])
+line("backend",        cfg["backend"])
+line("hostname",       cfg["machine"]["hostname"])
+line("gpu",            gpu_str)
+if cfg["backend"] == "anthropic":
+    line("model", cfg["model"]["served_name"])
+    line("api_version", cfg["model"]["anthropic_version"])
+else:
+    line("model",
+         f'{cfg["model"]["served_name"]}  ({cfg["model"]["hf_id"]})')
+    line("max_model_len",  cfg["model"]["max_model_len"])
+    line("tensor_parallel", cfg["model"]["tensor_parallel_size"])
+    line("gpu_mem_util",   cfg["model"]["gpu_memory_utilization"])
+    line("tool_parser",    cfg["model"]["tool_call_parser"])
+line("dataset",        f'{cfg["dataset"]["name"]}  '
+                       f'(split={cfg["dataset"]["split"]}, '
+                       f'limit={cfg["dataset"]["limit"]})')
+line("max_turns",      cfg["agent_settings"]["claude_max_turns"])
+line("timeout_secs",   cfg["agent_settings"]["claude_timeout_secs"])
+line("max_tokens_cap", cfg["agent_settings"]["max_tokens_cap"])
+line("upstream",       os.environ.get("UPSTREAM_URL", "?"))
+line("proxy_port",     cfg["server"]["proxy_port"])
+PY
+echo "[run] wrote $RUN_DIR/config.json"
+
+# --- 1. resolve upstream (vLLM-local or Anthropic remote) -------------------
 PROXY_URL="http://localhost:${PROXY_PORT}"
 VLLM_PID=""
 PROXY_PID=""
@@ -79,74 +242,50 @@ cleanup() {
 }
 trap cleanup EXIT
 
-if curl -fsS "$VLLM_URL/v1/models" >/dev/null 2>&1; then
-    echo "[run] vllm already serving on $VLLM_URL — reusing"
-else
-    echo "[run] starting vllm (logs: $RUN_DIR/server.log)"
-    "$ROOT/server.sh" >"$RUN_DIR/server.log" 2>&1 &
-    VLLM_PID=$!
-
-    echo -n "[run] waiting for vllm /v1/models"
-    for _ in $(seq 1 240); do
-        if curl -fsS "$VLLM_URL/v1/models" >/dev/null 2>&1; then
-            echo " — ready"
-            break
-        fi
-        if ! kill -0 "$VLLM_PID" 2>/dev/null; then
-            echo
-            echo "[run] vllm exited; tail of server.log:"
-            tail -n 50 "$RUN_DIR/server.log" >&2
-            exit 1
-        fi
-        echo -n "."
-        sleep 5
-    done
-    if ! curl -fsS "$VLLM_URL/v1/models" >/dev/null 2>&1; then
-        echo " — timed out"
-        exit 1
-    fi
+# --- 1b. start logging proxy -------------------------------------------------
+PROXY_AUTH_ARGS=()
+if [[ "$BACKEND" == "anthropic" ]]; then
+    # Forward claude's outbound Authorization header (OAuth bearer) verbatim
+    # so api.anthropic.com sees the same auth it normally would.
+    PROXY_AUTH_ARGS=( --passthrough-auth )
+    # Tell claude to talk to the proxy. ANTHROPIC_AUTH_TOKEN keeps the OAuth
+    # flow active (vs ANTHROPIC_API_KEY which switches to x-api-key auth).
+    BEARER=$("$VENV_PY" -c "
+import json
+print((json.load(open('/root/.claude/.credentials.json')).get('claudeAiOauth') or json.load(open('/root/.claude/.credentials.json'))).get('accessToken',''))
+")
+    [[ -z "$BEARER" ]] && { echo "[run] could not read OAuth bearer from ~/.claude/.credentials.json" >&2; exit 1; }
+    export ANTHROPIC_BASE_URL="$PROXY_URL"
+    export ANTHROPIC_AUTH_TOKEN="$BEARER"
 fi
 
-# Verify the Anthropic Messages route exists on this build.
-if ! curl -fsS -o /dev/null -X POST "$VLLM_URL/v1/messages" \
-        -H 'content-type: application/json' \
-        -d "{\"model\":\"$SERVED_MODEL_NAME\",\"max_tokens\":1,\"messages\":[{\"role\":\"user\",\"content\":\"ping\"}]}"; then
-    echo "[run] WARNING: $VLLM_URL/v1/messages probe failed — check server.log" >&2
-fi
-
-# --- 1b. start logging proxy ------------------------------------------------
-echo "[run] starting proxy on $PROXY_URL"
-"$VENV_PY" "$HERE/proxy.py" \
-    --upstream "$VLLM_URL" \
+echo "[run] starting proxy on $PROXY_URL  →  $UPSTREAM_URL"
+"$VENV_PY" "$HERE/pipeline/proxy.py" \
+    --upstream "$UPSTREAM_URL" \
     --port "$PROXY_PORT" \
     --per-problem-csv-dir "$PER_PROBLEM_CSV_DIR" \
     --max-tokens-cap "${MAX_TOKENS_CAP:-4096}" \
+    "${PROXY_AUTH_ARGS[@]}" \
     >/dev/null 2>&1 &
 PROXY_PID=$!
-
 echo -n "[run] waiting for proxy /health"
 for _ in $(seq 1 30); do
     if curl -fsS "$PROXY_URL/health" >/dev/null 2>&1; then
-        echo " — ready"
-        break
+        echo " — ready"; break
     fi
     if ! kill -0 "$PROXY_PID" 2>/dev/null; then
         echo
-        echo "[run] proxy exited; tail of proxy.log:"
-        tail -n 30 "$RUN_DIR/proxy.log" >&2
-        exit 1
+        echo "[run] proxy exited unexpectedly"; exit 1
     fi
-    echo -n "."
-    sleep 1
+    echo -n "."; sleep 1
 done
 if ! curl -fsS "$PROXY_URL/health" >/dev/null 2>&1; then
-    echo " — timed out"
-    exit 1
+    echo " — timed out"; exit 1
 fi
 
 # --- 2. fetch dataset --------------------------------------------------------
 if [[ ! -s "$PROBLEMS" ]]; then
-    "$VENV_PY" "$HERE/fetch_dataset.py" \
+    "$VENV_PY" "$HERE/pipeline/fetch_dataset.py" \
         --dataset "$SWE_DATASET" \
         --split "$SWE_SPLIT" \
         --limit "$SWE_LIMIT" \
@@ -166,33 +305,37 @@ while IFS= read -r line; do
 
     echo "[run] [$i/$TOTAL] $instance_id ($repo @ ${base_commit:0:8})"
 
-    # Cold-start vLLM so each problem sees an empty prefix cache.
-    bash "$HERE/reset_vllm.sh"
-    # Restart the proxy too — it kept the upstream connection pool that just
-    # went stale when we killed vllm.
-    if [[ -n "${PROXY_PID:-}" ]] && kill -0 "$PROXY_PID" 2>/dev/null; then
-        kill "$PROXY_PID" 2>/dev/null || true
-        wait "$PROXY_PID" 2>/dev/null || true
+    if [[ "$BACKEND" == "vllm" ]]; then
+        # Cold-start vLLM so each problem sees an empty prefix cache, then
+        # restart the proxy (whose connection pool went stale with vllm).
+        bash "$HERE/pipeline/reset_vllm.sh"
+        if [[ -n "${PROXY_PID:-}" ]] && kill -0 "$PROXY_PID" 2>/dev/null; then
+            kill "$PROXY_PID" 2>/dev/null || true
+            wait "$PROXY_PID" 2>/dev/null || true
+        fi
+        "$VENV_PY" "$HERE/pipeline/proxy.py" \
+            --upstream "$UPSTREAM_URL" \
+            --port "$PROXY_PORT" \
+            --per-problem-csv-dir "$PER_PROBLEM_CSV_DIR" \
+            --max-tokens-cap "${MAX_TOKENS_CAP:-4096}" \
+            >/dev/null 2>&1 &
+        PROXY_PID=$!
+        until curl -fsS "$PROXY_URL/health" >/dev/null 2>&1; do sleep 1; done
     fi
-    "$VENV_PY" "$HERE/proxy.py" \
-        --upstream "$VLLM_URL" \
-        --port "$PROXY_PORT" \
-        --per-problem-csv-dir "$PER_PROBLEM_CSV_DIR" \
-        --max-tokens-cap "${MAX_TOKENS_CAP:-4096}" \
-        >/dev/null 2>&1 &
-    PROXY_PID=$!
-    until curl -fsS "$PROXY_URL/health" >/dev/null 2>&1; do sleep 1; done
 
-    if "$VENV_PY" "$HERE/run_one.py" \
+    # Both backends now go through the proxy, which writes the per-problem
+    # CSVs directly with full SSE-derived timing.
+    run_one_args=( --base-url "$PROXY_URL" )
+    if "$VENV_PY" "$HERE/pipeline/run_one.py" \
         --instance-id "$instance_id" \
         --repo "$repo" \
         --base-commit "$base_commit" \
         --problem-statement "$problem" \
         --model "$SERVED_MODEL_NAME" \
-        --base-url "$PROXY_URL" \
         --workdir-root "$WORKDIRS" \
         --max-turns "$CLAUDE_MAX_TURNS" \
         --timeout-secs "$CLAUDE_TIMEOUT_SECS" \
+        "${run_one_args[@]}" \
         >/dev/null 2>/dev/null
     then
         echo "$instance_id" >> "$SOLVED"
@@ -205,3 +348,8 @@ echo
 echo "[run] done. results at $RUN_DIR"
 echo "[run]   solved.txt: $(wc -l <"$SOLVED") of $TOTAL"
 echo "[run]   per-problem CSVs: $(ls "$PER_PROBLEM_CSV_DIR" | wc -l)"
+
+if [[ "$RUN_ANALYSIS" -eq 1 ]]; then
+    echo
+    bash "$HERE/analyze.sh" "$RUN_DIR"
+fi

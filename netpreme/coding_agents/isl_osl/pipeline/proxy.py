@@ -51,6 +51,12 @@ USAGE_LOG: Path | None = None
 USAGE_CSV: Path | None = None
 PER_PROBLEM_CSV_DIR: Path | None = None
 MAX_TOKENS_CAP: int = 0  # 0 = no clamp
+# Header overrides applied to every upstream request (e.g. Anthropic auth).
+INJECT_HEADERS: dict[str, str] = {}
+# When True, keep client-supplied auth headers (authorization, x-api-key)
+# instead of stripping them. Needed when proxying to api.anthropic.com so
+# claude's OAuth bearer reaches Anthropic.
+PASSTHROUGH_AUTH: bool = False
 LOG_LOCK = asyncio.Lock()
 
 
@@ -257,11 +263,17 @@ async def messages(request: Request) -> Response:
     # Strip accept-encoding so the upstream returns uncompressed bytes — the
     # SSE parser below scans raw bytes for `data:` lines, which silently
     # match nothing if the wire is gzip/br/zstd.
+    # Strip hop-by-hop headers + any inbound auth (the proxy injects its own
+    # upstream credentials via INJECT_HEADERS below).
+    strip = {"host", "content-length", "accept-encoding"}
+    if not PASSTHROUGH_AUTH:
+        strip |= {"x-api-key", "authorization"}
     fwd_headers = {
-        k: v for k, v in request.headers.items()
-        if k.lower() not in ("host", "content-length", "accept-encoding")
+        k: v for k, v in request.headers.items() if k.lower() not in strip
     }
     fwd_headers["accept-encoding"] = "identity"
+    for k, v in INJECT_HEADERS.items():
+        fwd_headers[k] = v
 
     # Claude requests max_tokens in {20000, 32000} which combined with a
     # 200K+ agent-loop conversation overflows vLLM's strict
@@ -418,11 +430,17 @@ async def messages(request: Request) -> Response:
 )
 async def passthrough(path: str, request: Request) -> Response:
     body = await request.body()
+    # Strip hop-by-hop headers + any inbound auth (the proxy injects its own
+    # upstream credentials via INJECT_HEADERS below).
+    strip = {"host", "content-length", "accept-encoding"}
+    if not PASSTHROUGH_AUTH:
+        strip |= {"x-api-key", "authorization"}
     fwd_headers = {
-        k: v for k, v in request.headers.items()
-        if k.lower() not in ("host", "content-length", "accept-encoding")
+        k: v for k, v in request.headers.items() if k.lower() not in strip
     }
     fwd_headers["accept-encoding"] = "identity"
+    for k, v in INJECT_HEADERS.items():
+        fwd_headers[k] = v
     url = f"{UPSTREAM}/{path}"
     if request.url.query:
         url = f"{url}?{request.url.query}"
@@ -454,10 +472,24 @@ def main() -> int:
                     help="optional directory; one CSV per instance_id written here")
     ap.add_argument("--max-tokens-cap", type=int, default=4096,
                     help="clamp claude's max_tokens to this; 0 = no clamp")
+    ap.add_argument("--inject-header", action="append", default=[],
+                    metavar="NAME:VALUE",
+                    help="header to inject on every upstream request (repeatable)")
+    ap.add_argument("--passthrough-auth", action="store_true",
+                    help="forward client's Authorization/x-api-key headers "
+                         "unchanged (needed for Anthropic OAuth bearer)")
     args = ap.parse_args()
 
-    global UPSTREAM, USAGE_LOG, USAGE_CSV, PER_PROBLEM_CSV_DIR, MAX_TOKENS_CAP
+    global UPSTREAM, USAGE_LOG, USAGE_CSV, PER_PROBLEM_CSV_DIR, MAX_TOKENS_CAP, INJECT_HEADERS, PASSTHROUGH_AUTH
+    PASSTHROUGH_AUTH = bool(args.passthrough_auth)
     UPSTREAM = args.upstream.rstrip("/")
+    for spec in args.inject_header:
+        if ":" not in spec:
+            print(f"[proxy] ignoring malformed --inject-header: {spec!r}",
+                  file=sys.stderr)
+            continue
+        name, _, value = spec.partition(":")
+        INJECT_HEADERS[name.strip()] = value.strip()
     if args.usage_log is not None:
         USAGE_LOG = args.usage_log
         USAGE_LOG.parent.mkdir(parents=True, exist_ok=True)

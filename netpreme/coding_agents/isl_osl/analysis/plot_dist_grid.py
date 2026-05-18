@@ -6,8 +6,10 @@
   Row 3: ISL_new (uncached) distribution per difficulty bucket
 
 Each cell is a log-scaled histogram with median (dashed) and mean (dotted)
-overlays. The OSL row also gets the semantic region bands (tool-call JSON /
-text+tool / Edit-Write / large Write).
+overlays. Only the OSL row carries the semantic region bands (tool-call JSON
+/ text+tool / Edit-Write / large Write / huge context); the ISL and ISL_new
+rows are bare because those token ranges describe context size, not output
+archetypes, and the OSL labels would mislabel them.
 
 Usage:
   python3 plot_dist_grid.py \
@@ -30,15 +32,18 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 
-VERIFIED_BUCKETS = ["<15 min fix", "15 min - 1 hour", "1-4 hours", ">4 hours"]
-COL_COLOR = ["#3b82f6", "#ec4899", "#22c55e", "#a855f7"]
-# Semantic regions shared across all panels (OSL-style; same labels everywhere).
+VERIFIED_BUCKETS = ["<15 min fix", "15 min - 1 hour", "1+ hours"]
+COL_COLOR = ["#3b82f6", "#ec4899", "#22c55e"]
+# Collapse the sparse ">4 hours" bucket (≈3 problems) into "1+ hours" alongside
+# "1-4 hours" so the hard bucket has enough samples to be meaningful.
+DIFFICULTY_REMAP = {">4 hours": "1+ hours", "1-4 hours": "1+ hours"}
+# Semantic regions for the OSL row (no OSL turns exceed ~5k tokens in
+# practice, so the regions stop at 50k).
 REGIONS = [
     (1,        100,    "#dbeafe", "tool call JSON"),
     (100,      1_000,  "#fef9c3", "text + tool"),
     (1_000,    5_000,  "#fce7f3", "Edit/Write"),
     (5_000,    50_000, "#dcfce7", "large Write"),
-    (50_000,   300_000,"#e0e7ff", "huge context"),
 ]
 # Uniform x-range across the entire figure so all panels are visually comparable.
 XLIM_ALL = (1, 300_000)
@@ -66,6 +71,8 @@ def load_bucket_map(run_dir: Path, field: str) -> dict[str, str]:
         v = r.get(field)
         if isinstance(v, list):
             v = ",".join(map(str, v))
+        if field == "difficulty":
+            v = DIFFICULTY_REMAP.get(v, v)
         out[r["instance_id"]] = v
     return out
 
@@ -79,11 +86,13 @@ def load_turns(run_dir: Path) -> dict[str, list[dict]]:
     return out
 
 
-def hist_panel(ax, vals: np.ndarray, label: str, bucket_label: str, color: str) -> int:
+def hist_panel(ax, vals: np.ndarray, label: str, bucket_label: str, color: str,
+               show_regions: bool = True) -> int:
     """Render one histogram panel; returns the max bin count (for y-uniformizing)."""
     vals = vals[vals > 0]
-    for lo, hi, fill, _txt in REGIONS:
-        ax.axvspan(lo, hi, color=fill, alpha=0.45, zorder=0)
+    if show_regions:
+        for lo, hi, fill, _txt in REGIONS:
+            ax.axvspan(lo, hi, color=fill, alpha=0.45, zorder=0)
     if not len(vals):
         ax.set_title(f"{label} — {bucket_label}\n(no data)"); return 0
     bins = np.logspace(np.log10(XLIM_ALL[0]), np.log10(XLIM_ALL[1]), 36)
@@ -151,23 +160,27 @@ def main():
         fontsize=14,
     )
     # First pass: render histograms and capture row-wise max count.
+    # OSL-archetype region bands only render on the OSL row (rows for ISL /
+    # ISL_new measure context size, where the OSL labels would mislabel).
     row_max: list[int] = [0] * rows
     for ri, (m, label) in enumerate(METRICS):
         for ci, b in enumerate(buckets):
             color = COL_COLOR[ci % len(COL_COLOR)]
-            mx = hist_panel(axes[ri, ci], np.array(vals[(m, b)]), label, b, color)
+            mx = hist_panel(axes[ri, ci], np.array(vals[(m, b)]), label, b, color,
+                            show_regions=(m == "osl"))
             row_max[ri] = max(row_max[ri], mx)
             if ci == 0:
                 axes[ri, ci].set_ylabel(f"{label}\nCount")
             if ri == rows - 1:
                 axes[ri, ci].set_xlabel("tokens (log scale)")
     # Second pass: enforce identical y-axis per row + add region annotations
-    # using the now-finalized y range.
+    # using the now-finalized y range (OSL row only).
     for ri, (m, label) in enumerate(METRICS):
         ymax = row_max[ri] * 1.05
         for ci, b in enumerate(buckets):
             axes[ri, ci].set_ylim(0, ymax)
-            annotate_regions(axes[ri, ci], np.array(vals[(m, b)]), ymax)
+            if m == "osl":
+                annotate_regions(axes[ri, ci], np.array(vals[(m, b)]), ymax)
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
     plt.tight_layout(rect=(0, 0, 1, 0.97))
