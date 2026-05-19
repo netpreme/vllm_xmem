@@ -27,11 +27,13 @@ Usage:
 import argparse
 import atexit
 import concurrent.futures
+import itertools
 import json
 import os
 import queue as _queue
 import shutil
 import signal
+import socket
 import subprocess
 import sys
 import threading
@@ -44,11 +46,13 @@ import requests
 
 # ── paths ─────────────────────────────────────────────────────────────────────
 SCRIPT_DIR      = Path(__file__).resolve().parent
-ENV_FILE        = SCRIPT_DIR.parent / ".env"
+BENCH_ROOT      = SCRIPT_DIR.parent
+AGENT_ROOT      = BENCH_ROOT.parent
+ENV_FILE        = AGENT_ROOT / ".env"
 WORKSPACE_ROOT  = Path("/tmp/swe_workspaces")
-RESULTS_DIR     = SCRIPT_DIR / "results_benchmarks"
-START_SCRIPT    = SCRIPT_DIR.parent / "start_server.sh"
-MONITORING_DIR  = SCRIPT_DIR.parent / "monitoring"
+RESULTS_DIR     = BENCH_ROOT / "results_benchmarks"
+START_SCRIPT    = AGENT_ROOT / "start_server.sh"
+MONITORING_DIR  = AGENT_ROOT / "monitoring"
 PROM_CONFIG     = MONITORING_DIR / "prometheus.yml"
 PROM_DATA_DIR   = Path("/tmp/prometheus_data")
 PROM_URL        = "http://localhost:9090"
@@ -151,7 +155,7 @@ def stop_gpu_exporter(proc: "subprocess.Popen | None") -> None:
 
 # ── analyzer runner (called once per level after the snapshot is saved) ──────
 
-ANALYZER_SCRIPT = SCRIPT_DIR.parent / "analysis" / "analyze_snapshot.py"
+ANALYZER_SCRIPT = AGENT_ROOT / "analysis" / "analyze_snapshot.py"
 VENV_PYTHON    = Path("/home/ubuntu/vllm_xmem/.venv/bin/python")
 
 
@@ -180,8 +184,18 @@ def run_analyzer(level_dir: Path, port: int = 9099) -> None:
 
 # ── Prometheus lifecycle (per level: wipe → start → snapshot → stop) ──────────
 
-def start_prometheus() -> subprocess.Popen:
-    """Wipe TSDB and start a fresh Prometheus with admin API enabled."""
+def start_prometheus() -> "subprocess.Popen | None":
+    """Reuse an existing Prometheus on :9090 if one is healthy (so an external
+    monitoring stack keeps running between bench invocations). Otherwise start
+    a fresh one with admin API enabled."""
+    try:
+        r = requests.get(f"{PROM_URL}/-/ready", timeout=2)
+        if r.status_code == 200:
+            print(f"  [prom] Reusing existing Prometheus on :9090", flush=True)
+            return None
+    except Exception:
+        pass
+
     subprocess.run(["pkill", "-f", "prometheus --config.file"], capture_output=True)
     time.sleep(2)
     if PROM_DATA_DIR.exists():
@@ -220,7 +234,10 @@ def start_prometheus() -> subprocess.Popen:
         time.sleep(1)
 
 
-def stop_prometheus(proc: subprocess.Popen) -> None:
+def stop_prometheus(proc: "subprocess.Popen | None") -> None:
+    if proc is None:
+        # External Prometheus (e.g. from monitoring stack) — leave it alone.
+        return
     print(f"  [prom] Stopping ...", flush=True)
     try:
         os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
@@ -399,6 +416,14 @@ def setup_workspace(instance: dict, workspace_root: Path | None = None) -> Path:
 _RUNNING_CLAUDES: set = set()
 _RUNNING_CLAUDES_LOCK = threading.Lock()
 
+# Capture-mode state. Populated by main() when --capture-traces is set.
+# When None, run_claude_task points claude directly at the vLLM base_url.
+# When set, run_claude_task spawns a per-session proxy and routes claude through it.
+_CAPTURE_CFG: "dict | None" = None
+# Capture proxy lifetime is per-task. Track them so cleanup can kill stragglers.
+_RUNNING_PROXIES: set = set()
+_RUNNING_PROXIES_LOCK = threading.Lock()
+
 
 def _claudes_kill_all() -> None:
     """Kill every in-flight claude subprocess. Used at end-of-level cleanup."""
@@ -412,11 +437,140 @@ def _claudes_kill_all() -> None:
             pass
 
 
+def _proxies_kill_all() -> None:
+    """Kill every in-flight capture proxy. Used at end-of-level cleanup."""
+    with _RUNNING_PROXIES_LOCK:
+        procs = list(_RUNNING_PROXIES)
+        _RUNNING_PROXIES.clear()
+    for p in procs:
+        try:
+            p.terminate()
+        except Exception:
+            pass
+    for p in procs:
+        try:
+            p.wait(timeout=3)
+        except Exception:
+            try: p.kill()
+            except Exception: pass
+
+
+def _alloc_free_port() -> int:
+    """Get an OS-assigned ephemeral port. Caller binds soon after — small race
+    window is acceptable; capture_proxy uses SO_REUSEADDR/SO_REUSEPORT."""
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
+    finally:
+        s.close()
+
+
+_CAPTURE_PROXY_SCRIPT = SCRIPT_DIR / "record_proxy.py"
+
+
+def start_capture_proxy(trace_file: Path, session_id: str, upstream: str,
+                        timeout_s: float = 8.0) -> tuple[subprocess.Popen, int]:
+    """Spawn capture_proxy.py and return (process, port). Raises on startup failure."""
+    for attempt in range(3):
+        port = _alloc_free_port()
+        proc = subprocess.Popen(
+            [sys.executable, str(_CAPTURE_PROXY_SCRIPT),
+             "--port", str(port),
+             "--upstream", upstream,
+             "--trace", str(trace_file),
+             "--session-id", session_id],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            stdin=subprocess.DEVNULL,
+            text=True,
+            bufsize=1,
+        )
+        # Read until we see the "ready" line (or process dies).
+        t0 = time.monotonic()
+        ready = False
+        while time.monotonic() - t0 < timeout_s:
+            if proc.poll() is not None:
+                break
+            line = proc.stdout.readline() if proc.stdout else ""
+            if not line:
+                time.sleep(0.05)
+                continue
+            if "capture_proxy ready" in line:
+                ready = True
+                break
+        if ready:
+            with _RUNNING_PROXIES_LOCK:
+                _RUNNING_PROXIES.add(proc)
+            return proc, port
+        # Failed — kill and retry with a new port.
+        try: proc.kill()
+        except Exception: pass
+        try: proc.wait(timeout=2)
+        except Exception: pass
+    raise RuntimeError(f"capture_proxy failed to start (upstream={upstream}, trace={trace_file})")
+
+
+def _stop_capture_proxy(proc: subprocess.Popen) -> None:
+    with _RUNNING_PROXIES_LOCK:
+        _RUNNING_PROXIES.discard(proc)
+    try:
+        proc.terminate()
+    except Exception:
+        pass
+    try:
+        proc.wait(timeout=5)
+    except Exception:
+        try: proc.kill()
+        except Exception: pass
+
+
+def _log_session_start(capture_cfg: dict, instance_id: str,
+                       trace_filename: str, workdir: Path) -> None:
+    """Append a session-start record to sessions.jsonl for replay scheduling."""
+    t_rel = time.monotonic() - capture_cfg["t_level_start_mono"]
+    rec = {
+        "instance_id":      instance_id,
+        "trace_file":       trace_filename,
+        "t_session_start":  round(t_rel, 4),
+        "workdir":          workdir.name,
+        "t_wall_start":     time.time(),
+    }
+    with capture_cfg["sessions_lock"]:
+        with open(capture_cfg["sessions_file"], "a") as f:
+            f.write(json.dumps(rec) + "\n")
+
+
 def run_claude_task(instance: dict, workdir: Path, model: str, base_url: str) -> tuple[str, bool]:
-    """Run a single claude -p session on a SWE-bench problem. Return (instance_id, ok)."""
+    """Run a single claude -p session on a SWE-bench problem. Return (instance_id, ok).
+
+    If _CAPTURE_CFG is set, spawn a per-session capture proxy and route claude
+    through it. The proxy forwards to `base_url` (the real vLLM) and writes a
+    JSONL trace to <trace_dir>/<instance_id>.jsonl."""
+    proxy_proc: "subprocess.Popen | None" = None
+    claude_url = base_url
+    instance_id = instance["instance_id"]
+
+    if _CAPTURE_CFG is not None:
+        trace_dir = Path(_CAPTURE_CFG["trace_dir"])
+        trace_path = trace_dir / f"{instance_id}.jsonl"
+        try:
+            proxy_proc, port = start_capture_proxy(
+                trace_file=trace_path,
+                session_id=instance_id,
+                upstream=base_url,
+            )
+            claude_url = f"http://127.0.0.1:{port}"
+            _log_session_start(_CAPTURE_CFG, instance_id, trace_path.name, workdir)
+        except Exception:
+            # If proxy fails to start, fall back to direct connection rather than
+            # killing the task — the bench is still useful even with partial capture.
+            proxy_proc = None
+            claude_url = base_url
+
     env = {
         **os.environ,
-        "ANTHROPIC_BASE_URL":             base_url,
+        "ANTHROPIC_BASE_URL":             claude_url,
         "ANTHROPIC_API_KEY":              "dummy",
         "ANTHROPIC_AUTH_TOKEN":           "dummy",
         "ANTHROPIC_DEFAULT_OPUS_MODEL":   model,
@@ -446,9 +600,12 @@ def run_claude_task(instance: dict, workdir: Path, model: str, base_url: str) ->
             finally:
                 with _RUNNING_CLAUDES_LOCK:
                     _RUNNING_CLAUDES.discard(proc)
-        return instance["instance_id"], (rc == 0)
+        return instance_id, (rc == 0)
     except Exception:
-        return instance["instance_id"], False
+        return instance_id, False
+    finally:
+        if proxy_proc is not None:
+            _stop_capture_proxy(proxy_proc)
 
 
 # ── per-level orchestration ───────────────────────────────────────────────────
@@ -571,6 +728,7 @@ def _run_setup_pool(
         # Kill in-flight claude subprocesses BEFORE shutdown(wait=...).
         # Otherwise worker threads stuck in proc.wait() prevent Python exit.
         _claudes_kill_all()
+        _proxies_kill_all()
         ex.shutdown(wait=True, cancel_futures=True)
         _update_shared()
 
@@ -719,6 +877,11 @@ def run_level(
     t_start_unix = time.time()
     t_start_mono = time.monotonic()
 
+    # If capture is enabled, anchor session-start timestamps to this level's start.
+    if _CAPTURE_CFG is not None:
+        _CAPTURE_CFG["t_level_start_mono"] = t_start_mono
+        _CAPTURE_CFG["t_level_start_unix"] = t_start_unix
+
     shared_state: dict[str, dict] = {s["setup"]: {} for s in setup_specs}
 
     # Live status thread (1s, in-place updates)
@@ -825,6 +988,10 @@ def main() -> None:
                     help="Base dir for cloned task repos (default: /tmp/swe_workspaces_p<port>)")
     ap.add_argument("--no-clone", action="store_true",
                     help="Skip repo setup; run claude in cwd")
+    ap.add_argument("--capture-traces", type=str, default=None,
+                    help="If set, spawn a per-claude capture proxy and write trace JSONLs into "
+                         "this directory (one file per session + sessions.jsonl + capture_meta.json). "
+                         "Only meaningful with a single --setup and --concurrency level.")
     args = ap.parse_args()
 
     duration_s = args.sustained_mins * 60
@@ -931,12 +1098,38 @@ def main() -> None:
     print(f"  Difficulty   : {args.difficulty or 'all'}")
     print(f"  Dataset      : SWE-bench Verified  ({len(instances)} tasks)")
     print(f"  Output       : {run_dir}/")
-    print(f"  Determinism  : VLLM_BATCH_INVARIANT=1  seed=42  temperature=0")
+    _bi = os.environ.get("VLLM_BATCH_INVARIANT", "1")
+    print(f"  Determinism  : VLLM_BATCH_INVARIANT={_bi}  seed=42  temperature=0")
+    if args.capture_traces:
+        print(f"  Capture      : ON  →  {args.capture_traces}/")
+        if len(setup_specs) != 1:
+            print(f"  {_RED}WARN{_OFF}: --capture-traces with >1 setup is unusual — only one will be replayable")
     print(f"{'═'*70}")
 
     for concurrency in args.concurrency:
         level_dir = run_dir / f"c{concurrency:03d}"
         level_dir.mkdir(parents=True, exist_ok=True)
+
+        # ── Capture config: per-level traces/ dir + sessions.jsonl ──
+        global _CAPTURE_CFG
+        capture_dir: "Path | None" = None
+        if args.capture_traces:
+            capture_dir = Path(args.capture_traces).expanduser().resolve()
+            if len(args.concurrency) > 1:
+                capture_dir = capture_dir / f"c{concurrency:03d}"
+            capture_dir.mkdir(parents=True, exist_ok=True)
+            (capture_dir / "traces").mkdir(exist_ok=True)
+            sessions_file = capture_dir / "sessions.jsonl"
+            sessions_file.write_text("")  # truncate
+            _CAPTURE_CFG = {
+                "trace_dir":           capture_dir / "traces",
+                "sessions_file":       sessions_file,
+                "sessions_lock":       threading.Lock(),
+                "t_level_start_mono":  0.0,  # set when run_level starts
+                "t_level_start_unix":  0.0,
+            }
+        else:
+            _CAPTURE_CFG = None
 
         # 1) Fresh Prometheus (admin API enabled)
         global _prom_proc
@@ -988,7 +1181,7 @@ def main() -> None:
                 "difficulty":     args.difficulty,
                 "swe_bench_pool_size": len(instances),
                 "determinism": {
-                    "VLLM_BATCH_INVARIANT": 1,
+                    "VLLM_BATCH_INVARIANT": int(os.environ.get("VLLM_BATCH_INVARIANT", "1") or 0),
                     "seed":                  42,
                     "temperature":           0,
                 },
@@ -1001,6 +1194,39 @@ def main() -> None:
             }
             (level_dir / "config.json").write_text(json.dumps(config, indent=2))
             print(f"  → {level_dir}/  (config.json + prom_snapshot/)", flush=True)
+
+            # If capture was on, emit capture_meta.json next to traces/.
+            if capture_dir is not None and _CAPTURE_CFG is not None:
+                # Count sessions actually captured (lines in sessions.jsonl).
+                sf = _CAPTURE_CFG["sessions_file"]
+                try:
+                    n_sessions = sum(1 for _ in open(sf))
+                except Exception:
+                    n_sessions = 0
+                capture_meta = {
+                    "kind":            "capture_level",
+                    "concurrency":     concurrency,
+                    "model":           model,
+                    "setup":           setup_specs[0]["setup"] if setup_specs else None,
+                    "vllm_port":       setup_specs[0]["port"]  if setup_specs else None,
+                    "gpus":            setup_specs[0]["gpus"]  if setup_specs else None,
+                    "sustained_mins":  args.sustained_mins,
+                    "n_sessions":      n_sessions,
+                    "t_level_start_unix": _CAPTURE_CFG["t_level_start_unix"],
+                    "t_level_end_unix":   level_meta["t_end_unix"],
+                    "duration_s":      level_meta["duration_s"],
+                    "determinism": {
+                        "VLLM_BATCH_INVARIANT": int(os.environ.get("VLLM_BATCH_INVARIANT", "1") or 0),
+                        "seed":                  42,
+                        "temperature":           0,
+                    },
+                    "sweep_run_dir":   str(level_dir),
+                }
+                (capture_dir / "capture_meta.json").write_text(
+                    json.dumps(capture_meta, indent=2))
+                print(f"  → capture: {capture_dir}/  "
+                      f"({n_sessions} sessions, traces/, capture_meta.json)", flush=True)
+
             completed_levels.append({
                 "concurrency": concurrency,
                 "dir":         level_dir,

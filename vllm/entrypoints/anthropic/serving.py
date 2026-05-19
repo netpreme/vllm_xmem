@@ -340,6 +340,11 @@ class AnthropicServingMessages(OpenAIServingChat):
             top_p=anthropic_request.top_p,
             top_k=anthropic_request.top_k,
             kv_transfer_params=anthropic_request.kv_transfer_params,
+            # Replay-benchmarking extensions: force exact generation length.
+            ignore_eos=(anthropic_request.ignore_eos
+                        if anthropic_request.ignore_eos is not None else False),
+            min_tokens=(anthropic_request.min_tokens
+                        if anthropic_request.min_tokens is not None else 0),
         )
 
     @classmethod

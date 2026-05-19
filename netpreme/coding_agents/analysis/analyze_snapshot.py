@@ -441,17 +441,16 @@ def main() -> None:
     try:
         prom_url = f"http://localhost:{args.port}"
 
-        # fig1: combined plot showing all detected setups
         fig1_timeseries(prom_url, cfg, t0, t1, args.step,
-                        out_dir / "fig1_timeseries.png",
+                        out_dir / "timeseries.png",
                         rate_window=args.rate_window)
 
-        # fig2: one per detected setup (offload-dominant analysis is per-setup)
+        # One offload-dominant plot per detected setup
         setups = _discover_setups(prom_url) or [cfg.get("setup")]
         for s in sorted(filter(None, setups)):
             suffix = s.replace("hybrid-", "")  # "mtier" or "cpu"
             fig2_offload_dominant(prom_url, cfg, t0, t1, args.step,
-                                  out_dir / f"fig2_offload_dominant_{suffix}.png",
+                                  out_dir / f"offload_dominant_{suffix}.png",
                                   rate_window=args.rate_window,
                                   threshold=args.threshold,
                                   setup_filter=s)

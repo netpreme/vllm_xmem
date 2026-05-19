@@ -117,6 +117,17 @@ class AnthropicMessagesRequest(BaseModel):
         default=None,
         description="KVTransfer parameters used for disaggregated serving.",
     )
+    # vLLM extensions for trace-replay benchmarking: force exact generation
+    # length regardless of EOS. Used by netpreme/coding_agents/benchmarks
+    # to pin OSL identical to the captured trace.
+    ignore_eos: bool | None = Field(
+        default=None,
+        description="If True, ignore EOS and continue generating until max_tokens.",
+    )
+    min_tokens: int | None = Field(
+        default=None,
+        description="Minimum number of generated tokens before stopping.",
+    )
 
     @field_validator("model")
     @classmethod
