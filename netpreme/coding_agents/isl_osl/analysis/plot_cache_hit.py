@@ -23,42 +23,19 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import csv
-import json
 from collections import defaultdict
 from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
 
-VERIFIED_BUCKETS = ["<15 min fix", "15 min - 1 hour", "1+ hours"]
+from data import VERIFIED_BUCKETS, load_problem_field, load_per_problem_rows, num
+
 BUCKET_COLOR = {
     "<15 min fix":     "#3b82f6",
     "15 min - 1 hour": "#ec4899",
     "1+ hours":        "#22c55e",
 }
-# Collapse the sparse ">4 hours" bucket (≈3 problems) into "1+ hours" alongside
-# "1-4 hours" so the hard bucket has enough samples to be meaningful.
-DIFFICULTY_REMAP = {">4 hours": "1+ hours", "1-4 hours": "1+ hours"}
-
-
-def num(r: dict, k: str) -> float:
-    v = r.get(k)
-    if v in (None, "", "None"):
-        return float("nan")
-    try:
-        return float(v)
-    except ValueError:
-        return float("nan")
-
-
-def load_difficulty(run_dir: Path) -> dict[str, str]:
-    out = {}
-    for line in (run_dir / "problems.jsonl").open():
-        r = json.loads(line)
-        d = r.get("difficulty")
-        out[r["instance_id"]] = DIFFICULTY_REMAP.get(d, d)
-    return out
 
 
 def main():
@@ -72,36 +49,31 @@ def main():
                     help="Hard cap on the left panel's x-axis (turn index).")
     args = ap.parse_args()
 
-    difficulty = load_difficulty(args.run_dir)
+    difficulty = load_problem_field(args.run_dir, "difficulty")
+    turns_by_iid = load_per_problem_rows(args.run_dir)
 
-    # Walk per-problem CSVs in order; track turn index (1-based) per problem
-    # for kept rows. Apply cold-start and compaction filters.
+    # Track turn index (1-based) per problem. Apply cold-start and
+    # compaction filters: turn 1 is always 0% (cold), and compaction events
+    # (cache_hit < 50% with isl_new > 50k) are the ~143k full-recompute
+    # events that would dominate any aggregate.
     by_bucket_turn: dict[tuple[str, int], list[float]] = defaultdict(list)
     by_bucket_all: dict[str, list[float]] = defaultdict(list)
-    for f in sorted((args.run_dir / "per_problem").glob("*.csv")):
-        iid = f.stem
+    for iid, rows in turns_by_iid.items():
         diff = difficulty.get(iid)
         if diff not in VERIFIED_BUCKETS:
             continue
-        with f.open() as fh:
-            ti = 0
-            for r in csv.DictReader(fh):
-                if r.get("category") == "empty":
-                    continue
-                isl = num(r, "isl")
-                isl_new = num(r, "isl_new")
-                hit = num(r, "cache_hit_rate")
-                if not all(np.isfinite(x) for x in (isl, isl_new, hit)):
-                    continue
-                if isl <= 0:
-                    continue
-                ti += 1
-                if ti == 1:
-                    continue                                  # cold-start
-                if hit < 0.5 and isl_new > 50_000:
-                    continue                                  # compaction event
-                by_bucket_turn[(diff, ti)].append(hit * 100)
-                by_bucket_all[diff].append(hit * 100)
+        ti = 0
+        for r in rows:
+            if r.get("category") == "empty":
+                continue
+            isl, isl_new, hit = num(r, "isl"), num(r, "isl_new"), num(r, "cache_hit_rate")
+            if not all(np.isfinite(x) for x in (isl, isl_new, hit)) or isl <= 0:
+                continue
+            ti += 1
+            if ti == 1: continue                              # cold-start
+            if hit < 0.5 and isl_new > 50_000: continue       # compaction
+            by_bucket_turn[(diff, ti)].append(hit * 100)
+            by_bucket_all[diff].append(hit * 100)
 
     fig, axes = plt.subplots(1, 2, figsize=(16, 6), constrained_layout=True)
     suffix = f" — {args.title_suffix}" if args.title_suffix else ""

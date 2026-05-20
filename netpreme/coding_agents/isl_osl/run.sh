@@ -26,6 +26,7 @@ BACKEND="vllm"
 SWE_DATASET="princeton-nlp/SWE-bench_Verified"
 SWE_LIMIT=500
 RUN_ANALYSIS=1
+MODEL_FLAG=""
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --backend)     BACKEND="$2"; shift 2 ;;
@@ -36,14 +37,20 @@ while [[ $# -gt 0 ]]; do
                 *) echo "unknown --dataset: $2" >&2; exit 2 ;;
             esac; shift 2 ;;
         --limit)       SWE_LIMIT="$2"; shift 2 ;;
-        --model)       MODEL_NAME="$2"; shift 2 ;;
+        --model)       MODEL_FLAG="$2"; shift 2 ;;
         --no-analysis) RUN_ANALYSIS=0; shift ;;
         -h|--help)     sed -n '2,11p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *) echo "unknown flag: $1" >&2; exit 2 ;;
     esac
 done
 case "$BACKEND" in vllm|anthropic) ;; *) echo "bad --backend: $BACKEND" >&2; exit 2 ;; esac
-[[ "$BACKEND" == "anthropic" ]] && : "${MODEL_NAME:=claude-opus-4-7}"
+# Anthropic backend ignores the .env MODEL_NAME (Qwen HF id) — default to
+# claude-opus-4-7 unless --model was explicitly passed.
+if [[ -n "$MODEL_FLAG" ]]; then
+    MODEL_NAME="$MODEL_FLAG"
+elif [[ "$BACKEND" == "anthropic" ]]; then
+    MODEL_NAME="claude-opus-4-7"
+fi
 
 # --- upstream ---------------------------------------------------------------
 PROXY_URL="http://localhost:9001"
@@ -67,8 +74,9 @@ VENV_PY=/root/vllm_xmem/.venv/bin/python3
 STAMP="$(date +%Y%m%d_%H%M%S)"
 RUN_DIR="$HERE/runs/$STAMP"
 PER_PROBLEM_CSV_DIR="$RUN_DIR/per_problem"
+BODIES_DIR="$RUN_DIR/bodies"
 WORKDIRS="/tmp/swe_workdirs/$STAMP"
-mkdir -p "$WORKDIRS" "$PER_PROBLEM_CSV_DIR"
+mkdir -p "$WORKDIRS" "$PER_PROBLEM_CSV_DIR" "$BODIES_DIR"
 PROBLEMS="$RUN_DIR/problems.jsonl"
 SOLVED="$RUN_DIR/solved.txt"; : >"$SOLVED"
 echo "[run] writing to $RUN_DIR"
@@ -128,6 +136,7 @@ start_proxy() {
     "$VENV_PY" "$HERE/pipeline/proxy.py" \
         --upstream "$UPSTREAM_URL" --port 9001 \
         --per-problem-csv-dir "$PER_PROBLEM_CSV_DIR" \
+        --dump-bodies-dir "$BODIES_DIR" \
         --max-tokens-cap "$MAX_TOKENS_CAP" \
         "${PROXY_AUTH[@]}" >/dev/null 2>&1 &
     PROXY_PID=$!

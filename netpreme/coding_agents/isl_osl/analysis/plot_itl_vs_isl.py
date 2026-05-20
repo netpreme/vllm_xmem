@@ -23,35 +23,18 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import csv
 from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
+
+from data import load_all_rows, num
 
 CATEGORY_COLORS = {
     "text_only": "#3b82f6",
     "tool_only": "#22c55e",
     "mixed":     "#ec4899",
 }
-
-
-def num(r: dict, k: str) -> float:
-    v = r.get(k)
-    if v in (None, "", "None"):
-        return float("nan")
-    try:
-        return float(v)
-    except ValueError:
-        return float("nan")
-
-
-def load_turns(run_dir: Path) -> list[dict]:
-    out = []
-    for f in sorted((run_dir / "per_problem").glob("*.csv")):
-        with f.open() as fh:
-            out.extend(csv.DictReader(fh))
-    return out
 
 
 def itl_panel(ax, xs, ys, cats, osls) -> None:
@@ -114,7 +97,7 @@ def main():
     ap.add_argument("--min-osl", type=int, default=5)
     args = ap.parse_args()
 
-    rows = load_turns(args.run_dir)
+    rows = load_all_rows(args.run_dir)
 
     # ITL panel needs: itl_ms, osl >= min, isl, osl, category.
     # Decode panel needs: decode_ms > 0, osl > 0, isl > 0.
