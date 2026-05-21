@@ -1,171 +1,113 @@
-#!/usr/bin/env python3
-"""
-Per-turn TTFT vs prefill workload, three-panel view + tier-3 fit.
+"""Per-turn TTFT vs prefill workload, three-panel view + tier-3 fit.
 
 Prefill cost decomposes as:
-  TTFT ≈ β₀ + γ·isl_cached + α·isl_new + δ·isl_new·isl
-          └ overhead └ cache load └─ FFN ─┘ └── attention ──┘
+    TTFT ≈ β₀ + γ·isl_cached + α·isl_new + δ·isl_new·isl
+              └ overhead └ cache load └─ FFN ─┘ └── attention ──┘
 
-Panel 1: TTFT vs isl_new            — color shows what the FFN term misses
-Panel 2: TTFT vs cache_hit_rate     — cache-effect view
-Panel 3: decode_ms vs ttft_ms       — per-turn prefill vs decode dominance,
-                                       log-log with y=x reference
+  Panel 1: TTFT vs isl_new           — color = isl
+  Panel 2: TTFT vs cache_hit_rate    — cache effect
+  Panel 3: decode_ms vs ttft_ms      — prefill vs decode dominance (log-log)
 
-Points colored by isl (total context size in tokens). A 4-parameter OLS fit
-on the TTFT panels is reported in the suptitle.
-
-Filters:
-  - category != "empty"
-  - ttft_ms finite and > 0
-  - isl > 0
-
-Usage:
-  python3 plot_ttft_prefill.py \
-      --run-dir runs/20260513_175826 \
-      --out ~/analysis_ttft_prefill.png \
-      --title-suffix "claude × Verified"
+Filters: drop empty turns, drop ttft<=0 / isl<=0.
 """
 from __future__ import annotations
 
 import argparse
-import csv
 from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
 
-
-def num(r: dict, k: str) -> float:
-    v = r.get(k)
-    if v in (None, "", "None"):
-        return float("nan")
-    try:
-        return float(v)
-    except ValueError:
-        return float("nan")
+from data import load_data
 
 
-def load_turns(run_dir: Path) -> list[dict]:
-    out = []
-    for f in sorted((run_dir / "per_problem").glob("*.csv")):
-        with f.open() as fh:
-            out.extend(csv.DictReader(fh))
-    return out
-
-
-def fit_tier3(ttft, isl_new, isl_cached, isl):
-    """OLS: TTFT = β₀ + γ·isl_cached + α·isl_new + δ·isl_new·isl. Returns (coef, pred, R²)."""
-    X = np.column_stack([
-        np.ones_like(ttft),
-        isl_cached,
-        isl_new,
-        isl_new * isl,
-    ])
+def fit_tier3(ttft: np.ndarray, isl_new: np.ndarray,
+              isl_cached: np.ndarray, isl: np.ndarray
+              ) -> tuple[np.ndarray, float]:
+    """OLS: TTFT = β₀ + γ·isl_cached + α·isl_new + δ·isl_new·isl. (coef, R²)."""
+    X = np.column_stack([np.ones_like(ttft), isl_cached, isl_new, isl_new * isl])
     coef, *_ = np.linalg.lstsq(X, ttft, rcond=None)
     pred = X @ coef
     ss_res = np.sum((ttft - pred) ** 2)
     ss_tot = np.sum((ttft - ttft.mean()) ** 2)
     r2 = 1 - ss_res / ss_tot if ss_tot > 0 else float("nan")
-    return coef, pred, r2
+    return coef, r2
 
 
-def main():
+def _scatter_ttft(ax, x, ttft, isl, *, xlabel: str, title: str):
+    sc = ax.scatter(x, ttft, c=isl, cmap="viridis",
+                    alpha=0.35, s=10, edgecolors="none")
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel("ttft_ms")
+    ax.set_title(title, fontsize=10, fontweight="bold")
+    ax.grid(True, ls="--", alpha=0.3)
+    return sc
+
+
+def _decode_vs_ttft(ax, ttft, decode, isl):
+    mask = (decode > 0) & np.isfinite(decode)
+    ax.scatter(ttft[mask], decode[mask], c=isl[mask], cmap="viridis",
+               alpha=0.35, s=10, edgecolors="none")
+    lo, hi = (max(1.0, min(ttft[mask].min(), decode[mask].min())),
+              max(ttft[mask].max(), decode[mask].max()))
+    ax.plot([lo, hi], [lo, hi], color="#ef4444", lw=0.8, alpha=0.7,
+            label="ttft = decode")
+    ax.set(xscale="log", yscale="log",
+           xlim=(lo * 0.85, hi * 1.15), ylim=(lo * 0.85, hi * 1.15),
+           xlabel="ttft_ms  (prefill time)",
+           ylabel="decode_ms  (decode time)")
+    ax.set_title("decode_ms vs ttft_ms", fontsize=10, fontweight="bold")
+    ax.grid(True, which="both", ls="--", alpha=0.3)
+    ax.legend(loc="upper left", fontsize=8, framealpha=0.95)
+
+
+def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--run-dir", required=True, type=Path)
-    ap.add_argument("--out", required=True, type=Path)
+    ap.add_argument("--run-dir",      required=True, type=Path)
+    ap.add_argument("--out",          required=True, type=Path)
     ap.add_argument("--title-suffix", default="")
     args = ap.parse_args()
 
-    rows = load_turns(args.run_dir)
+    t = load_data(args.run_dir)
+    real = t[(t["category"] != "empty") & (t["ttft_ms"] > 0) & (t["isl"] > 0)]
+    print(f"plotting {len(real)} turns (after filtering)")
 
-    ttft, isl_new, isl_cached, isl, decode = [], [], [], [], []
-    for r in rows:
-        if r.get("category") == "empty":
-            continue
-        t = num(r, "ttft_ms")
-        i = num(r, "isl")
-        i_new = num(r, "isl_new")
-        i_cached = num(r, "isl_cached")
-        d = num(r, "decode_ms")
-        if not all(np.isfinite(x) for x in (t, i, i_new, i_cached)):
-            continue
-        if t <= 0 or i <= 0:
-            continue
-        ttft.append(t); isl.append(i); decode.append(d)
-        isl_new.append(i_new); isl_cached.append(i_cached)
+    ttft, isl   = real["ttft_ms"].astype(float),   real["isl"].astype(float)
+    isl_new     = real["isl_new"].astype(float)
+    isl_cached  = real["isl_cached"].astype(float)
+    decode      = real["decode_ms"].astype(float)
+    cache_hit   = isl_cached / isl
 
-    ttft = np.array(ttft); isl = np.array(isl)
-    isl_new = np.array(isl_new); isl_cached = np.array(isl_cached)
-    decode = np.array(decode)
-    print(f"plotting {len(ttft)} turns (after filtering)")
+    coef, r2 = fit_tier3(ttft, isl_new, isl_cached, isl)
+    b0, gamma, alpha_, delta = coef
+    crossover = alpha_ / delta if delta > 0 else float("nan")
 
-    coef, pred, r2 = fit_tier3(ttft, isl_new, isl_cached, isl)
-    b0, gamma, alpha, delta = coef
-    # Crossover ISL: where δ·isl_new·isl overtakes α·isl_new  →  isl = α / δ
-    crossover = alpha / delta if delta > 0 else float("nan")
-
-    # Scaled units in the equation for readability (ms vs tokens vs token²).
-    eq = (
-        f"TTFT ≈ {b0:.1f} "
-        f"+ {gamma*1e3:.3f}·(isl_cached/1k) "
-        f"+ {alpha*1e3:.3f}·(isl_new/1k) "
-        f"+ {delta*1e6:.4f}·(isl_new·isl/1M)   [ms]"
-    )
+    eq = (f"TTFT ≈ {b0:.1f} "
+          f"+ {gamma*1e3:.3f}·(isl_cached/1k) "
+          f"+ {alpha_*1e3:.3f}·(isl_new/1k) "
+          f"+ {delta*1e6:.4f}·(isl_new·isl/1M)   [ms]")
     print(eq)
     print(f"R² = {r2:.3f}    crossover ISL (FFN→attn dominant) ≈ {crossover:,.0f} tokens")
 
-    cache_hit_rate = isl_cached / isl
-
     fig, axes = plt.subplots(1, 3, figsize=(22, 7), constrained_layout=True)
-    # Share y between panels 0 and 1 (both are ttft_ms); panel 2 is decode_ms.
     axes[0].sharey(axes[1])
     suffix = f" — {args.title_suffix}" if args.title_suffix else ""
     fig.suptitle(
-        f"Per-turn TTFT vs prefill workload{suffix}\n"
-        f"{eq}\n"
+        f"Per-turn TTFT vs prefill workload{suffix}\n{eq}\n"
         f"R²={r2:.3f}   crossover ISL ≈ {crossover:,.0f} tokens "
         f"(above this, attention term > FFN term)",
         fontsize=10,
     )
-
-    sc = None
-    for ax, x, xlabel, title in [
-        (axes[0], isl_new,        "isl_new (tokens)",
-         "TTFT vs isl_new"),
-        (axes[1], cache_hit_rate, "cache_hit_rate (isl_cached / isl)",
-         "TTFT vs cache_hit_rate"),
-    ]:
-        sc = ax.scatter(x, ttft, c=isl, cmap="viridis",
-                        alpha=0.35, s=10, edgecolors="none")
-        ax.set_xlabel(xlabel)
-        ax.set_title(title, fontsize=10, fontweight="bold")
-        ax.set_ylabel("ttft_ms")
-        ax.grid(True, ls="--", alpha=0.3)
+    sc = _scatter_ttft(axes[0], isl_new,   ttft, isl,
+                       xlabel="isl_new (tokens)",
+                       title="TTFT vs isl_new")
+    _scatter_ttft(axes[1], cache_hit, ttft, isl,
+                  xlabel="cache_hit_rate (isl_cached / isl)",
+                  title="TTFT vs cache_hit_rate")
     axes[1].set_xlim(-0.01, 1.01)
-    y_hi = float(ttft.max()) * 1.05
+    y_hi = ttft.max() * 1.05
     axes[0].set_ylim(-y_hi * 0.01, y_hi)
-
-    # Panel 3: decode_ms vs ttft_ms, log-log, with y=x diagonal so prefill
-    # vs decode dominance is read at a glance.
-    ax = axes[2]
-    mask = np.isfinite(decode) & (decode > 0)
-    sc3 = ax.scatter(ttft[mask], decode[mask], c=isl[mask], cmap="viridis",
-                     alpha=0.35, s=10, edgecolors="none")
-    data_lo = max(1.0, float(min(ttft[mask].min(), decode[mask].min())))
-    data_hi = float(max(ttft[mask].max(), decode[mask].max()))
-    # Log-space padding so points at the data min/max sit just inside the
-    # axis lines (visual analog of the linear -1%/+5% padding on panels 1-2).
-    lim_lo = data_lo * 0.85
-    lim_hi = data_hi * 1.15
-    ax.plot([data_lo, data_hi], [data_lo, data_hi], color="#ef4444",
-            lw=0.8, alpha=0.7, label="ttft = decode")
-    ax.set_xscale("log"); ax.set_yscale("log")
-    ax.set_xlim(lim_lo, lim_hi); ax.set_ylim(lim_lo, lim_hi)
-    ax.set_xlabel("ttft_ms  (prefill time)")
-    ax.set_ylabel("decode_ms  (decode time)")
-    ax.set_title("decode_ms vs ttft_ms", fontsize=10, fontweight="bold")
-    ax.grid(True, which="both", ls="--", alpha=0.3)
-    ax.legend(loc="upper left", fontsize=8, framealpha=0.95)
+    _decode_vs_ttft(axes[2], ttft, decode, isl)
 
     cbar = fig.colorbar(sc, ax=axes, fraction=0.025, pad=0.02)
     cbar.set_label("isl (total context tokens)")
@@ -173,7 +115,8 @@ def main():
     args.out.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(args.out, dpi=130, bbox_inches="tight")
     print(f"wrote {args.out}")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

@@ -12,12 +12,20 @@ import json
 import math
 from pathlib import Path
 
+import numpy as np
+
 
 # SWE-bench Verified difficulty buckets. The ">4 hours" bucket has only ~3
 # problems in the 500-problem split, too few to be meaningful, so we fold
 # it into "1+ hours" together with "1-4 hours".
 VERIFIED_BUCKETS = ["<15 min fix", "15 min - 1 hour", "1+ hours"]
 DIFFICULTY_REMAP = {">4 hours": "1+ hours", "1-4 hours": "1+ hours"}
+
+
+def load_data(run_dir: Path) -> np.ndarray:
+    """Load the canonical per-turn structured array from <run-dir>/data.npz.
+    Build it first with `python build_data.py --run-dir <run-dir>`."""
+    return np.load(run_dir / "data.npz")["turns"]
 
 
 def num(row: dict, key: str) -> float:

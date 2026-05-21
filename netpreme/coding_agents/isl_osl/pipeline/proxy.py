@@ -11,7 +11,7 @@ body line per /v1/messages call, keyed by the X-Instance-Id header.
   └─────────┘   (unchanged)         └────┬───┘               └──────────┘
                                          │
                                          ├▶ <csv_dir>/<id>.csv     (per-turn metrics)
-                                         └▶ <bodies_dir>/<id>.jsonl (full request+response)
+                                         └▶ <transcripts_dir>/<id>.jsonl (full request+response)
 
 Claude always streams; the unary path isn't implemented.
 """
@@ -173,12 +173,12 @@ def _safe(s: str) -> str:
 
 class TurnLogger:
     """Append per-turn rows to <csv_dir>/<id>.csv and full text to
-    <bodies_dir>/<id>.jsonl. Async-locked so concurrent requests don't
+    <transcripts_dir>/<id>.jsonl. Async-locked so concurrent requests don't
     interleave bytes inside a single file."""
 
-    def __init__(self, csv_dir: Path | None, bodies_dir: Path | None) -> None:
+    def __init__(self, csv_dir: Path | None, transcripts_dir: Path | None) -> None:
         self._csv_dir = csv_dir
-        self._bodies_dir = bodies_dir
+        self._transcripts_dir = transcripts_dir
         self._lock = asyncio.Lock()
 
     async def write(self, rec: TurnRecord) -> None:
@@ -209,7 +209,7 @@ class TurnLogger:
             w.writerow({k: row.get(k) for k in CSV_COLUMNS})
 
     def _write_body(self, rec: TurnRecord) -> None:
-        if self._bodies_dir is None or rec.request is None: return
+        if self._transcripts_dir is None or rec.request is None: return
         messages = rec.request.get("messages") or []
         payload = {
             "ts": rec.ts,
@@ -233,7 +233,7 @@ class TurnLogger:
             "response": {"content": rec.content,
                          "stop_reason": rec.usage.get("stop_reason")},
         }
-        path = self._bodies_dir / f"{_safe(rec.instance_id)}.jsonl"
+        path = self._transcripts_dir / f"{_safe(rec.instance_id)}.jsonl"
         with path.open("a") as f:
             f.write(json.dumps(payload, ensure_ascii=False) + "\n")
 
@@ -245,7 +245,7 @@ class Config:
     upstream: str
     port: int = 9001
     csv_dir: Path | None = None
-    bodies_dir: Path | None = None
+    transcripts_dir: Path | None = None
     max_tokens_cap: int = 0          # 0 disables the clamp
     passthrough_auth: bool = False   # forward client Authorization/x-api-key
 
@@ -276,7 +276,7 @@ def _clamp_max_tokens(body: bytes, cap: int) -> tuple[bytes, dict[str, Any] | No
 
 
 def build_app(cfg: Config) -> FastAPI:
-    logger = TurnLogger(cfg.csv_dir, cfg.bodies_dir)
+    logger = TurnLogger(cfg.csv_dir, cfg.transcripts_dir)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -360,7 +360,7 @@ def main() -> int:
                     help="e.g. http://localhost:8000 or https://api.anthropic.com")
     ap.add_argument("--port",                type=int, default=9001)
     ap.add_argument("--per-problem-csv-dir", type=Path, default=None)
-    ap.add_argument("--dump-bodies-dir",     type=Path, default=None)
+    ap.add_argument("--dump-transcripts-dir",     type=Path, default=None)
     ap.add_argument("--max-tokens-cap",      type=int, default=4096,
                     help="clamp client's max_tokens; 0 disables")
     ap.add_argument("--passthrough-auth",    action="store_true",
@@ -372,12 +372,12 @@ def main() -> int:
         upstream=args.upstream.rstrip("/"),
         port=args.port,
         csv_dir=args.per_problem_csv_dir,
-        bodies_dir=args.dump_bodies_dir,
+        transcripts_dir=args.dump_transcripts_dir,
         max_tokens_cap=max(0, args.max_tokens_cap),
         passthrough_auth=args.passthrough_auth,
     )
     if cfg.csv_dir:    cfg.csv_dir.mkdir(parents=True, exist_ok=True)
-    if cfg.bodies_dir: cfg.bodies_dir.mkdir(parents=True, exist_ok=True)
+    if cfg.transcripts_dir: cfg.transcripts_dir.mkdir(parents=True, exist_ok=True)
 
     uvicorn.run(build_app(cfg), host="127.0.0.1", port=cfg.port,
                 log_level="warning")

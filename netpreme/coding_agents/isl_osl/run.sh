@@ -74,9 +74,9 @@ VENV_PY=/root/vllm_xmem/.venv/bin/python3
 STAMP="$(date +%Y%m%d_%H%M%S)"
 RUN_DIR="$HERE/runs/$STAMP"
 PER_PROBLEM_CSV_DIR="$RUN_DIR/per_problem"
-BODIES_DIR="$RUN_DIR/bodies"
+TRANSCRIPTS_DIR="$RUN_DIR/transcripts"
 WORKDIRS="/tmp/swe_workdirs/$STAMP"
-mkdir -p "$WORKDIRS" "$PER_PROBLEM_CSV_DIR" "$BODIES_DIR"
+mkdir -p "$WORKDIRS" "$PER_PROBLEM_CSV_DIR" "$TRANSCRIPTS_DIR"
 PROBLEMS="$RUN_DIR/problems.jsonl"
 SOLVED="$RUN_DIR/solved.txt"; : >"$SOLVED"
 echo "[run] writing to $RUN_DIR"
@@ -136,7 +136,7 @@ start_proxy() {
     "$VENV_PY" "$HERE/pipeline/proxy.py" \
         --upstream "$UPSTREAM_URL" --port 9001 \
         --per-problem-csv-dir "$PER_PROBLEM_CSV_DIR" \
-        --dump-bodies-dir "$BODIES_DIR" \
+        --dump-transcripts-dir "$TRANSCRIPTS_DIR" \
         --max-tokens-cap "$MAX_TOKENS_CAP" \
         "${PROXY_AUTH[@]}" >/dev/null 2>&1 &
     PROXY_PID=$!

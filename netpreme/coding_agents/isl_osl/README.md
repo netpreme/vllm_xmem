@@ -48,8 +48,8 @@ Dataset:    [SWE Bench Verified](https://huggingface.co/datasets/princeton-nlp/S
               │ response streamed back through the proxy to claude
               ▼
    ┌──────────────────────┐
-   │   per-turn CSV +     │   analyze.sh → distribution / cache /
-   │   per-problem JSON   │   TTFT-prefill / ITL-decode figures
+   │  per-problem CSV +   │   analyze.sh consolidates everything into one
+   │  full text JSONL     │   data.npz, then renders figures from it
    └──────────────────────┘
 ```
 
@@ -59,8 +59,10 @@ What gets saved per run (`runs/<stamp>/`):
 - `problems.jsonl` — the SWE-bench rows fed to claude
 - `per_problem/<id>.csv` — one row per assistant turn (the proxy log)
 - `per_problem/<id>.summary.json` — per-problem totals from claude's `result` event
+- `transcripts/<id>.jsonl` — full per-turn request + response text
 - `solved.txt` — completed instance IDs
-- `analysis/*.png` — figures from `analyze.sh`
+- `data.npz` — canonical per-turn structured array (built by `analyze.sh`)
+- `analysis/*.png` — figures from `analyze.sh` (all read from `data.npz`)
 
 ## Quick start
 
@@ -68,7 +70,7 @@ What gets saved per run (`runs/<stamp>/`):
 # Local vLLM (Qwen3-Coder) — start the server, then run:
 bash ../server.sh > /tmp/vllm.log 2>&1 &
 ./run.sh                                            # claude code + vllm + swe bench verfied
-./analyze.sh runs/<stamp>                           # generate figures
+./analyze.sh runs/<stamp>                           # build data.npz + figures
 ```
 
 To run SWE-bench Pro, use:
@@ -89,14 +91,15 @@ To use the hosted Anthropic API (no local vLLM needed; uses your existing
 
 ## Results
 
-![ISL / ISL_new / OSL distributions](results/analysis_dist_grid.png)
+![Aggregate OSL / ISL / ISL_uncached distributions](results/analysis_dist_agg.png)
 
-`analysis_dist_grid.png` — Per-turn token counts as histograms, split by
-SWE-bench difficulty bucket (`<15min`, `15min–1h`, `1+h`). Rows are
-`ISL` (total prompt), `ISL_new` (non-cached portion), and `OSL` (output).
-**Takeaways:** OSL is heavily concentrated below ~200 tokens regardless of
-difficulty (tool-call outputs dominate over long-form text); ISL has a
-heavy right tail above 100k tokens; harder problems drift to larger ISL.
+`analysis_dist_agg.png` — Same three histograms collapsed across all 500
+problems (no difficulty split). Same semantic region bands as the grid
+version: OSL is bucketed into `tool calls / plan / code edits` and
+ISL_uncached into `small tool result / file read / large read /
+system prompt or compaction`. ISL panel marks the **claude-code
+baseline** (~27k tokens — system prompt + 18 tool schemas + CLAUDE.md +
+task statement) as a red reference line.
 
 ![Cache hit rate per turn](results/analysis_cache.png)
 
@@ -107,5 +110,19 @@ both the per-turn line and the aggregate distribution. y-axis clipped to
 60–100%. **Takeaways:** from turn 2 onward, cache hit is already ~75–85%
 and climbs to 95–98% steady-state by turn ~5 for all difficulty buckets.
 Harder problems just run for many more turns at that steady state.
+
+![Turns per problem](results/analysis_turns.png)
+
+`analysis_turns.png` — distribution of turns-per-problem (substantive turns
+only; empty/init rows dropped). Leftmost panel aggregates all 500 problems;
+the next three split by difficulty with a shared y-axis for direct
+comparison. **Takeaways:** median ~31 turns/problem overall, with a clear
+monotone shift by difficulty (`<15min` median 26 → `15min–1h` median 32 →
+`1+h` median 39). One outlier at 618 turns lives in the easy bucket
+(probably a loop the model couldn't escape).
+
+Additional figures derived from `data.npz`: `analysis_ttft_prefill.png`
+(TTFT regression), `analysis_itl_vs_isl.png` (decode latency vs context),
+and `analysis_prefill_decode_ratio.png` (prefill+decode share by turn).
 
 

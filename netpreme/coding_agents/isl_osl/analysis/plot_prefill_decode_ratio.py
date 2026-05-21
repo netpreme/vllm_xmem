@@ -1,82 +1,63 @@
-#!/usr/bin/env python3
-"""
-Stacked average latency by turn index:
-  x = turn index within problem
-  y = average ttft_ms (prefill) stacked with average decode_ms (decode)
-  sum = average e2e latency at that turn index
+"""Average e2e latency stacked into (prefill + decode) by turn index.
 
-Filters:
-  - category != "empty"
-  - ttft_ms, decode_ms finite and >= 0; at least one > 0
-  - isl, osl finite and > 0
+  x = 1-based turn index within a problem (after dropping empty turns)
+  y = avg(ttft_ms) stacked over avg(decode_ms); the top line is avg e2e
 
-Usage:
-  python3 plot_prefill_decode_ratio.py \
-      --run-dir runs/20260513_175826 \
-      --out analysis/analysis_prefill_decode_ratio.png \
-      --title-suffix "claude × Verified"
+Filters: drop empty turns, drop turns missing timing.
 """
 from __future__ import annotations
 
 import argparse
-import csv
 from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
 
-
-def num(r: dict, k: str) -> float:
-    v = r.get(k)
-    if v in (None, "", "None"):
-        return float("nan")
-    try:
-        return float(v)
-    except ValueError:
-        return float("nan")
+from data import load_data
 
 
-def main():
+def per_turn_means(t: np.ndarray, min_samples: int
+                   ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """For each substantive turn index ti, return mean(ttft_ms), mean(decode_ms)
+    aggregated across all problems. Per-problem `turn` numbers are re-ranked
+    after dropping empty turns so ti=1 is the first substantive turn."""
+    ttfts, decs, idx = [], [], []
+    for iid in np.unique(t["instance_id"]):
+        rows = t[t["instance_id"] == iid]
+        ti = 0
+        for r in rows:
+            if (r["category"] == "empty"
+                    or r["isl"] <= 0 or r["osl"] <= 0
+                    or r["ttft_ms"] + r["decode_ms"] <= 0):
+                continue
+            ti += 1
+            ttfts.append(float(r["ttft_ms"]))
+            decs.append(float(r["decode_ms"]))
+            idx.append(ti)
+    ttfts = np.array(ttfts); decs = np.array(decs); idx = np.array(idx)
+
+    xs, mean_ttft, mean_dec = [], [], []
+    for ti in range(1, int(idx.max()) + 1 if len(idx) else 1):
+        m = idx == ti
+        if int(m.sum()) < min_samples:
+            continue
+        xs.append(ti)
+        mean_ttft.append(float(ttfts[m].mean()))
+        mean_dec.append(float(decs[m].mean()))
+    return np.array(xs), np.array(mean_ttft), np.array(mean_dec)
+
+
+def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--run-dir", required=True, type=Path)
-    ap.add_argument("--out", required=True, type=Path)
+    ap.add_argument("--run-dir",      required=True, type=Path)
+    ap.add_argument("--out",          required=True, type=Path)
     ap.add_argument("--title-suffix", default="")
-    ap.add_argument("--min-samples", type=int, default=10,
-                    help="Truncate turn-index axis where fewer problems remain.")
+    ap.add_argument("--min-samples",  type=int, default=10,
+                    help="truncate at turn indices with fewer samples than this")
     args = ap.parse_args()
 
-    ttft, decode, isl, osl, turn_idx = [], [], [], [], []
-    for f in sorted((args.run_dir / "per_problem").glob("*.csv")):
-        with f.open() as fh:
-            ti = 0
-            for r in csv.DictReader(fh):
-                if r.get("category") == "empty":
-                    continue
-                t = num(r, "ttft_ms"); d = num(r, "decode_ms")
-                i = num(r, "isl");      o = num(r, "osl")
-                if not all(np.isfinite(x) for x in (t, d, i, o)):
-                    continue
-                if t < 0 or d < 0 or i <= 0 or o <= 0 or t + d <= 0:
-                    continue
-                ti += 1
-                ttft.append(t); decode.append(d)
-                isl.append(i); osl.append(o); turn_idx.append(ti)
-    ttft = np.array(ttft); decode = np.array(decode); turn_idx = np.array(turn_idx)
-    print(f"plotting {len(ttft)} turns (after filtering)")
-
-    max_ti = int(turn_idx.max())
-    xs, counts, avg_ttft, avg_decode = [], [], [], []
-    for ti in range(1, max_ti + 1):
-        m = turn_idx == ti
-        n = int(m.sum())
-        if n < args.min_samples:
-            continue
-        xs.append(ti); counts.append(n)
-        avg_ttft.append(float(ttft[m].mean()))
-        avg_decode.append(float(decode[m].mean()))
-    xs = np.array(xs); counts = np.array(counts)
-    avg_ttft = np.array(avg_ttft); avg_decode = np.array(avg_decode)
-    avg_e2e = avg_ttft + avg_decode
+    t = load_data(args.run_dir)
+    xs, mean_ttft, mean_dec = per_turn_means(t, args.min_samples)
     print(f"per-turn axis: turns 1..{xs.max() if len(xs) else 0} "
           f"with ≥{args.min_samples} samples")
 
@@ -86,25 +67,22 @@ def main():
         f"Average e2e latency = prefill + decode, by turn index{suffix}",
         fontsize=12,
     )
-
-    ax.stackplot(
-        xs,
-        [avg_ttft, avg_decode],
-        labels=["prefill (ttft)", "decode"],
-        colors=["#3b82f6", "#22c55e"],
-        alpha=0.85,
-    )
-    ax.plot(xs, avg_e2e, color="black", lw=1.2, label="e2e (sum)")
+    ax.stackplot(xs, [mean_ttft, mean_dec],
+                 labels=["prefill (ttft)", "decode"],
+                 colors=["#3b82f6", "#22c55e"], alpha=0.85)
+    ax.plot(xs, mean_ttft + mean_dec, color="black", lw=1.2, label="e2e (sum)")
     ax.set_xlabel("turn index within problem")
     ax.set_ylabel("average latency (ms)")
     ax.legend(loc="upper left", fontsize=9, framealpha=0.95)
     ax.grid(True, ls="--", alpha=0.3)
-    ax.set_xlim(xs.min() if len(xs) else 0, xs.max() if len(xs) else 1)
+    if len(xs):
+        ax.set_xlim(xs.min(), xs.max())
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(args.out, dpi=130, bbox_inches="tight")
     print(f"wrote {args.out}")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
