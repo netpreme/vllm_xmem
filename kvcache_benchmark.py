@@ -1,17 +1,16 @@
 import argparse
-import gc
 import time
 
 import torch
 from vllm import LLM, SamplingParams, TokensPrompt
 from vllm.config import KVTransferConfig
 
-CPU_CACHE_SIZE_GB = 64
+CPU_CACHE_SIZE_GB = 128
 CPU_BLOCK_SIZE = 128
 GPU_BLOCK_SIZE = 128
 NUM_DECODED_TOKENS_PER_PROMPT = 1
 
-MODEL = "Qwen/Qwen3-30B-A3B-Instruct-2507-FP8"
+MODEL = "Qwen/Qwen3-30B-A3B-Instruct-2507"
 # sizeof(element) * head_size * num_heads * |{k,v}| * layer_count
 KV_SIZE_PER_TOKEN = 2 * 128 * 4 * 2 * 48
 
@@ -25,33 +24,7 @@ NUM_PROMPTS = 1000
 HIT_PERCENTS_TO_TEST = tuple(range(0, 101, 10))
 
 # for latency test
-PROMPT_SIZES_IN_K_TO_TEST = (1,) + tuple(range(10, 71, 10))
-
-def _print_ttft_table(prompt_sizes_k, prefill_ms, cpu_ms, mtier_ms):
-    col_w = max(8, *(len(f"{s}K") + 2 for s in prompt_sizes_k))
-    label_w = 24
-    sep = "-" * (label_w + col_w * len(prompt_sizes_k) + 1)
-
-    def row(label, values, fmt):
-        cells = "".join(fmt(v).rjust(col_w) for v in values)
-        print(f"{label:<{label_w}}{cells}")
-
-    print()
-    print(sep)
-    row("Prompt length", [f"{s}K" for s in prompt_sizes_k], str)
-    print(sep)
-    row("TTFT (prefill), ms",   prefill_ms, str)
-    row("TTFT (cached, CPU), ms", cpu_ms,   str)
-    row("TTFT (cached, MTier), ms", mtier_ms, str)
-    print(sep)
-    speedups = [
-        f"{c/m:.2f}x" if m else "N/A"
-        for c, m in zip(cpu_ms, mtier_ms)
-    ]
-    row("MTier Speed-Up", speedups, str)
-    print(sep)
-    print()
-
+PROMPT_SIZES_IN_K_TO_TEST = (1,) + tuple(range(10, 101, 10))
 
 def main(run_ttft: bool, run_tput: bool):
     sampling_params = SamplingParams(
@@ -69,19 +42,7 @@ def main(run_ttft: bool, run_tput: bool):
             "num_cpu_blocks": num_cpu_blocks, # required in older versions (0.12.0)
         }
     )
-
-    # keyed by prompt_size_k: {prefill, cpu, mtier}
-    ttft_results: dict[int, dict] = {s: {} for s in PROMPT_SIZES_IN_K_TO_TEST}
-
-    llm = None
     for use_xmem in (False, True):
-        # Clean-up things.
-        if llm is not None:
-            del llm
-        gc.collect()
-        torch.cuda.synchronize()
-        torch.cuda.empty_cache()
-
         llm = LLM(
             model=MODEL,
             block_size=GPU_BLOCK_SIZE,
@@ -129,13 +90,7 @@ def main(run_ttft: bool, run_tput: bool):
                     1000 * (total_cpu_load_time / iterations_count)
                 )
 
-                if use_xmem:
-                    print("Average MTier load time:", average_cpu_load_time_ms, "ms")
-                    ttft_results[prompt_size_k]["mtier"] = average_cpu_load_time_ms
-                else:
-                    print("Average CPU load time:", average_cpu_load_time_ms, "ms")
-                    ttft_results[prompt_size_k]["prefill"] = average_prefill_time_ms
-                    ttft_results[prompt_size_k]["cpu"] = average_cpu_load_time_ms
+                print("Average CPU load time:", average_cpu_load_time_ms, "ms")
                 print()
 
         # run throughput test
@@ -203,20 +158,10 @@ def main(run_ttft: bool, run_tput: bool):
                 print(int(num_tokens/total_time), "tokens/sec")
                 print()
 
-    # Clean-up things.
-    del llm
-    gc.collect()
-    torch.cuda.synchronize()
-    torch.cuda.empty_cache()
-
-    if run_ttft:
-        sizes = list(PROMPT_SIZES_IN_K_TO_TEST)
-        _print_ttft_table(
-            prompt_sizes_k=sizes,
-            prefill_ms=[ttft_results[s].get("prefill", 0) for s in sizes],
-            cpu_ms=    [ttft_results[s].get("cpu",    0) for s in sizes],
-            mtier_ms=  [ttft_results[s].get("mtier",  0) for s in sizes],
-        )
+        # Cleanup before next test
+        del llm
+        torch.cuda.empty_cache()
+        time.sleep(5)
 
 
 if __name__ == "__main__":
@@ -227,5 +172,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     run_ttft = args.ttft
     run_tput = args.tput
-
+    
     main(run_ttft, run_tput)
+
+    

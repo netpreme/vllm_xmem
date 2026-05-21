@@ -43,8 +43,18 @@ def main():
         help="Replay this previously-captured trace directory. OSL is "
              "automatically pinned to each turn's captured value.")
     ap.add_argument("--osl", type=int, default=None,
-        help="Override OSL to a fixed value for every turn "
-             "(only meaningful with --from-trace).")
+        help="OSL target. With --from-trace: overrides each turn's pinned OSL. "
+             "With --save-trace AND --isl: target OSL for synthetic capture (default 110).")
+    # Synthetic-capture knobs (only meaningful with --save-trace; trigger when --isl is set)
+    ap.add_argument("--isl",     type=int, default=None,
+        help="Initial ISL target for synthetic capture. Enables synthetic capture mode "
+             "when combined with --save-trace (no agents, no GPU needed).")
+    ap.add_argument("--isl-new", type=int, default=500,
+        help="Target uncached input tokens per turn (synthetic capture only).")
+    ap.add_argument("--n-turns", type=int, default=50,
+        help="Turns per session (synthetic capture only).")
+    ap.add_argument("--n-sessions", type=int, default=30,
+        help="Total sessions (synthetic capture only).")
     ap.add_argument("--deterministic", action="store_true",
         help="Pin VLLM_BATCH_INVARIANT=1 + greedy decoding (temp=0, seed=42). "
              "Default: OFF — non-deterministic kernels, model-default sampling.")
@@ -61,9 +71,20 @@ def main():
 
     if args.save_trace and args.from_trace:
         ap.error("--save-trace and --from-trace are mutually exclusive")
+    # Synthetic mode: --save-trace + --isl. Pure file generation, no GPU/agents.
+    if args.save_trace and args.isl is not None:
+        from .synthetic_capture import gen_synthetic_capture
+        out_dir = gen_synthetic_capture(
+            isl=args.isl, isl_new=args.isl_new,
+            osl=(args.osl if args.osl is not None else 110),
+            n_turns=args.n_turns, n_sessions=args.n_sessions,
+            seed=42)
+        print(f"\nSynthetic capture written → {out_dir}")
+        print(f"Replay with: bash bench.sh --from-trace {out_dir} --concurrency <C> --deterministic")
+        return
     if args.osl is not None and not args.from_trace:
-        ap.error("--osl requires --from-trace")
-    if args.osl is not None:
+        ap.error("--osl requires --from-trace (or --save-trace with --isl)")
+    if args.osl is not None and args.from_trace:
         os.environ["REPLAY_OSL_OVERRIDE"] = str(args.osl)
 
     # Determinism toggle (default OFF). Controls both VLLM_BATCH_INVARIANT
