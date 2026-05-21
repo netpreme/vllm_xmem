@@ -24,7 +24,8 @@ if str(BENCH_ROOT) not in sys.path:
 from utils import CodingAgents
 
 
-SETUPS = ["hybrid-mtier", "hybrid-cpu"]
+SETUPS_DUAL = ["hybrid-mtier", "hybrid-cpu"]
+SETUPS_CAPTURE = ["hybrid-mtier"]   # capture uses one backend (the trace source)
 
 
 def main():
@@ -35,14 +36,18 @@ def main():
         help="Wall-clock cap per concurrency level in run / save-trace mode")
     ap.add_argument("--duration-cap-mins", type=float, default=20.0,
         help="Hard cap for replay (--from-trace) mode")
-    ap.add_argument("--save-trace", default=None,
-        help="Output directory for per-session traces (run + capture)")
+    ap.add_argument("--save-trace", action="store_true",
+        help="Record per-session traces alongside the Prometheus snapshot "
+             "(written inside each <run>/c<NN>/ folder).")
     ap.add_argument("--from-trace", default=None,
         help="Replay this previously-captured trace directory. OSL is "
              "automatically pinned to each turn's captured value.")
     ap.add_argument("--osl", type=int, default=None,
         help="Override OSL to a fixed value for every turn "
              "(only meaningful with --from-trace).")
+    ap.add_argument("--deterministic", action="store_true",
+        help="Pin VLLM_BATCH_INVARIANT=1 + greedy decoding (temp=0, seed=42). "
+             "Default: OFF — non-deterministic kernels, model-default sampling.")
     ap.add_argument("--model",          default=None)
     ap.add_argument("--tp",   type=int, default=None)
     ap.add_argument("--gpu-util", type=float, default=None)
@@ -61,9 +66,22 @@ def main():
     if args.osl is not None:
         os.environ["REPLAY_OSL_OVERRIDE"] = str(args.osl)
 
+    # Determinism toggle (default OFF). Controls both VLLM_BATCH_INVARIANT
+    # and the temperature/seed override forwarded by start_server.sh.
+    if args.deterministic:
+        os.environ["VLLM_BATCH_INVARIANT"] = "1"
+        os.environ["OVERRIDE_GEN_CONFIG"] = '{"temperature":0,"seed":42}'
+    else:
+        os.environ["VLLM_BATCH_INVARIANT"] = "0"
+        os.environ["OVERRIDE_GEN_CONFIG"] = ""
+
+    # In capture mode (--save-trace) use only mtier — the trace is the source-of-truth
+    # workload that the from-trace replay will then drive against both backends.
+    setups = SETUPS_CAPTURE if args.save_trace else SETUPS_DUAL
+
     agents = CodingAgents(
         concurrency=args.concurrency,
-        setups=SETUPS,
+        setups=setups,
         sustained_mins=args.sustained_mins,
         duration_cap_mins=args.duration_cap_mins,
         model=args.model,
@@ -77,34 +95,31 @@ def main():
     )
 
     if args.from_trace:
-        # Replay always pins OSL to the captured value; --osl overrides to a constant.
-        agents.benchmark(from_traces=args.from_trace, force_osl=True)
+        # OSL pinning is tied to --deterministic: ON → pin to captured; OFF → model decides.
+        agents.benchmark(from_traces=args.from_trace, force_osl=args.deterministic)
     elif args.save_trace:
-        agents.benchmark(capture_to=args.save_trace)
-        _emit_per_turn(args.save_trace)
+        # Pass a sentinel — the bench writes traces inside the run dir.
+        agents.benchmark(capture_to="enabled")
+        # Auto-extract per_turn.csv inside each level dir produced
+        for level_dir in agents.last_level_dirs:
+            _emit_per_turn(level_dir)
     else:
         agents.benchmark()
 
     agents.analyze()
 
 
-def _emit_per_turn(capture_dir: str) -> None:
-    """Always-on: write per_turn.csv with ISL/OSL/uncached/timings."""
+def _emit_per_turn(level_dir: Path) -> None:
+    """Write per_turn.csv with ISL/OSL/uncached/timings inside the level dir."""
     extract = SCRIPT_DIR / "extract_per_turn.py"
-    if not extract.exists():
+    if not extract.exists() or not (Path(level_dir) / "capture_meta.json").exists():
         return
-    bases = sorted(p for p in Path(capture_dir).iterdir()
-                   if p.is_dir() and p.name.startswith("c"))
-    targets = bases if bases else [Path(capture_dir)]
-    for t in targets:
-        if not (t / "capture_meta.json").exists():
-            continue
-        subprocess.run(
-            [sys.executable, str(extract),
-             "--capture-dir", str(t),
-             "--output", str(t / "per_turn.csv")],
-            check=False,
-        )
+    subprocess.run(
+        [sys.executable, str(extract),
+         "--capture-dir", str(level_dir),
+         "--output", str(Path(level_dir) / "per_turn.csv")],
+        check=False,
+    )
 
 
 if __name__ == "__main__":

@@ -54,7 +54,7 @@ RESULTS_DIR     = BENCH_ROOT / "results_benchmarks"
 START_SCRIPT    = AGENT_ROOT / "start_server.sh"
 MONITORING_DIR  = AGENT_ROOT / "monitoring"
 PROM_CONFIG     = MONITORING_DIR / "prometheus.yml"
-PROM_DATA_DIR   = Path("/tmp/prometheus_data")
+PROM_DATA_DIR   = Path(os.environ.get("PROM_DATA_DIR", str(Path.home() / "monitoring_state" / "prometheus_data")))
 PROM_URL        = "http://localhost:9090"
 
 DEFAULT_MODEL            = "qwen/qwen3-coder-30b-a3b-instruct-fp8"
@@ -977,6 +977,10 @@ def main() -> None:
     ap.add_argument("--end",     type=int, default=None, help="SWE-bench dataset end index")
     ap.add_argument("--difficulty", nargs="+", default=None,
                     help="Filter by SWE-bench difficulty: easy/medium/hard/vhard or full labels")
+    ap.add_argument("--no-shuffle", action="store_true",
+                    help="Disable dataset shuffle; use deterministic difficulty-sort order")
+    ap.add_argument("--shuffle-seed", type=int, default=None,
+                    help="Seed for dataset shuffle (default: random per invocation)")
     ap.add_argument("--port",    default=None)
     ap.add_argument("--model",   default=None)
     ap.add_argument("--tp",      type=int,   default=None)
@@ -1031,12 +1035,19 @@ def main() -> None:
         ds = ds.filter(lambda row: row["difficulty"] in wanted)
         print(f"  Difficulty filter: {wanted}  →  {len(ds)} tasks", flush=True)
 
-    rows = sorted(
-        ds,
-        key=lambda r: (_DIFF_RANK.get(r["difficulty"], 9), -len(r["problem_statement"])),
-    )
-    print(f"  Task order: v-hard → hard → medium → easy, longest problem first within tier",
-          flush=True)
+    rows = list(ds)
+    if args.no_shuffle:
+        rows = sorted(
+            rows,
+            key=lambda r: (_DIFF_RANK.get(r["difficulty"], 9), -len(r["problem_statement"])),
+        )
+        shuffle_seed = None
+        print(f"  Task order: v-hard → hard → medium → easy (--no-shuffle)", flush=True)
+    else:
+        import random as _random
+        shuffle_seed = args.shuffle_seed if args.shuffle_seed is not None else int(time.time_ns() % (2**32))
+        _random.Random(shuffle_seed).shuffle(rows)
+        print(f"  Task order: shuffled (seed={shuffle_seed})", flush=True)
 
     end = args.end if args.end is not None else len(rows)
     instances = rows[args.start:end]
@@ -1110,14 +1121,15 @@ def main() -> None:
         level_dir = run_dir / f"c{concurrency:03d}"
         level_dir.mkdir(parents=True, exist_ok=True)
 
-        # ── Capture config: per-level traces/ dir + sessions.jsonl ──
+        # ── Capture config: write trace data inside this level's run dir
+        # so one folder == one run (config.json + prom_snapshot + analysis +
+        # traces + sessions.jsonl + capture_meta.json + per_turn.csv).
+        # --capture-traces is now a boolean-like flag: any non-empty value
+        # enables capture; the value itself is ignored.
         global _CAPTURE_CFG
         capture_dir: "Path | None" = None
         if args.capture_traces:
-            capture_dir = Path(args.capture_traces).expanduser().resolve()
-            if len(args.concurrency) > 1:
-                capture_dir = capture_dir / f"c{concurrency:03d}"
-            capture_dir.mkdir(parents=True, exist_ok=True)
+            capture_dir = level_dir
             (capture_dir / "traces").mkdir(exist_ok=True)
             sessions_file = capture_dir / "sessions.jsonl"
             sessions_file.write_text("")  # truncate
@@ -1180,6 +1192,7 @@ def main() -> None:
                 "sustained_mins": args.sustained_mins,
                 "difficulty":     args.difficulty,
                 "swe_bench_pool_size": len(instances),
+                "shuffle_seed":   shuffle_seed,
                 "determinism": {
                     "VLLM_BATCH_INVARIANT": int(os.environ.get("VLLM_BATCH_INVARIANT", "1") or 0),
                     "seed":                  42,

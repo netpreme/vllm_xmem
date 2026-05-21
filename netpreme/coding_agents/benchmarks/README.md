@@ -34,18 +34,21 @@ All runs are capped at **20 min** by default (`--sustained-mins` for run/record,
 ## Run + record a trace
 
 ```bash
-./bench.sh --concurrency 16 --sustained-mins 20 \
-    --save-trace results_benchmarks/record_c016/
+./bench.sh --concurrency 16 --sustained-mins 20 --save-trace
 ```
+
+Trace data is written **inside the run's own folder** (alongside the
+Prometheus snapshot + analysis figures), so one folder = everything from
+one run.
 
 ## Run from a recorded trace
 
 ```bash
 # OSL automatically pinned to each turn's recorded value
-./bench.sh --from-trace results_benchmarks/record_c016/
+./bench.sh --from-trace results_benchmarks/bench_sweep_<ts>/c016/
 
 # Override: force every turn's OSL to a constant (e.g. 1 — artificial)
-./bench.sh --from-trace results_benchmarks/record_c016/ --osl 1
+./bench.sh --from-trace results_benchmarks/bench_sweep_<ts>/c016/ --osl 1
 ```
 
 ---
@@ -124,9 +127,14 @@ Every run produces per concurrency level `<run_dir>/c<NN>/`:
 | `analysis/offload_dominant_mtier.png` | TTFT / E2E / throughput vs offload-share, mtier panel |
 | `analysis/offload_dominant_cpu.png` | same, cpu panel |
 
-In `--save-trace` mode the record directory additionally contains
-`per_turn.csv` with columns
-`session_id, turn_idx, t_session_start, t_request, isl, osl, isl_new`.
+When `--save-trace` is set, the same `c<NN>/` folder also contains:
+
+| File | Contents |
+|------|----------|
+| `capture_meta.json` | model, n_sessions, level start/end timestamps |
+| `sessions.jsonl` | one record per session-start (instance_id, t_session_start) |
+| `per_turn.csv` | per-turn ISL / OSL / ISL_new / timings (auto-extracted) |
+| `traces/<instance>.jsonl` | full captured `/v1/messages` request + SSE response per turn |
 
 Aggregate inference metrics across runs (TTFT, ITL, E2E, queue p50/p95/p99,
 HBM/offload hit rates, offload GB) are extractable via

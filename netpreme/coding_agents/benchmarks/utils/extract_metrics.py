@@ -190,27 +190,37 @@ def extract_for_level(level_dir: Path, port: int = 9097) -> list[dict]:
     concurrency = int(cfg.get("concurrency", 0))
     kind = cfg.get("kind", "sweep")
     capture_dir = cfg.get("capture_dir", "")
-    setups = cfg.get("setups", [])
-    per_setup = cfg.get("per_setup", {}) if isinstance(cfg.get("per_setup"), dict) else {}
+    # Normalise: capture configs have setups as a dict, replay configs as a list.
+    raw_setups = cfg.get("setups", [])
+    if isinstance(raw_setups, dict):
+        # Capture mode: {setup_name: {n_tasks_started, n_tasks_completed, ...}}
+        # Default port/gpu from SETUP_DEFAULTS (mtier→8001/0, cpu→8002/1).
+        _DEFS = {"hybrid-mtier": (8001, "0"), "mtier-only": (8001, "0"),
+                 "hybrid-cpu":   (8002, "1"), "cpu-only":   (8002, "1")}
+        setup_list = []
+        for name, stats in raw_setups.items():
+            port_g = _DEFS.get(name, (None, None))
+            setup_list.append({"setup": name, "port": port_g[0], "gpus": port_g[1]})
+        per_setup = {name: stats for name, stats in raw_setups.items() if isinstance(stats, dict)}
+    else:
+        setup_list = raw_setups
+        per_setup = cfg.get("per_setup", {}) if isinstance(cfg.get("per_setup"), dict) else {}
 
     proc = start_local_prom(snapshot, port)
     prom_url = f"http://localhost:{port}"
     try:
         rows: list[dict] = []
-        for s in setups:
+        for s in setup_list:
             setup_name = s["setup"]
-            vllm_port  = s["port"]
-            gpus       = s["gpus"]
+            vllm_port  = s.get("port")
+            gpus       = s.get("gpus")
+            if vllm_port is None:
+                continue
             sel = '{instance="localhost:%s"}' % vllm_port
             m = _metric_block(prom_url, sel, window, t_end)
 
             ps = per_setup.get(setup_name, {})
-            # In capture (non-replay) runs, per-setup info lives in `setups` dict-style.
-            cap_setups_dict = cfg.get("setups")
-            if isinstance(cap_setups_dict, dict):
-                ps_alt = cap_setups_dict.get(setup_name, {})
-            else:
-                ps_alt = {}
+            ps_alt = ps   # same data in capture mode
 
             def _ms(v): return round(v * 1000, 2) if v is not None else None
             def _s(v):  return round(v, 3) if v is not None else None

@@ -18,8 +18,8 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 PY="${PY:-${REPO_ROOT}/.venv/bin/python}"
 [[ -x "$PY" ]] || PY="$(command -v python3)"
 
-: "${VLLM_BATCH_INVARIANT:=1}"
-export VLLM_BATCH_INVARIANT
+# Determinism is controlled by bench.py's --deterministic flag; we don't
+# default VLLM_BATCH_INVARIANT here. bench.py sets the env explicitly.
 
 # ── Auto-start the monitoring stack if Grafana is not already up ──────────
 if ! curl -fsS http://localhost:3000/api/health > /dev/null 2>&1; then

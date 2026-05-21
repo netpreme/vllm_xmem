@@ -17,9 +17,28 @@ if [[ ! -x "$PYTHON_BIN" ]]; then
     PYTHON_BIN="$(command -v python3)"
 fi
 GRAFANA_DIR="$HOME/grafana"
-PROM_DATA_DIR="/tmp/prometheus_data"
-GRAFANA_DATA_DIR="/tmp/grafana_data"
-KEEP_DATA="${1:-}"
+# Persistent data + log locations (NOT /tmp — tmp gets cleaned and we lose Prom history).
+MON_HOME="${MON_HOME:-$HOME/monitoring_state}"
+PROM_DATA_DIR="$MON_HOME/prometheus_data"
+GRAFANA_DATA_DIR="$MON_HOME/grafana_data"
+MON_LOG_DIR="$MON_HOME/logs"
+mkdir -p "$PROM_DATA_DIR" "$GRAFANA_DATA_DIR" "$MON_LOG_DIR"
+
+# Flag parsing (any order):
+#   --keep      : do NOT wipe Prom data (default now — used to be opt-in)
+#   --wipe      : explicitly wipe Prom data before start
+#   --headless  : launch processes and exit; do NOT wait/trap. Each process is
+#                 setsid-detached so SIGTERM to this script never propagates.
+KEEP_DATA="--keep"
+HEADLESS=""
+for arg in "$@"; do
+    case "$arg" in
+        --keep)     KEEP_DATA="--keep" ;;
+        --wipe)     KEEP_DATA="--wipe" ;;
+        --headless) HEADLESS="1" ;;
+        *)          echo "WARN: unknown arg $arg" ;;
+    esac
+done
 
 # ── 1. Kill any existing instances ──────────────────────────
 echo "Stopping any running Prometheus / Grafana / kv_exporter / gpu_exporter..."
@@ -31,25 +50,24 @@ pkill -f "kv_exporter.py"          2>/dev/null || true
 pkill -f "gpu_exporter.py"         2>/dev/null || true
 sleep 2  # wait for processes to die before wiping data dir
 
-# ── 2. Reset Prometheus data (unless --keep) ─────────────────
-if [[ "$KEEP_DATA" == "--keep" ]]; then
-    echo "Keeping existing Prometheus data at $PROM_DATA_DIR"
-else
+# ── 2. Reset Prometheus data (only if --wipe) ─────────────────
+if [[ "$KEEP_DATA" == "--wipe" ]]; then
     echo "Wiping Prometheus data at $PROM_DATA_DIR ..."
     rm -rf "$PROM_DATA_DIR"
 fi
 mkdir -p "$PROM_DATA_DIR"
 
-# ── 3. Start Prometheus ──────────────────────────────────────
-prometheus \
+# ── 3. Start Prometheus (setsid-detached so it survives parent TERM) ─
+setsid prometheus \
     --config.file="$MONITORING_DIR/prometheus.yml" \
     --storage.tsdb.path="$PROM_DATA_DIR" \
     --storage.tsdb.retention.time=1d \
     --web.enable-admin-api \
-    > /tmp/prometheus.log 2>&1 &
+    </dev/null > "$MON_LOG_DIR/prometheus.log" 2>&1 &
 PROM_PID=$!
+disown 2>/dev/null
 echo "Prometheus started (pid $PROM_PID) → http://localhost:9090"
-echo "  log: /tmp/prometheus.log"
+echo "  log: $MON_LOG_DIR/prometheus.log"
 
 # ── 4. Start Grafana ─────────────────────────────────────────
 if [[ ! -d "$GRAFANA_DIR" ]]; then
@@ -63,35 +81,39 @@ fi
 rm -rf "$GRAFANA_DATA_DIR"
 mkdir -p "$GRAFANA_DATA_DIR"
 
-GF_PATHS_PROVISIONING="$MONITORING_DIR/grafana_provisioning" \
-GF_SERVER_HTTP_PORT=3000 \
-GF_AUTH_ANONYMOUS_ENABLED=true \
-GF_AUTH_ANONYMOUS_ORG_NAME="Main Org." \
-GF_AUTH_ANONYMOUS_ORG_ROLE=Admin \
-GF_SECURITY_ALLOW_EMBEDDING=true \
+setsid env \
+    GF_PATHS_PROVISIONING="$MONITORING_DIR/grafana_provisioning" \
+    GF_SERVER_HTTP_PORT=3000 \
+    GF_AUTH_ANONYMOUS_ENABLED=true \
+    GF_AUTH_ANONYMOUS_ORG_NAME="Main Org." \
+    GF_AUTH_ANONYMOUS_ORG_ROLE=Admin \
+    GF_SECURITY_ALLOW_EMBEDDING=true \
     "$GRAFANA_DIR/bin/grafana-server" \
     --homepath="$GRAFANA_DIR" \
     cfg:paths.data="$GRAFANA_DATA_DIR" \
-    cfg:paths.logs=/tmp/grafana.log \
-    > /tmp/grafana_stdout.log 2>&1 &
+    cfg:paths.logs="$MON_LOG_DIR/grafana.log" \
+    </dev/null > "$MON_LOG_DIR/grafana_stdout.log" 2>&1 &
 GRAFANA_PID=$!
+disown 2>/dev/null
 echo "Grafana   started (pid $GRAFANA_PID) → http://localhost:3000"
-echo "  log: /tmp/grafana.log"
+echo "  log: $MON_LOG_DIR/grafana.log"
 
 # ── 5. Start KV exporter ─────────────────────────────────────
-"$PYTHON_BIN" "$MONITORING_DIR/kv_exporter.py" \
+setsid "$PYTHON_BIN" "$MONITORING_DIR/kv_exporter.py" \
     --log "/tmp/dynamo_worker_*.log" \
-    --port 9091 > /tmp/kv_exporter.log 2>&1 &
+    --port 9091 </dev/null > "$MON_LOG_DIR/kv_exporter.log" 2>&1 &
 EXPORTER_PID=$!
+disown 2>/dev/null
 echo "KV exporter started (pid $EXPORTER_PID) → http://localhost:9091"
-echo "  log: /tmp/kv_exporter.log"
+echo "  log: $MON_LOG_DIR/kv_exporter.log"
 
 # ── 5b. Start GPU exporter (nvidia-smi → prom_client) ────────
-"$PYTHON_BIN" "$MONITORING_DIR/gpu_exporter.py" \
-    --port 9092 --interval 1.0 > /tmp/gpu_exporter.log 2>&1 &
+setsid "$PYTHON_BIN" "$MONITORING_DIR/gpu_exporter.py" \
+    --port 9092 --interval 1.0 </dev/null > "$MON_LOG_DIR/gpu_exporter.log" 2>&1 &
 GPU_EXPORTER_PID=$!
+disown 2>/dev/null
 echo "GPU exporter started (pid $GPU_EXPORTER_PID) → http://localhost:9092"
-echo "  log: /tmp/gpu_exporter.log"
+echo "  log: $MON_LOG_DIR/gpu_exporter.log"
 
 echo ""
 echo "Dashboard auto-loaded: 'vLLM + XMem — Unified'"
@@ -99,22 +121,14 @@ echo "  Prometheus:   http://localhost:9090"
 echo "  Grafana:      http://localhost:3000  (no login required)"
 echo "  KV exporter:  http://localhost:9091/metrics"
 echo ""
-echo "Press Ctrl+C to stop all."
+if [[ -n "$HEADLESS" ]]; then
+    echo "Headless mode — services launched detached; this script exits now."
+    exit 0
+fi
 
-# ── 6. Stay in foreground — Ctrl+C kills all ─────────────────
-cleanup() {
-    echo ""
-    echo "Stopping Prometheus / Grafana / kv_exporter / gpu_exporter..."
-    kill "$PROM_PID"         2>/dev/null || true
-    kill "$GRAFANA_PID"      2>/dev/null || true
-    kill "$EXPORTER_PID"     2>/dev/null || true
-    kill "$GPU_EXPORTER_PID" 2>/dev/null || true
-    wait "$PROM_PID"         2>/dev/null || true
-    wait "$GRAFANA_PID"      2>/dev/null || true
-    wait "$EXPORTER_PID"     2>/dev/null || true
-    wait "$GPU_EXPORTER_PID" 2>/dev/null || true
-    echo "Done."
-}
-trap cleanup INT TERM
+echo "Press Ctrl+C to stop this watcher (services keep running — they are setsid-detached)."
 
-wait "$PROM_PID" "$GRAFANA_PID" "$EXPORTER_PID" "$GPU_EXPORTER_PID"
+# ── 6. Optional foreground wait — Ctrl+C only exits this script,
+#       it no longer kills the children (they are in different sessions).
+trap "echo; echo 'Watcher exiting; services remain running.'; exit 0" INT TERM
+wait "$PROM_PID" "$GRAFANA_PID" "$EXPORTER_PID" "$GPU_EXPORTER_PID" 2>/dev/null || true

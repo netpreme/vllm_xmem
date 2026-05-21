@@ -287,6 +287,11 @@ trap cleanup INT TERM
 
 # ── Start vLLM server ────────────────────────────────────────────
 echo "[1/2] Starting vLLM server on GPUs $CVD ..."
+# Generation override config: when env var is UNSET, default to deterministic
+# greedy with fixed seed. Pass OVERRIDE_GEN_CONFIG="" to disable entirely.
+if [[ -z "${OVERRIDE_GEN_CONFIG+set}" ]]; then
+    OVERRIDE_GEN_CONFIG='{"temperature":0,"seed":42}'
+fi
 CUDA_VISIBLE_DEVICES="$CVD" \
 PYTHONHASHSEED=0 \
 VLLM_BATCH_INVARIANT="${VLLM_BATCH_INVARIANT:-1}" \
@@ -312,7 +317,7 @@ HF_HUB_OFFLINE="${HF_HUB_OFFLINE:-1}" \
         --max-num-seqs "$MAX_NUM_SEQS" \
         --max-num-batched-tokens 65536 \
         ${NUM_GPU_BLOCKS_OVERRIDE:+--num-gpu-blocks-override "$NUM_GPU_BLOCKS_OVERRIDE"} \
-        --override-generation-config '{"temperature":0,"seed":42}' \
+        ${OVERRIDE_GEN_CONFIG:+--override-generation-config "$OVERRIDE_GEN_CONFIG"} \
         --attention-backend "${ATTENTION_BACKEND:-FLASH_ATTN}" \
         --enable-auto-tool-choice \
         --tool-call-parser qwen3_coder \
