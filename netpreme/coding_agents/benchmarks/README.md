@@ -25,30 +25,94 @@ Prometheus on subsequent runs. Open while a run is in flight:
 All runs are capped at **20 min** by default (`--sustained-mins` for run/record,
 `--duration-cap-mins` for replay). Pass either flag to override.
 
-## Run
+## Run modes
+
+`bench.sh` is the single entrypoint. All modes share the same flags;
+which mode you get is decided by which flags you pass.
+
+| Flag | Effect |
+|------|--------|
+| `--concurrency C` | Concurrent agents (capture) or replay workers (replay) per backend. Accepts a list `--concurrency 12 14 16` to sweep. |
+| `--sustained-mins T` | Wall-clock cap per concurrency level. Default 20. |
+| `--duration-cap-mins T` | Hard cap for `--from-trace` mode. Default 20. |
+| `--save-trace` | Record per-session JSONL traces alongside the Prom snapshot. Mtier-only (since the trace is the source of truth for any later replay). |
+| `--from-trace <dir>` | Replay a captured workload against both backends in parallel. |
+| `--osl N` | In replay mode: override every turn's OSL to a fixed `N`. |
+| `--deterministic` | Pin `VLLM_BATCH_INVARIANT=1`, `temperature=0`, `seed=42` on the vLLM server. In replay mode also pins OSL exactly via `min_tokens+ignore_eos`. **Orthogonal to every mode — append to any command.** |
+| `--isl N`, `--isl-new K`, `--n-turns T`, `--n-sessions S` | Synthetic capture only — see below. |
+| `--difficulty <set>` | Restrict SWE-bench tasks to a difficulty (easy/medium/hard/vhard). |
+| `--start N`, `--end M` | SWE-bench dataset slice indices. |
+| `--no-shuffle` | Disable dataset shuffling (use deterministic difficulty-sort order). |
+| `--shuffle-seed N` | Pin the shuffle seed for reproducible task ordering. |
+| `--model`, `--tp`, `--gpu-util`, `--max-num-seqs` | vLLM server overrides. |
+
+### 1. Plain dual-backend run
+
+Both backends drive SWE-bench tasks via Claude Code. No trace captured.
+Useful when you only care about Prom metrics from a live workload.
 
 ```bash
-./bench.sh --concurrency 16
+./bench.sh --concurrency 16 --sustained-mins 20
+./bench.sh --concurrency 16 --sustained-mins 20 --deterministic
 ```
 
-## Run + record a trace
+### 2. Agent capture (record SWE-bench + Claude workload)
+
+Runs Claude Code agents against SWE-bench, mtier-only, and tees every
+`/v1/messages` request + SSE response to per-session JSONL. The captured
+trace can be replayed against both backends later, byte-identical.
 
 ```bash
 ./bench.sh --concurrency 16 --sustained-mins 20 --save-trace
+./bench.sh --concurrency 16 --sustained-mins 20 --save-trace --deterministic
 ```
 
 Trace data is written **inside the run's own folder** (alongside the
 Prometheus snapshot + analysis figures), so one folder = everything from
 one run.
 
-## Run from a recorded trace
+### 3. Synthetic capture (controlled ISL / ISL_new / OSL)
+
+No GPU, no agents — fabricates a `/v1/messages` trace with a controlled
+per-turn profile. The conversation grows monotonically: turn N's prompt
+is turn N-1's prompt + the prior assistant's recorded `OSL` tokens + a
+new user message of `ISL_new` tokens. Initial turn has `ISL` total tokens.
 
 ```bash
-# OSL automatically pinned to each turn's recorded value
-./bench.sh --from-trace results_benchmarks/bench_sweep_<ts>/c016/
+./bench.sh --save-trace \
+           --isl 27000 --osl 110 --isl-new 500 \
+           --n-turns 50 --n-sessions 30
+```
 
-# Override: force every turn's OSL to a constant (e.g. 1 — artificial)
-./bench.sh --from-trace results_benchmarks/bench_sweep_<ts>/c016/ --osl 1
+Output goes to `results_benchmarks/bench_sweep_synth_<ts>_isln<K>_osl<M>/c<n_sessions:03d>/`.
+Replay it like any other capture (see mode 4). Useful for isolating the
+effect of `(ISL, ISL_new, OSL)` from agent-driven variance.
+
+| Flag | Default | Meaning |
+|------|---------|---------|
+| `--isl N` | required | Target initial input tokens (system + first user message). |
+| `--isl-new K` | 500 | Target uncached input tokens per follow-up turn. |
+| `--osl M` | 110 | Output tokens per turn. Replay must use `--deterministic` to enforce exactly. |
+| `--n-turns T` | 50 | Turns per session. |
+| `--n-sessions S` | 30 | Sessions per capture. |
+
+### 4. Replay a recorded trace (agent or synthetic)
+
+Replays the recorded request bodies against both backends in parallel on
+the captured timing schedule. Closed-loop floor: `max(captured_gap, response_time)`.
+
+```bash
+# OSL pinned to each turn's recorded value (model-decided sampling):
+./bench.sh --from-trace results_benchmarks/bench_sweep_<ts>/c016/ --concurrency 16
+
+# Deterministic + exact OSL (byte-identical workload on both backends):
+./bench.sh --from-trace <dir> --concurrency 16 --deterministic
+
+# Force every turn's OSL to a constant (e.g. 1 — artificial micro-benchmark):
+./bench.sh --from-trace <dir> --concurrency 16 --osl 1
+
+# Sweep concurrencies with the same recorded workload:
+./bench.sh --from-trace <dir> --concurrency 12 14 16 18 --deterministic
 ```
 
 ---
