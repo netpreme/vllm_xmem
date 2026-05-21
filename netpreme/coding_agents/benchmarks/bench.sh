@@ -1,14 +1,32 @@
 #!/usr/bin/env bash
-# Single entrypoint. Always runs hybrid-mtier (GPU0:8001) + hybrid-cpu (GPU1:8002)
-# in parallel. Monitoring stack (Prometheus + Grafana + exporters) is auto-started
-# if not already running. Analysis figures + per-turn ISL/OSL/uncached/timings
-# CSV are emitted automatically.
+# Single entrypoint. Replays run hybrid-mtier (GPU0:8001) + hybrid-cpu (GPU1:8002)
+# in parallel. Agent capture mode runs mtier only.
+# Monitoring stack (Prometheus + Grafana + exporters) is auto-started if not
+# already running. Analysis figures + per-turn ISL/OSL/uncached/timings CSV
+# are emitted automatically.
 #
-# Usage:
+# Determinism (orthogonal to mode — append --deterministic to any command):
+#   --deterministic  Pins VLLM_BATCH_INVARIANT=1 + temp=0 + seed=42 on the vLLM
+#                    server. In replay mode, also pins OSL exactly via
+#                    min_tokens + ignore_eos. Default OFF.
+#
+# Usage modes:
+#   # Agent capture (SWE-bench tasks via Claude Code, mtier only):
+#   ./bench.sh --concurrency 16 --sustained-mins 20 --save-trace
+#   ./bench.sh --concurrency 16 --sustained-mins 20 --save-trace --deterministic
+#
+#   # Synthetic capture (controlled ISL/ISL_new/OSL, no GPU, no agents):
+#   ./bench.sh --save-trace --isl 27000 --osl 110 --isl-new 500 \
+#              --n-turns 50 --n-sessions 30
+#
+#   # Replay any capture (mtier + cpu side-by-side):
+#   ./bench.sh --from-trace results_benchmarks/bench_sweep_xxx/c016/ --concurrency 16
+#   ./bench.sh --from-trace <dir> --concurrency 16 --deterministic
+#   ./bench.sh --from-trace <dir> --concurrency 16 --osl 1   # override OSL to 1
+#
+#   # Plain dual-backend benchmark (no trace work):
 #   ./bench.sh --concurrency 16 --sustained-mins 20
-#   ./bench.sh --concurrency 16 --sustained-mins 20 --save-trace results_benchmarks/record_c016/
-#   ./bench.sh --from-trace results_benchmarks/record_c016/
-#   ./bench.sh --from-trace results_benchmarks/record_c016/ --osl 1
+#   ./bench.sh --concurrency 16 --sustained-mins 20 --deterministic
 #
 # View live: http://localhost:3000 (Grafana, no login)
 set -euo pipefail
