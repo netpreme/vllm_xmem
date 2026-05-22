@@ -53,9 +53,13 @@ REGIONS_ISL_NEW = [
 ]
 
 # Median first-substantive-turn ISL across 500 Verified problems under
-# Qwen3-Coder-30B = 26,975 tokens (p10=26,750, p90=27,597) — i.e. claude's
-# system prompt + 18 tool schemas + CLAUDE.md + task. Marked as a vertical
-# reference line on the ISL panel.
+# Qwen3-Coder-30B = 26,975 tokens (p10=26,750, p90=27,597). Breakdown
+# (estimated at ~4.17 chars/token from the actual data):
+#   ~6,400 tokens  (24%)  system prompt (claude behavioral rules)
+#   ~19,500 tokens (71%)  28 tool schemas — Bash/Read/Edit/Write/Glob/Grep/Task/…
+#   ~1,800 tokens  (5%)   first user message (task statement)
+# The tool catalog dominates; this is what every new conversation pays before
+# the first byte of useful work. Marked as a vertical reference on the ISL panel.
 CLAUDE_BASELINE_ISL = 27_000
 
 METRICS = [

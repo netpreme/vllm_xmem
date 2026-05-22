@@ -11,7 +11,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 
-from data import load_data
+from data import load_data, run_signature
 from plot_dist_grid import (
     CLAUDE_BASELINE_ISL, METRICS, REGIONS_ISL_NEW, REGIONS_OSL,
     XLIM_ALL, annotate_regions, hist_panel,
@@ -43,8 +43,7 @@ def main() -> int:
     vals = {m: real[m].astype(float) for m, *_ in METRICS}
 
     fig, axes = plt.subplots(1, 3, figsize=(20, 5.8))
-    suffix = f" — {args.title_suffix}" if args.title_suffix else ""
-    fig.suptitle(f"OSL / ISL / ISL_new distributions — aggregate{suffix}",
+    fig.suptitle(f"Token distributions\n{run_signature(args.run_dir)}",
                  fontsize=13)
 
     panel_max = []

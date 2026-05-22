@@ -35,9 +35,14 @@ plot() {
 }
 plot plot_itl_vs_isl.py           analysis_itl_vs_isl.png
 plot plot_ttft_prefill.py         analysis_ttft_prefill.png
-plot plot_prefill_decode_ratio.py analysis_prefill_decode_ratio.png
 plot plot_dist_agg.py             analysis_dist_agg.png
 plot plot_turns.py                analysis_turns.png
+# plot_kv_cache.py produces the representative figure AND, with
+# --samples-dir, 10 diverse-problem sample figures into analysis/samples/.
+echo "  -> plot_kv_cache.py (+ samples)"
+"$PY" "$HERE/analysis/plot_kv_cache.py" \
+    --run-dir "$RUN_DIR" --out "$OUT/analysis_kv_cache.png" \
+    --samples-dir "$OUT/samples" --title-suffix "$SUFFIX"
 if [[ "$IS_VERIFIED" -eq 1 ]]; then
     plot plot_dist_grid.py        analysis_dist_grid.png
     plot plot_cache_hit.py        analysis_cache.png

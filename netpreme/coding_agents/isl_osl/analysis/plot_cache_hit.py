@@ -16,7 +16,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 
-from data import VERIFIED_BUCKETS, load_data
+from data import VERIFIED_BUCKETS, load_data, run_signature
 
 BUCKET_COLOR = {
     "<15 min fix":     "#3b82f6",
@@ -81,9 +81,7 @@ def _plot_per_turn(ax, by_turn, max_turns: int, min_samples: int) -> None:
                     label=f"{bucket} (mean)")
     ax.set(xlabel="Turn", ylabel="Cache hit %",
            xlim=(2, max_turns), ylim=(60, 101))
-    ax.set_title("Cache hit % per turn\n"
-                 "(turn 1 excluded · compaction turns excluded)",
-                 fontsize=11, fontweight="bold")
+    ax.set_title("Cache hit % per turn", fontsize=11, fontweight="bold")
     ax.grid(True, ls="--", alpha=0.3)
     ax.legend(loc="lower right", fontsize=8, framealpha=0.95)
 
@@ -115,10 +113,11 @@ def _plot_per_bucket(ax, by_bucket) -> None:
         xticks.append(i); xticklabels.append(bucket)
     ax.set_xticks(xticks); ax.set_xticklabels(xticklabels)
     ax.set_ylabel("Cache hit %"); ax.set_ylim(60, 101)
-    ax.set_title("Cache hit % — all turns\n(compaction turns excluded)",
-                 fontsize=11, fontweight="bold")
+    ax.set_title("Cache hit % per level", fontsize=11, fontweight="bold")
     ax.grid(True, axis="y", ls="--", alpha=0.3)
-    ax.legend(loc="lower right", fontsize=8, framealpha=0.95)
+    # Lift the legend off the bottom so it doesn't overlap the n=… labels.
+    ax.legend(loc="lower right", bbox_to_anchor=(1.0, 0.10),
+              fontsize=8, framealpha=0.95)
 
 
 def main() -> int:
@@ -136,8 +135,8 @@ def main() -> int:
     by_turn, by_bucket = _build_buckets(t)
 
     fig, axes = plt.subplots(1, 2, figsize=(16, 6), constrained_layout=True)
-    suffix = f" — {args.title_suffix}" if args.title_suffix else ""
-    fig.suptitle(f"vLLM prefix cache hit rate{suffix}", fontsize=12)
+    fig.suptitle(f"Prefix cache hit rate\n{run_signature(args.run_dir)}",
+                 fontsize=12)
     _plot_per_turn(axes[0], by_turn, args.max_turns, args.min_samples)
     _plot_per_bucket(axes[1], by_bucket)
 

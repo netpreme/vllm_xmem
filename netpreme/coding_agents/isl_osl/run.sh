@@ -25,6 +25,8 @@ ROOT="$(cd "$HERE/.." && pwd)"
 BACKEND="vllm"
 SWE_DATASET="princeton-nlp/SWE-bench_Verified"
 SWE_LIMIT=500
+SWE_RANDOM=0       # 0 = take first N; >0 = random sample of N
+SWE_SEED=0
 RUN_ANALYSIS=1
 MODEL_FLAG=""
 while [[ $# -gt 0 ]]; do
@@ -37,6 +39,8 @@ while [[ $# -gt 0 ]]; do
                 *) echo "unknown --dataset: $2" >&2; exit 2 ;;
             esac; shift 2 ;;
         --limit)       SWE_LIMIT="$2"; shift 2 ;;
+        --random)      SWE_RANDOM="$2"; shift 2 ;;
+        --seed)        SWE_SEED="$2"; shift 2 ;;
         --model)       MODEL_FLAG="$2"; shift 2 ;;
         --no-analysis) RUN_ANALYSIS=0; shift ;;
         -h|--help)     sed -n '2,11p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
@@ -44,6 +48,8 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 case "$BACKEND" in vllm|anthropic) ;; *) echo "bad --backend: $BACKEND" >&2; exit 2 ;; esac
+# --random sets both the sample size and the displayed limit.
+[[ "$SWE_RANDOM" -gt 0 ]] && SWE_LIMIT="$SWE_RANDOM"
 # Anthropic backend ignores the .env MODEL_NAME (Qwen HF id) — default to
 # claude-opus-4-7 unless --model was explicitly passed.
 if [[ -n "$MODEL_FLAG" ]]; then
@@ -151,8 +157,13 @@ echo "[run] starting proxy on $PROXY_URL  →  $UPSTREAM_URL"
 start_proxy
 
 # --- dataset ----------------------------------------------------------------
-"$VENV_PY" "$HERE/pipeline/fetch_dataset.py" \
-    --dataset "$SWE_DATASET" --limit "$SWE_LIMIT" --out "$PROBLEMS"
+FETCH_ARGS=( --dataset "$SWE_DATASET" --out "$PROBLEMS" )
+if [[ "$SWE_RANDOM" -gt 0 ]]; then
+    FETCH_ARGS+=( --random "$SWE_RANDOM" --seed "$SWE_SEED" )
+else
+    FETCH_ARGS+=( --limit "$SWE_LIMIT" )
+fi
+"$VENV_PY" "$HERE/pipeline/fetch_dataset.py" "${FETCH_ARGS[@]}"
 TOTAL=$(wc -l < "$PROBLEMS")
 echo "[run] $TOTAL problems queued"
 

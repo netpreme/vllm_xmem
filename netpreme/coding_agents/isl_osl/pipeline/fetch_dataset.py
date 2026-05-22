@@ -32,12 +32,18 @@ def stratify(rows: list[dict], field: str, per_bucket: int) -> list[dict]:
 
 
 def main() -> int:
+    import random
     ap = argparse.ArgumentParser()
     ap.add_argument("--dataset",     default="princeton-nlp/SWE-bench_Verified")
     ap.add_argument("--split",       default="test")
-    ap.add_argument("--limit",       type=int, default=0, help="0 = no limit")
+    ap.add_argument("--limit",       type=int, default=0,
+                    help="take the first N rows in dataset order (0 = no limit)")
+    ap.add_argument("--random",      type=int, default=0,
+                    help="take a uniformly random sample of N rows")
+    ap.add_argument("--seed",        type=int, default=0,
+                    help="random seed for --random (default 0 for reproducibility)")
     ap.add_argument("--per-bucket",  type=int, default=0,
-                    help="if >0, take N rows per --bucket-by value")
+                    help="if >0, take N rows per --bucket-by value (stratified)")
     ap.add_argument("--bucket-by",   default="difficulty")
     ap.add_argument("--out",         required=True, type=Path)
     args = ap.parse_args()
@@ -51,6 +57,9 @@ def main() -> int:
     rows = list(load_dataset(args.dataset, split=args.split))
     if args.per_bucket > 0:
         rows = stratify(rows, args.bucket_by, args.per_bucket)
+    elif args.random > 0:
+        random.Random(args.seed).shuffle(rows)
+        rows = rows[: args.random]
     elif args.limit > 0:
         rows = rows[: args.limit]
 

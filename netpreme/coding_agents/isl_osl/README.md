@@ -98,7 +98,7 @@ problems (no difficulty split). Same semantic region bands as the grid
 version: OSL is bucketed into `tool calls / plan / code edits` and
 ISL_uncached into `small tool result / file read / large read /
 system prompt or compaction`. ISL panel marks the **claude-code
-baseline** (~27k tokens — system prompt + 18 tool schemas + CLAUDE.md +
+baseline** (~27k tokens total — system prompt ~6.4k + 28 tool schemas ~19.5k +
 task statement) as a red reference line.
 
 ![Cache hit rate per turn](results/analysis_cache.png)
@@ -121,8 +121,10 @@ monotone shift by difficulty (`<15min` median 26 → `15min–1h` median 32 →
 `1+h` median 39). One outlier at 618 turns lives in the easy bucket
 (probably a loop the model couldn't escape).
 
-Additional figures derived from `data.npz`: `analysis_ttft_prefill.png`
-(TTFT regression), `analysis_itl_vs_isl.png` (decode latency vs context),
-and `analysis_prefill_decode_ratio.png` (prefill+decode share by turn).
+![Per-turn KV cache + time breakdown — matplotlib-24637 (171 turns)](results/samples/kv_matplotlib__matplotlib-24637.png)
 
-
+`samples/kv_matplotlib__matplotlib-24637.png` — example per-turn breakdown
+for one representative problem (171 turns). **Top panel**: stacked KV cache
+in GB per turn — blue (cached prefix reused), red (recompute), green
+(decode). **Bottom panel**: per-turn wall time in ms, decomposed the same
+way. **Hatched bars** mark Task-tool sub-agent turns; solid bars are the main agent. 

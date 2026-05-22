@@ -28,6 +28,19 @@ def load_data(run_dir: Path) -> np.ndarray:
     return np.load(run_dir / "data.npz")["turns"]
 
 
+def run_signature(run_dir: Path) -> str:
+    """Return a one-line "agent + server + model + dataset" subtitle built
+    from <run-dir>/config.json. Used as the second line of figure titles."""
+    cfg = json.load((run_dir / "config.json").open())
+    ds_name = (cfg.get("dataset") or {}).get("name", "?")
+    dataset = ("SWE bench verfied" if "Verified" in ds_name else
+               "SWE bench pro"      if "Pro"     in ds_name else ds_name)
+    return (f"{cfg.get('agent', 'claude')} + "
+            f"{cfg.get('backend', 'vllm')} + "
+            f"{cfg.get('model', '?')} + "
+            f"{dataset}")
+
+
 def num(row: dict, key: str) -> float:
     """Coerce a CSV cell to float; return NaN for missing/blank/non-numeric."""
     v = row.get(key)
