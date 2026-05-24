@@ -24,7 +24,7 @@ BUCKET_COLOR = {
 
 def turns_per_problem(t: np.ndarray) -> dict[str, np.ndarray]:
     """Return {bucket: array of turn counts per problem}, plus an 'all' key."""
-    substantive = t[t["category"] != "empty"]
+    substantive = t[t["osl"] > 0]
     counts_per_iid: dict[str, int] = {}
     diff_per_iid: dict[str, str] = {}
     for iid in np.unique(substantive["instance_id"]):

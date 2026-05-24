@@ -1,10 +1,11 @@
 # ISL/OSL distribition generation
 
 Measures the input and output sequence length (ISL / OSL) distributions of a
-real coding agent. Claude Code drives a model — local via vLLM, or hosted via
-the Anthropic API — through SWE-bench Verified problems, and a logging proxy
-records ISL/OSL plus cache and timing on every turn. Single-GPU setup
-(1× NVIDIA GPU) required.
+real coding agent. Claude Code drives a local vLLM server through SWE-bench
+Verified problems; a background watcher polls vLLM's Prometheus `/metrics`
+endpoint and writes one row per turn with ISL / OSL / cache hits / TTFT /
+prefill / decode / ITL / queue / KV-usage. Single-GPU setup (1× NVIDIA GPU)
+required.
 
 ## Setup
 
@@ -29,64 +30,62 @@ Dataset:    [SWE Bench Verified](https://huggingface.co/datasets/princeton-nlp/S
    │     Claude Code      │   coding agent: reads files, edits, runs tests,
    │   (claude -p prompt) │   loops tool calls until the bug is fixed
    └──────────┬───────────┘
-              │ many turns of /v1/messages, each carrying
-              │   prompt history + tool results
-              ▼
-   ┌──────────────────────┐   tap captures, per turn:
-   │  measurement tap     │   ISL, OSL, ISL_new, ISL_cached,
-   │  (logging proxy)     │   cache_hit_rate, ttft_ms, decode_ms,
-   └──────────┬───────────┘   itl_ms, category (text / tool / mixed)
-              │ forwards request unchanged
-              ▼
-   ┌─────────────────────────────────────────┐
-   │              Model server               │
-   │  ┌─────────────────┐  ┌───────────────┐ │
-   │  │  vLLM (local)   │  │ Anthropic API │ │
-   │  │  Qwen3-Coder    │  │ Claude Opus   │ │
-   │  └─────────────────┘  └───────────────┘ │
-   └─────────────────────────────────────────┘
-              │ response streamed back through the proxy to claude
+              │ POSTs /v1/messages straight to vLLM, one per turn
               ▼
    ┌──────────────────────┐
-   │  per-problem CSV +   │   analyze.sh consolidates everything into one
-   │  full text JSONL     │   data.npz, then renders figures from it
-   └──────────────────────┘
+   │  vLLM (Qwen3-Coder)  │   ─────────►  /metrics  (Prometheus endpoint)
+   └──────────────────────┘                  ▲
+              │ response streamed             │ scraped every 100 ms
+              ▼                               │
+   ┌──────────────────────┐                   │
+   │      claude-cli      │              ┌────┴───────────────┐
+   │  (next turn, repeat) │              │  metrics_watcher   │
+   └──────────────────────┘              │  detects each turn │
+                                          │  completion in     │
+                                          │  the counters and  │
+                                          │  writes one row    │
+                                          │  per turn to       │
+                                          │  per_problem/*.csv │
+                                          └────────────────────┘
+                                                    │
+                                                    ▼
+                                         analyze.sh ─► data.npz + figures
 ```
+
+The watcher reads vLLM's per-request histograms (`vllm:request_prompt_tokens_sum`,
+`vllm:request_prefill_time_seconds_sum`, etc.). At concurrency=1, vLLM updates
+all of those atomically at request completion, so the delta between two
+scrapes that bracket one completion is exactly that request's contribution —
+giving us per-turn attribution without an intercepting proxy.
 
 What gets saved per run (`runs/<stamp>/`):
 
 - `config.json` — resolved config (model, dataset, caps, machine)
 - `problems.jsonl` — the SWE-bench rows fed to claude
-- `per_problem/<id>.csv` — one row per assistant turn (the proxy log)
+- `per_problem/<id>.csv` — one row per assistant turn (the watcher's output)
 - `per_problem/<id>.summary.json` — per-problem totals from claude's `result` event
-- `transcripts/<id>.jsonl` — full per-turn request + response text
 - `solved.txt` — completed instance IDs
+- `.active_instance` — control file the watcher reads to attribute rows
+- `.watcher.log` — watcher's stderr (mostly empty; vLLM-restart noise filtered)
 - `data.npz` — canonical per-turn structured array (built by `analyze.sh`)
 - `analysis/*.png` — figures from `analyze.sh` (all read from `data.npz`)
 
 ## Quick start
 
 ```bash
-# Local vLLM (Qwen3-Coder) — start the server, then run:
+# Start the vLLM server (Qwen3-Coder), then drive a SWE-bench run:
 bash ../server.sh > /tmp/vllm.log 2>&1 &
-./run.sh                                            # claude code + vllm + swe bench verfied
+./run.sh                                            # Verified, all 500 problems
 ./analyze.sh runs/<stamp>                           # build data.npz + figures
 ```
 
-To run SWE-bench Pro, use:
+Other dataset / sample sizes:
 
 ```bash
-bash ../server.sh > /tmp/vllm.log 2>&1 &
-./run.sh --dataset pro
-./analyze.sh runs/<stamp>
-```
-
-To use the hosted Anthropic API (no local vLLM needed; uses your existing
-`claude login` credentials), use:
-
-```bash
-./run.sh --backend anthropic --model claude-opus-4-7
-./analyze.sh runs/<stamp>
+./run.sh --dataset pro                              # SWE-bench Pro instead
+./run.sh --limit 50                                 # first 50 problems
+./run.sh --random 100 --seed 0                      # random sample of 100
+./run.sh --no-analysis                              # skip analyze.sh at the end
 ```
 
 ## Results

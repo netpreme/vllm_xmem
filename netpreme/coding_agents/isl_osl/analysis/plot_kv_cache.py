@@ -56,7 +56,7 @@ def pick_representative(t: np.ndarray) -> str:
         rows = t[t["instance_id"] == iid]
         if rows["difficulty"][0] != "15 min - 1 hour":
             continue
-        real = rows[rows["category"] != "empty"]
+        real = rows[rows["osl"] > 0]
         n = len(real)
         if n < 25 or n > 40:
             continue
@@ -72,7 +72,7 @@ def pick_samples(t: np.ndarray, n: int = 10) -> list[str]:
     turn count. Filters out compaction problems for cleaner figures."""
     stats: list[tuple[str, int]] = []
     for iid in np.unique(t["instance_id"]):
-        rows = t[(t["instance_id"] == iid) & (t["category"] != "empty")]
+        rows = t[(t["instance_id"] == iid) & (t["osl"] > 0)]
         if len(rows) < 15:
             continue
         if ((rows["cache_hit_rate"] < 0.5) & (rows["isl_new"] > 50_000)).any():
@@ -87,7 +87,7 @@ def pick_samples(t: np.ndarray, n: int = 10) -> list[str]:
 
 def render(t: np.ndarray, iid: str, out: Path, title_suffix: str) -> None:
     """Render one two-panel figure for one problem and save to `out`."""
-    problem = t[(t["instance_id"] == iid) & (t["category"] != "empty")]
+    problem = t[(t["instance_id"] == iid) & (t["osl"] > 0)]
     difficulty = problem["difficulty"][0] if len(problem) else ""
 
     turns = np.arange(1, len(problem) + 1)

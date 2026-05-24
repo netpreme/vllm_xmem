@@ -145,7 +145,7 @@ def main() -> int:
     args = ap.parse_args()
 
     t = load_data(args.run_dir)
-    real = t[t["category"] != "empty"]
+    real = t[t["osl"] > 0]
     # Group values by (metric, difficulty bucket).
     vals: dict[tuple[str, str], np.ndarray] = {}
     for m, *_ in METRICS:

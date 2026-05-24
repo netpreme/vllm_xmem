@@ -44,7 +44,7 @@ def _build_buckets(t: np.ndarray) -> tuple[
             continue
         ti = 0
         for r in problem:
-            if r["category"] == "empty" or r["isl"] <= 0:
+            if r["osl"] <= 0 or r["isl"] <= 0:
                 continue
             ti += 1
             if ti == 1:                                          # cold-start

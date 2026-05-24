@@ -89,7 +89,7 @@ def main() -> int:
     args = ap.parse_args()
 
     t = load_data(args.run_dir)
-    real = t[(t["category"] != "empty") & (t["isl"] > 0) & (t["osl"] > 0)]
+    real = t[(t["osl"] > 0) & (t["isl"] > 0) & (t["osl"] > 0)]
     dec = real[real["decode_ms"] > 0]
     itl = real[(real["itl_ms"] > 0) & (real["osl"] >= args.min_osl)
                & np.isfinite(real["itl_ms"])]

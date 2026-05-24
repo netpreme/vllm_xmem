@@ -69,7 +69,7 @@ def main() -> int:
     args = ap.parse_args()
 
     t = load_data(args.run_dir)
-    real = t[(t["category"] != "empty") & (t["ttft_ms"] > 0) & (t["isl"] > 0)]
+    real = t[(t["osl"] > 0) & (t["ttft_ms"] > 0) & (t["isl"] > 0)]
     print(f"plotting {len(real)} turns (after filtering)")
 
     ttft, isl   = real["ttft_ms"].astype(float),   real["isl"].astype(float)

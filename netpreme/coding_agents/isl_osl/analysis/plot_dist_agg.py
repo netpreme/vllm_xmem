@@ -39,7 +39,7 @@ def main() -> int:
     args = ap.parse_args()
 
     t = load_data(args.run_dir)
-    real = t[t["category"] != "empty"]
+    real = t[t["osl"] > 0]
     vals = {m: real[m].astype(float) for m, *_ in METRICS}
 
     fig, axes = plt.subplots(1, 3, figsize=(20, 5.8))
