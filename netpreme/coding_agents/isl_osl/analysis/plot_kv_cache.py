@@ -12,7 +12,9 @@ Two stacked-bar subplots sharing the x-axis (turn index within the problem):
     recompute        = ttft_ms − cached   (what's left of TTFT)
     decode           = decode_ms          (observed)
 
-A ribbon below identifies each turn as main agent vs Task-tool sub-agent.
+Task-tool sub-agent turns (agent == "sub") are drawn with a `///` hatch
+on top of the same color stack so they stand out without changing the
+component color encoding.
 
 If --instance-id isn't supplied we pick a representative problem in the
 medium-difficulty bucket: turn-count near the median, no compaction events.
@@ -24,9 +26,13 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.patches import Patch
 from matplotlib.ticker import FuncFormatter
 
 from data import load_data
+
+# Hatch pattern used to mark Task-tool sub-agent turns on every stacked bar.
+SUB_AGENT_HATCH = "///"
 
 # Same constant as build_data.py.
 KV_BYTES_PER_TOKEN = 48 * 4 * 128 * 2 * 2
@@ -47,6 +53,27 @@ KV_COMPONENTS = [
     ("recompute",        "isl_new",    COLOR_RECOMPUTE),
     ("decode",           "osl",        COLOR_DECODE),
 ]
+
+
+def _apply_sub_agent_hatch(bars, is_sub: np.ndarray) -> None:
+    """Walk a `BarContainer` and stamp the `///` hatch on bars whose
+    corresponding turn is a Task-tool sub-agent."""
+    for rect, sub in zip(bars, is_sub):
+        if sub:
+            rect.set_hatch(SUB_AGENT_HATCH)
+            rect.set_edgecolor("white")
+
+
+def _legend_handles(components, n_sub: int) -> list[Patch]:
+    """Build a combined legend: one patch per stack component plus, if any
+    sub-agent turns exist in this problem, a single hatched patch
+    explaining the encoding."""
+    handles = [Patch(facecolor=c, label=n) for n, _, c in components]
+    if n_sub > 0:
+        handles.append(Patch(facecolor="white", edgecolor="black",
+                             hatch=SUB_AGENT_HATCH,
+                             label="sub-agent (hatched)"))
+    return handles
 
 
 def pick_representative(t: np.ndarray) -> str:
@@ -114,26 +141,21 @@ def render(t: np.ndarray, iid: str, out: Path, title_suffix: str) -> None:
     fig, (ax_kv, ax_t) = plt.subplots(2, 1, figsize=(13, 9.5),
                                       sharex=True, constrained_layout=True)
     suffix = f" — {title_suffix}" if title_suffix else ""
-    fig.suptitle(
-        f"{iid}  ({difficulty}, {len(turns)} turns: "
-        f"{len(turns)-n_sub} main / {n_sub} sub){suffix}",
-        fontsize=11,
-    )
+    subtitle = (f"{iid}  ({difficulty}, {len(turns)} turns: "
+                f"{len(turns) - n_sub} main / {n_sub} sub){suffix}")
+    fig.suptitle(subtitle, fontsize=11)
 
-    # ---- top panel: KV cache (GB). Sub-agent bars are hatched (///). ------
+    # ---- top panel: KV cache (GB) -----------------------------------------
+    # Stacked bars first, then a single pass that hatches the sub-agent
+    # bars in-place. Keeping the hatching as a post-processing step keeps
+    # the main bar-drawing loop readable.
     bottom = np.zeros(len(turns))
     for name, col, color in KV_COMPONENTS:
         vals = kv_series[name]
-        # Main and sub-agent bars are drawn together so the legend has one
-        # entry per component; then we walk the rectangles and add a hatch
-        # pattern on the sub-agent ones.
         bars = ax_kv.bar(turns, vals, width=1.0, bottom=bottom,
                          color=color, edgecolor="white", linewidth=0.3,
                          label=name)
-        for rect, sub in zip(bars, is_sub):
-            if sub:
-                rect.set_hatch("///")
-                rect.set_edgecolor("white")
+        _apply_sub_agent_hatch(bars, is_sub)
         bottom += vals
     for x, total in zip(turns, bottom):
         if x % 5 == 0:
@@ -143,26 +165,17 @@ def render(t: np.ndarray, iid: str, out: Path, title_suffix: str) -> None:
     ax_kv.set_ylim(0, bottom.max() * 1.10 if len(bottom) else 1)
     ax_kv.yaxis.set_major_formatter(FuncFormatter(lambda v, _: f"{v:.1f}"))
     ax_kv.grid(True, axis="y", ls="--", alpha=0.3)
-    from matplotlib.patches import Patch
-    kv_legend_handles = [
-        *[Patch(facecolor=c, label=n) for n, _, c in KV_COMPONENTS],
-        Patch(facecolor="white", edgecolor="black", hatch="///",
-              label="sub-agent (hatched)"),
-    ]
-    ax_kv.legend(handles=kv_legend_handles, loc="upper left",
-                 fontsize=10, framealpha=0.95, title="KV component / agent")
+    ax_kv.legend(handles=_legend_handles(KV_COMPONENTS, n_sub),
+                 loc="upper left", fontsize=10, framealpha=0.95,
+                 title="KV component / agent")
 
     # ---- bottom panel: per-turn wall-clock time (ms) ----------------------
-    # Sub-agent bars are hatched, same convention as the KV panel.
     bottom_t = np.zeros(len(turns))
     for name, vals, color in time_stack:
         bars = ax_t.bar(turns, vals, width=1.0, bottom=bottom_t,
                         color=color, edgecolor="white", linewidth=0.3,
                         label=name)
-        for rect, sub in zip(bars, is_sub):
-            if sub:
-                rect.set_hatch("///")
-                rect.set_edgecolor("white")
+        _apply_sub_agent_hatch(bars, is_sub)
         bottom_t += vals
     for x, total in zip(turns, bottom_t):
         if x % 5 == 0:
@@ -171,13 +184,9 @@ def render(t: np.ndarray, iid: str, out: Path, title_suffix: str) -> None:
     ax_t.set_ylabel("per-turn wall time (ms)")
     ax_t.set_ylim(0, bottom_t.max() * 1.10 if len(bottom_t) else 1)
     ax_t.grid(True, axis="y", ls="--", alpha=0.3)
-    time_legend_handles = [
-        *[Patch(facecolor=c, label=n) for n, _, c in time_stack],
-        Patch(facecolor="white", edgecolor="black", hatch="///",
-              label="sub-agent (hatched)"),
-    ]
-    ax_t.legend(handles=time_legend_handles, loc="upper left",
-                fontsize=10, framealpha=0.95, title="time component / agent")
+    ax_t.legend(handles=_legend_handles(time_stack, n_sub),
+                loc="upper left", fontsize=10, framealpha=0.95,
+                title="time component / agent")
 
     ax_t.set_xlabel("turn index within problem (substantive turns)")
     ax_t.set_xlim(0.5, len(turns) + 0.5)

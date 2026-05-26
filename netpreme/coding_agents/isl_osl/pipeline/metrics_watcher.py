@@ -36,11 +36,13 @@ import csv
 import re
 import sys
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import httpx
+
+from agent_labels import LabelReader, LabelRecord
 
 
 # ---------------------------------------------------------------------------
@@ -51,7 +53,8 @@ CSV_COLUMNS = [
     "ts", "instance_id", "elapsed_ms",
     "ttft_ms", "prefill_ms", "decode_ms", "itl_ms", "queue_ms",
     "isl", "osl", "isl_new", "isl_cached", "cache_hit_rate",
-    "stop_reason", "agent", "kv_cache_usage_pct",
+    "stop_reason", "agent", "num_tool_defs", "num_messages",
+    "system_prompt_chars", "kv_cache_usage_pct",
 ]
 
 
@@ -81,11 +84,13 @@ class _Metric:
 
     # Cumulative histogram _sum counters (seconds). Atomic at request
     # completion — diff across two snapshots is the per-request value.
-    TTFT_SUM         = "vllm:time_to_first_token_seconds_sum"
+    # We intentionally skip `vllm:time_to_first_token_seconds_sum` and
+    # `vllm:e2e_request_latency_seconds_sum`: the former races our
+    # completion trigger (vLLM observes TTFT at first-token-time, not at
+    # completion), and we reconstruct e2e from local wall-clock deltas.
     PREFILL_SUM      = "vllm:request_prefill_time_seconds_sum"
     DECODE_SUM       = "vllm:request_decode_time_seconds_sum"
     QUEUE_SUM        = "vllm:request_queue_time_seconds_sum"
-    E2E_SUM          = "vllm:e2e_request_latency_seconds_sum"
     TPOT_SUM         = "vllm:request_time_per_output_token_seconds_sum"
 
     # Per-request token histograms — atomic at completion.
@@ -173,7 +178,7 @@ class Snapshot:
     """
 
     request_count:           int
-    timing_seconds_sum:      dict[str, float]   # ttft | prefill | decode | queue | e2e | tpot
+    timing_seconds_sum:      dict[str, float]   # prefill | decode | queue | tpot
     prompt_tokens:           int                # per-request histogram _sum
     gen_tokens:              int
     prefill_kv_computed:     int                # uncached input tokens (= isl_new)
@@ -184,11 +189,9 @@ class Snapshot:
     @classmethod
     def from_metrics(cls, metrics: dict[str, float]) -> "Snapshot":
         timings = {
-            "ttft":    metric_value(metrics, _Metric.TTFT_SUM),
             "prefill": metric_value(metrics, _Metric.PREFILL_SUM),
             "decode":  metric_value(metrics, _Metric.DECODE_SUM),
             "queue":   metric_value(metrics, _Metric.QUEUE_SUM),
-            "e2e":     metric_value(metrics, _Metric.E2E_SUM),
             "tpot":    metric_value(metrics, _Metric.TPOT_SUM),
         }
         finished = {
@@ -224,9 +227,14 @@ def _diff_finished_reason(before: Snapshot, after: Snapshot) -> str:
     return ""
 
 
-def derive_row(before: Snapshot, after: Snapshot, instance_id: str) -> dict[str, Any]:
+def derive_row(before: Snapshot, after: Snapshot, instance_id: str,
+               label: LabelRecord | None) -> dict[str, Any]:
     """Build one CSV row from two consecutive snapshots that bracket
-    exactly one request completion (concurrency=1)."""
+    exactly one request completion (concurrency=1).
+
+    `label` is the matching record from the agent-labeler queue, or None
+    if the labeler isn't running. We default the agent-side fields to
+    something sensible so the schema is always populated."""
 
     def delta_ms(name: str) -> float:
         return (after.timing_seconds_sum[name]
@@ -263,7 +271,10 @@ def derive_row(before: Snapshot, after: Snapshot, instance_id: str) -> dict[str,
         "isl_cached":         isl_cached,
         "cache_hit_rate":     round(cache_hit, 4),
         "stop_reason":        _diff_finished_reason(before, after),
-        "agent":              "main",   # cannot distinguish without proxy
+        "agent":               label.agent               if label else "main",
+        "num_tool_defs":       label.num_tool_defs       if label else 0,
+        "num_messages":        label.num_messages        if label else 0,
+        "system_prompt_chars": label.system_prompt_chars if label else 0,
         "kv_cache_usage_pct": round(after.kv_usage_pct * 100, 3),
     }
 
@@ -331,10 +342,12 @@ class MetricsWatcher:
     """
 
     def __init__(self, vllm_url: str, control_file: Path, csv_dir: Path,
+                 labels_file: Path | None = None,
                  poll_interval_s: float = 0.1) -> None:
         self._url             = vllm_url.rstrip("/")
         self._control_file    = control_file
         self._csv             = PerProblemCSV(csv_dir)
+        self._labels          = LabelReader(labels_file) if labels_file else None
         self._poll_interval_s = poll_interval_s
 
     async def _scrape(self, client: httpx.AsyncClient) -> Snapshot:
@@ -342,9 +355,24 @@ class MetricsWatcher:
         return Snapshot.from_metrics(parse_prometheus_text(r.text))
 
     async def run(self) -> None:
-        """Main polling loop. Returns when the process is killed."""
+        """Main polling loop. Returns when the process is killed.
+
+        We never raise on transient `/metrics` failures: vLLM is killed and
+        restarted between problems by `reset_vllm.sh`, and our scrape can
+        race that. A failed scrape just clears `previous`; the next
+        successful one becomes the new baseline. This applies to the very
+        first scrape too — so the watcher can be safely launched while
+        vLLM is still warming up.
+        """
         async with httpx.AsyncClient() as client:
-            previous = await self._scrape(client)
+            previous: Snapshot | None = None
+            while previous is None:
+                try:
+                    previous = await self._scrape(client)
+                except httpx.HTTPError as exc:
+                    print(f"[metrics-watcher] baseline scrape error: {exc!r}",
+                          file=sys.stderr, flush=True)
+                    await asyncio.sleep(self._poll_interval_s)
             print(f"[metrics-watcher] baseline scrape: "
                   f"request_count={previous.request_count}", flush=True)
 
@@ -366,7 +394,8 @@ class MetricsWatcher:
                 completed = current.request_count - previous.request_count
                 if completed >= 1:
                     instance_id = read_active_instance(self._control_file)
-                    row = derive_row(previous, current, instance_id)
+                    label = self._labels.pop() if self._labels else None
+                    row = derive_row(previous, current, instance_id, label)
                     self._csv.write(row)
                     if completed > 1:
                         print(f"[metrics-watcher] WARNING: {completed} "
@@ -388,6 +417,11 @@ def main() -> int:
                              "current instance_id")
     parser.add_argument("--per-problem-csv-dir", required=True, type=Path,
                         help="directory to write per-problem CSVs into")
+    parser.add_argument("--labels-file",     type=Path, default=None,
+                        help="optional file produced by pipeline/"
+                             "agent_labeler.py; if set, the watcher pops "
+                             "one record per detected completion and "
+                             "fills in agent/num_tool_defs/etc.")
     parser.add_argument("--poll-interval-s", type=float, default=0.1,
                         help="seconds between /metrics scrapes")
     args = parser.parse_args()
@@ -396,6 +430,7 @@ def main() -> int:
         vllm_url=args.vllm_url,
         control_file=args.control_file,
         csv_dir=args.per_problem_csv_dir,
+        labels_file=args.labels_file,
         poll_interval_s=args.poll_interval_s,
     )
     try:

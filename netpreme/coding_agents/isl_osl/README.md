@@ -1,11 +1,18 @@
-# ISL/OSL distribition generation
+# ISL/OSL distribution generation
 
 Measures the input and output sequence length (ISL / OSL) distributions of a
 real coding agent. Claude Code drives a local vLLM server through SWE-bench
-Verified problems; a background watcher polls vLLM's Prometheus `/metrics`
-endpoint and writes one row per turn with ISL / OSL / cache hits / TTFT /
-prefill / decode / ITL / queue / KV-usage. Single-GPU setup (1× NVIDIA GPU)
-required.
+Verified problems; two sidecar processes capture per-turn data:
+
+- **`metrics_watcher`** polls vLLM's Prometheus `/metrics` endpoint and writes
+  one row per turn with ISL / OSL / cache hits / TTFT / prefill / decode /
+  ITL / queue / KV-usage — everything the model and scheduler can measure.
+- **`agent_labeler`** is a thin reverse-proxy in front of vLLM that
+  inspects each request body to classify it as main-agent vs Task-tool
+  sub-agent (by system-prompt size), then appends a label that the watcher
+  merges into the same row.
+
+Single-GPU setup (1× NVIDIA GPU) required.
 
 ## Setup
 
@@ -30,33 +37,47 @@ Dataset:    [SWE Bench Verified](https://huggingface.co/datasets/princeton-nlp/S
    │     Claude Code      │   coding agent: reads files, edits, runs tests,
    │   (claude -p prompt) │   loops tool calls until the bug is fixed
    └──────────┬───────────┘
-              │ POSTs /v1/messages straight to vLLM, one per turn
+              │ POSTs /v1/messages, one per turn
               ▼
    ┌──────────────────────┐
-   │  vLLM (Qwen3-Coder)  │   ─────────►  /metrics  (Prometheus endpoint)
+   │   agent_labeler      │   inspects system-prompt size →
+   │   (reverse proxy)    │   appends "main" or "sub" record
+   └──────────┬───────────┘     to .agent_labels (FIFO queue)
+              │ forwards unmodified
+              ▼
+   ┌──────────────────────┐
+   │  vLLM (Qwen3-Coder)  │ ─────────► /metrics  (Prometheus endpoint)
    └──────────────────────┘                  ▲
               │ response streamed             │ scraped every 100 ms
               ▼                               │
    ┌──────────────────────┐                   │
-   │      claude-cli      │              ┌────┴───────────────┐
-   │  (next turn, repeat) │              │  metrics_watcher   │
-   └──────────────────────┘              │  detects each turn │
-                                          │  completion in     │
-                                          │  the counters and  │
-                                          │  writes one row    │
-                                          │  per turn to       │
-                                          │  per_problem/*.csv │
-                                          └────────────────────┘
-                                                    │
-                                                    ▼
-                                         analyze.sh ─► data.npz + figures
+   │      claude-cli      │              ┌────┴───────────────────┐
+   │  (next turn, repeat) │              │   metrics_watcher       │
+   └──────────────────────┘              │   on each detected      │
+                                          │   completion:           │
+                                          │     · pop one label     │
+                                          │       from .agent_labels│
+                                          │     · merge with vLLM   │
+                                          │       counter deltas    │
+                                          │     · write CSV row to  │
+                                          │       per_problem/*.csv │
+                                          └─────────────────────────┘
+                                                       │
+                                                       ▼
+                                          analyze.sh ─► data.npz + figures
 ```
 
-The watcher reads vLLM's per-request histograms (`vllm:request_prompt_tokens_sum`,
-`vllm:request_prefill_time_seconds_sum`, etc.). At concurrency=1, vLLM updates
-all of those atomically at request completion, so the delta between two
-scrapes that bracket one completion is exactly that request's contribution —
-giving us per-turn attribution without an intercepting proxy.
+**Where each metric comes from.** vLLM's `/metrics` is authoritative for
+anything the GPU or scheduler can measure: token counts, prefill/decode/ITL
+timings, queue time, prefix-cache stats, KV utilization. At concurrency=1,
+every per-request `_sum` histogram updates atomically when a request
+completes, so the delta between two scrapes that bracket one completion is
+exactly that request's contribution. The labeler owns what only the request
+body can tell us: whether the call is claude's main agent loop (~27k char
+system prompt) or a Task-tool sub-agent (~3k char system prompt), plus
+incidentals like `num_tool_defs` and `num_messages`. The two streams are
+joined in the watcher by FIFO ordering — at concurrency=1, the N-th label
+written corresponds to the N-th completion observed.
 
 What gets saved per run (`runs/<stamp>/`):
 
@@ -66,9 +87,39 @@ What gets saved per run (`runs/<stamp>/`):
 - `per_problem/<id>.summary.json` — per-problem totals from claude's `result` event
 - `solved.txt` — completed instance IDs
 - `.active_instance` — control file the watcher reads to attribute rows
-- `.watcher.log` — watcher's stderr (mostly empty; vLLM-restart noise filtered)
+- `.agent_labels` — FIFO queue the labeler appends to and the watcher pops from
+  (truncated at the start of every problem)
+- `.labeler.log` / `.watcher.log` — sidecar stderr. The watcher log will contain
+  `scrape error:` lines during each `reset_vllm.sh` window (the server is
+  briefly down between problems) — that's expected.
 - `data.npz` — canonical per-turn structured array (built by `analyze.sh`)
 - `analysis/*.png` — figures from `analyze.sh` (all read from `data.npz`)
+
+## Code layout
+
+```
+pipeline/
+  agent_labels.py       on-disk label-record format + Writer + Reader
+                        (the contract between labeler and watcher)
+  agent_labeler.py      the reverse-proxy. Pure classification logic at the
+                        top of the file; HTTP transport at the bottom.
+  metrics_watcher.py    polls /metrics, pops labels, writes per-problem CSV
+  solve_problem.py      drives one `claude -p` invocation for one problem
+  fetch_dataset.py      pulls SWE-bench rows into problems.jsonl
+  reset_vllm.sh         cold-restarts vLLM between problems
+
+analysis/
+  build_data.py         CSVs + problems.jsonl  →  data.npz
+  data.py               small helpers shared by build_data + plots
+  plot_*.py             one figure each; every script reads only data.npz
+
+run.sh                  orchestrator: starts sidecars, loops problems
+analyze.sh              orchestrator: builds data.npz, renders all figures
+```
+
+The modular split means each file has one job. The labeler doesn't know
+about timing; the watcher doesn't know about HTTP bodies; the plot scripts
+don't know about CSVs. Changing any layer is a localized edit.
 
 ## Quick start
 
@@ -115,15 +166,15 @@ Harder problems just run for many more turns at that steady state.
 `analysis_turns.png` — distribution of turns-per-problem (substantive turns
 only; empty/init rows dropped). Leftmost panel aggregates all 500 problems;
 the next three split by difficulty with a shared y-axis for direct
-comparison. **Takeaways:** median ~31 turns/problem overall, with a clear
-monotone shift by difficulty (`<15min` median 26 → `15min–1h` median 32 →
-`1+h` median 39). One outlier at 618 turns lives in the easy bucket
-(probably a loop the model couldn't escape).
+comparison. **Takeaways:** median 29 turns/problem overall, with a clear
+monotone shift by difficulty (`<15min` median 26 → `15min–1h` median 30 →
+`1+h` median 34). The long tail reaches 471 turns (`sympy__sympy-24443`) —
+these are the cases where the model loops without converging on a fix.
 
-![Per-turn KV cache + time breakdown — matplotlib-24637 (171 turns)](results/samples/kv_matplotlib__matplotlib-24637.png)
+![Per-turn KV cache + time breakdown — matplotlib-23412 (142 turns)](results/samples/kv_matplotlib__matplotlib-23412.png)
 
-`samples/kv_matplotlib__matplotlib-24637.png` — example per-turn breakdown
-for one representative problem (171 turns). **Top panel**: stacked KV cache
+`samples/kv_matplotlib__matplotlib-23412.png` — example per-turn breakdown
+for one representative problem (142 turns). **Top panel**: stacked KV cache
 in GB per turn — blue (cached prefix reused), red (recompute), green
 (decode). **Bottom panel**: per-turn wall time in ms, decomposed the same
-way. **Hatched bars** mark Task-tool sub-agent turns; solid bars are the main agent. 
+way.

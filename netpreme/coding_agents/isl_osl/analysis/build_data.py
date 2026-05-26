@@ -4,7 +4,8 @@ Walks runs/<stamp>/per_problem/*.csv + problems.jsonl, joins difficulty
 per problem, and writes one structured numpy array to <run-dir>/data.npz.
 Every plot script reads from this file rather than re-parsing CSVs.
 
-CSV schema is set by pipeline/proxy.py (Prometheus-sourced metrics).
+CSV schema is set by pipeline/metrics_watcher.py (the Prometheus-scraping
+process that writes one row per turn).
 """
 from __future__ import annotations
 
@@ -25,9 +26,14 @@ KV_BYTES_PER_TOKEN = 48 * 4 * 128 * 2 * 2
 DTYPE = np.dtype([
     ("instance_id",             "U64"),
     ("difficulty",               "U24"),
-    # "main" = claude's outer agent loop; "sub" = Task-tool helper.
-    # Detected by the proxy from system-prompt size; persisted in the CSV.
+    # Populated by pipeline/agent_labeler.py from the system-prompt size of
+    # each /v1/messages request: "main" (claude-cli's outer loop, ~27 k char
+    # system prompt) vs "sub" (Task-tool helper, ~3 k char system prompt).
+    # If the labeler isn't running the column is always "main".
     ("agent",                   "U4"),
+    ("num_tool_defs",           "i4"),
+    ("num_messages",            "i4"),
+    ("system_prompt_chars",     "i4"),
     ("turn",                    "i4"),
     ("isl",                     "i4"),
     ("osl",                     "i4"),
@@ -78,6 +84,9 @@ def build_records(run_dir: Path) -> np.ndarray:
                 iid,
                 difficulty.get(iid) or "",
                 r.get("agent") or "main",
+                _int(num(r, "num_tool_defs")),
+                _int(num(r, "num_messages")),
+                _int(num(r, "system_prompt_chars")),
                 i,
                 isl, osl,
                 _int(num(r, "isl_new")),

@@ -41,6 +41,7 @@ fi
 : "${CLAUDE_TIMEOUT_SECS:=86400}"
 
 VLLM_URL="http://localhost:8000"
+LABELER_URL="http://127.0.0.1:8001"   # agent_labeler proxy, sits in front of vLLM
 
 
 # ---------------------------------------------------------------------------
@@ -97,6 +98,7 @@ WORKDIRS="/tmp/swe_workdirs/$STAMP"
 PROBLEMS="$RUN_DIR/problems.jsonl"
 SOLVED="$RUN_DIR/solved.txt"
 CONTROL_FILE="$RUN_DIR/.active_instance"
+LABELS_FILE="$RUN_DIR/.agent_labels"
 
 mkdir -p "$CSV_DIR" "$WORKDIRS"
 : >"$SOLVED"
@@ -158,28 +160,61 @@ PY
 
 
 # ---------------------------------------------------------------------------
-# Start the background metrics watcher.
+# Background processes.
+#
+# Two long-lived sidecars run for the whole benchmark:
+#   * agent_labeler  — pass-through proxy in front of vLLM. Classifies each
+#                      /v1/messages call (main vs sub agent) and appends a
+#                      label record to .agent_labels.
+#   * metrics_watcher — polls vLLM /metrics every 100 ms. On each detected
+#                      completion it pops the matching label record and
+#                      writes one CSV row to per_problem/<iid>.csv.
+# Both are killed in the cleanup trap below.
 # ---------------------------------------------------------------------------
 
+LABELER_PID=""
 WATCHER_PID=""
 cleanup() {
-    if [[ -n "${WATCHER_PID:-}" ]] && kill -0 "$WATCHER_PID" 2>/dev/null; then
-        echo "[run] stopping metrics watcher (pid $WATCHER_PID)"
-        kill "$WATCHER_PID"            2>/dev/null || true
-        wait "$WATCHER_PID"            2>/dev/null || true
-    fi
+    for proc in "watcher:$WATCHER_PID" "labeler:$LABELER_PID"; do
+        name="${proc%%:*}"
+        pid="${proc#*:}"
+        if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
+            echo "[run] stopping $name (pid $pid)"
+            kill "$pid"            2>/dev/null || true
+            wait "$pid"            2>/dev/null || true
+        fi
+    done
 }
 trap cleanup EXIT
+
+start_labeler() {
+    "$PY" "$HERE/pipeline/agent_labeler.py" \
+        --upstream "$VLLM_URL" \
+        --labels-file "$LABELS_FILE" \
+        --listen-port 8001 \
+        >"$RUN_DIR/.labeler.log" 2>&1 &
+    LABELER_PID=$!
+    # Wait for the labeler to start listening before we let claude hit it.
+    for _ in $(seq 1 50); do
+        curl -fsS "$LABELER_URL/v1/models" >/dev/null 2>&1 && return 0
+        sleep 0.1
+    done
+    echo "[run] labeler failed to start; see $RUN_DIR/.labeler.log" >&2
+    exit 1
+}
 
 start_watcher() {
     "$PY" "$HERE/pipeline/metrics_watcher.py" \
         --vllm-url "$VLLM_URL" \
         --control-file "$CONTROL_FILE" \
         --per-problem-csv-dir "$CSV_DIR" \
+        --labels-file "$LABELS_FILE" \
         >"$RUN_DIR/.watcher.log" 2>&1 &
     WATCHER_PID=$!
 }
 
+echo "[run] starting agent labeler on $LABELER_URL → $VLLM_URL"
+start_labeler
 echo "[run] starting metrics watcher on $VLLM_URL/metrics"
 start_watcher
 
@@ -204,16 +239,16 @@ echo "[run] $TOTAL problems queued"
 # Solve loop.
 #
 # For each problem we:
-#   1. cold-restart vLLM (each problem sees an empty prefix cache),
-#   2. update the watcher's control file so subsequent completions get
-#      attributed to this instance_id,
-#   3. sleep briefly so the watcher has at least one scrape after the
-#      reset where its baseline matches the post-restart vLLM state,
-#   4. invoke claude-cli pointed at vLLM directly,
-#   5. sleep briefly so the watcher has at least one scrape that
-#      captures the final completion before we overwrite the
-#      instance_id for the next problem,
-#   6. clear the control file.
+#   1. cold-restart vLLM (each problem sees an empty prefix cache);
+#   2. truncate .agent_labels so labels don't carry across the restart
+#      (the watcher's LabelReader notices the shrink and rewinds);
+#   3. update the watcher's control file so subsequent completions get
+#      attributed to this instance_id;
+#   4. sleep briefly so the watcher has at least one post-reset scrape;
+#   5. invoke claude-cli pointed at the agent_labeler proxy (which
+#      forwards to vLLM and writes labels);
+#   6. sleep briefly so the watcher catches the final completion;
+#   7. clear the control file.
 # ---------------------------------------------------------------------------
 
 extract() {
@@ -237,12 +272,17 @@ while IFS= read -r line; do
     #    its next scrape (it tolerates an HTTPError mid-restart).
     bash "$HERE/pipeline/reset_vllm.sh"
 
-    # 2-3. Update the control file and give the watcher a tick to read
+    # 2. Reset the label queue. The LabelReader rewinds automatically when
+    #    the file shrinks, so any leftover lines from the previous problem
+    #    are dropped.
+    : >"$LABELS_FILE"
+
+    # 3-4. Update the control file and give the watcher a tick to read
     #      it before claude's first request lands.
     printf '%s' "$iid" >"$CONTROL_FILE"
     sleep 0.3
 
-    # 4. Run the agent against vLLM directly.
+    # 5. Run the agent against the labeler (which forwards to vLLM).
     if "$PY" "$HERE/pipeline/solve_problem.py" \
             --instance-id        "$iid" \
             --repo               "$repo" \
@@ -252,14 +292,15 @@ while IFS= read -r line; do
             --workdir-root       "$WORKDIRS" \
             --max-turns          "$CLAUDE_MAX_TURNS" \
             --timeout-secs       "$CLAUDE_TIMEOUT_SECS" \
-            --vllm-url           "$VLLM_URL" >/dev/null 2>/dev/null
+            --vllm-url           "$LABELER_URL" \
+            --per-problem-dir    "$CSV_DIR" >/dev/null 2>/dev/null
     then
         echo "$iid" >>"$SOLVED"
     else
         echo "[run]   ! failed (exit $?), continuing"
     fi
 
-    # 5-6. Let the watcher catch the last completion before the
+    # 6-7. Let the watcher catch the last completion before the
     #      attribution changes.
     sleep 0.3
     : >"$CONTROL_FILE"

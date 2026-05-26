@@ -1,6 +1,6 @@
 """Per-turn decode latency vs context size.
 
-Left  : ITL_ms vs ISL — per-token decode latency, colored by response type.
+Left  : ITL_ms vs ISL — per-token decode latency, colored by osl (viridis).
 Right : decode_ms vs ISL — total per-turn decode wall time, with the OLS fit
         `decode_ms ≈ β·osl + γ·osl·isl + δ·osl²` reported in the title.
 
@@ -17,12 +17,6 @@ import numpy as np
 
 from data import load_data
 
-CATEGORY_COLORS = {
-    "text_only": "#3b82f6",
-    "tool_only": "#22c55e",
-    "mixed":     "#ec4899",
-}
-
 
 def fit_decode(decode_ms: np.ndarray, osl: np.ndarray, isl: np.ndarray
                ) -> tuple[np.ndarray, float]:
@@ -36,16 +30,12 @@ def fit_decode(decode_ms: np.ndarray, osl: np.ndarray, isl: np.ndarray
     return coef, r2
 
 
-def itl_panel(ax, isl, itl, cat, osl) -> None:
+def itl_panel(ax, isl, itl, osl) -> None:
+    """Per-turn ITL scatter vs ISL. Color encodes osl (decode length)
+    on a viridis colormap; marker size also scales with log(osl)."""
     sizes = np.clip(8 + np.log1p(osl) * 6, 8, 80)
-    for category in ("tool_only", "mixed", "text_only"):
-        mask = cat == category
-        if not mask.any():
-            continue
-        ax.scatter(isl[mask], itl[mask], s=sizes[mask], alpha=0.32,
-                   color=CATEGORY_COLORS[category],
-                   edgecolors="white", linewidths=0.2,
-                   label=f"{category} (n={int(mask.sum())})")
+    sc = ax.scatter(isl, itl, c=osl, cmap="viridis",
+                    s=sizes, alpha=0.4, edgecolors="white", linewidths=0.2)
 
     # Linear fit on log(isl).
     keep = (isl > 0) & np.isfinite(itl)
@@ -61,9 +51,7 @@ def itl_panel(ax, isl, itl, cat, osl) -> None:
     ax.set_title("ITL vs ISL (starting KV size)", fontsize=11, fontweight="bold")
     ax.grid(True, which="both", ls="--", alpha=0.3)
     ax.legend(loc="upper left", fontsize=8, framealpha=0.95)
-    ax.annotate("marker size ∝ log(osl)", xy=(0.98, 0.02),
-                xycoords="axes fraction", ha="right", va="bottom",
-                fontsize=8, color="#6b7280")
+    return sc
 
 
 def decode_panel(ax, isl, decode_ms, osl) -> tuple:
@@ -99,9 +87,11 @@ def main() -> int:
     fig, axes = plt.subplots(1, 2, figsize=(16, 7), constrained_layout=True)
     suffix = f" — {args.title_suffix}" if args.title_suffix else ""
 
-    itl_panel(axes[0],
-              itl["isl"].astype(float), itl["itl_ms"].astype(float),
-              itl["category"], itl["osl"].astype(float))
+    itl_sc = itl_panel(axes[0],
+                       itl["isl"].astype(float), itl["itl_ms"].astype(float),
+                       itl["osl"].astype(float))
+    cb = fig.colorbar(itl_sc, ax=axes[0], fraction=0.04, pad=0.02)
+    cb.set_label("osl (output tokens)")
     sc, beta, gamma, delta, r2, crossover = decode_panel(
         axes[1],
         dec["isl"].astype(float), dec["decode_ms"].astype(float),
