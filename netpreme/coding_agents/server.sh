@@ -19,9 +19,18 @@ fi
 
 : "${MODEL_NAME:=Qwen/Qwen3-Coder-30B-A3B-Instruct-FP8}"
 : "${TENSOR_PARALLEL_SIZE:=1}"
-: "${MAX_MODEL_LEN:=262144}"
-: "${GPU_MEMORY_UTILIZATION:=0.92}"
+: "${MAX_MODEL_LEN:=131072}"
+: "${GPU_MEMORY_UTILIZATION:=0.9}"
 : "${TOOL_CALL_PARSER:=qwen3_coder}"
+
+# Model-specific args that have no sensible shared default. Only set what the
+# model genuinely requires; never override knobs the user can pick.
+REASONING_ARGS=()
+case "$MODEL_NAME" in
+    openai/gpt-oss-*)
+        REASONING_ARGS=( --reasoning-parser openai_gptoss )
+        ;;
+esac
 
 echo "[server] model=$MODEL_NAME tp=$TENSOR_PARALLEL_SIZE max_model_len=$MAX_MODEL_LEN"
 
@@ -35,5 +44,6 @@ exec "$VLLM_BIN" serve "$MODEL_NAME" \
     --gpu-memory-utilization "$GPU_MEMORY_UTILIZATION" \
     --enable-auto-tool-choice \
     --tool-call-parser "$TOOL_CALL_PARSER" \
+    "${REASONING_ARGS[@]}" \
     --enable-prompt-tokens-details \
     "$@"
