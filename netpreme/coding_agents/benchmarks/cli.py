@@ -15,13 +15,13 @@ import subprocess
 import sys
 from pathlib import Path
 
-SCRIPT_DIR = Path(__file__).resolve().parent
-BENCH_ROOT = SCRIPT_DIR.parent
-
+# cli.py is at .../benchmarks/cli.py. Ensure benchmarks/ is on sys.path so
+# `from modes.xxx`, `from runners.xxx`, etc. resolve when run directly.
+BENCH_ROOT = Path(__file__).resolve().parent
 if str(BENCH_ROOT) not in sys.path:
     sys.path.insert(0, str(BENCH_ROOT))
 
-from utils import CodingAgents
+from coding_agents import CodingAgents
 
 
 SETUPS_DUAL = ["hybrid-mtier", "hybrid-cpu"]
@@ -73,14 +73,14 @@ def main():
         ap.error("--save-trace and --from-trace are mutually exclusive")
     # Synthetic mode: --save-trace + --isl. Pure file generation, no GPU/agents.
     if args.save_trace and args.isl is not None:
-        from .synthetic_capture import gen_synthetic_capture
+        from modes.synthetic import gen_synthetic_capture
         out_dir = gen_synthetic_capture(
             isl=args.isl, isl_new=args.isl_new,
             osl=(args.osl if args.osl is not None else 110),
             n_turns=args.n_turns, n_sessions=args.n_sessions,
             seed=42)
         print(f"\nSynthetic capture written → {out_dir}")
-        print(f"Replay with: bash bench.sh --from-trace {out_dir} --concurrency <C> --deterministic")
+        print(f"Replay with: bash benchmark.sh --from-trace {out_dir} --concurrency <C> --deterministic")
         return
     if args.osl is not None and not args.from_trace:
         ap.error("--osl requires --from-trace (or --save-trace with --isl)")
@@ -88,7 +88,7 @@ def main():
         os.environ["REPLAY_OSL_OVERRIDE"] = str(args.osl)
 
     # Determinism toggle (default OFF). Controls both VLLM_BATCH_INVARIANT
-    # and the temperature/seed override forwarded by start_server.sh.
+    # and the temperature/seed override forwarded by server.sh.
     if args.deterministic:
         os.environ["VLLM_BATCH_INVARIANT"] = "1"
         os.environ["OVERRIDE_GEN_CONFIG"] = '{"temperature":0,"seed":42}'
@@ -132,7 +132,7 @@ def main():
 
 def _emit_per_turn(level_dir: Path) -> None:
     """Write per_turn.csv with ISL/OSL/uncached/timings inside the level dir."""
-    extract = SCRIPT_DIR / "extract_per_turn.py"
+    extract = BENCH_ROOT / "extract" / "extract_per_turn.py"
     if not extract.exists() or not (Path(level_dir) / "capture_meta.json").exists():
         return
     subprocess.run(

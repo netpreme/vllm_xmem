@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Streaming HTTP proxy that tees every request+response to a JSONL trace file.
 
-Spawned by bench_concurrent_users.py as a per-claude-session subprocess.
+Spawned by runners/claude_task.py::CaptureProxy as a per-session subprocess.
 Listens on --port, forwards every request to --upstream, streams the
 response back chunk-by-chunk while collecting the full body for the trace.
 

@@ -1,8 +1,8 @@
 """Synthetic trace capture — write a fabricated /v1/messages trace with
 controlled (ISL, ISL_new, OSL) per turn. No agents, no GPU. The on-disk
-format matches a real capture so ``bench.sh --from-trace`` works.
+format matches a real capture so ``benchmark.sh --from-trace`` works.
 
-Used when ``bench.sh --save-trace --isl N --isl-new K [--osl M] [--n-turns T] [--n-sessions S]``.
+Used when ``benchmark.sh --save-trace --isl N --isl-new K [--osl M] [--n-turns T] [--n-sessions S]``.
 
 Pattern (growing-ISL conversation):
   * Turn 0: messages = [user_0]            → ISL ≈ isl (the initial target)

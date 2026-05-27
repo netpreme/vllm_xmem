@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ═══════════════════════════════════════════════════════════════
-#  Launch vLLM for Claude Code — no Dynamo required.
+#  Launch vLLM for Claude Code
 #
 #  Architecture:
 #
@@ -110,7 +110,7 @@ else
 fi
 
 # ── Parse mode ───────────────────────────────────────────────────
-MODE="hybrid-cpu"
+MODE="hybrid-mtier"
 GPU_UTIL_OVERRIDE=""
 PORT_OVERRIDE=""
 MAX_NUM_SEQS_OVERRIDE=""

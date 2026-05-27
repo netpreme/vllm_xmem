@@ -17,11 +17,6 @@ scrape_configs:
       - targets: ["localhost:8081"]
     metrics_path: /metrics
 
-  # Custom KV transfer exporter: CPU↔GPU bandwidth and byte counters (xmem/MTier)
-  - job_name: vllm_kv_exporter
-    static_configs:
-      - targets: ["localhost:9091"]
-
   # Per-GPU utilization, memory, power, temp (from nvidia-smi)
   - job_name: gpu_exporter
     static_configs:

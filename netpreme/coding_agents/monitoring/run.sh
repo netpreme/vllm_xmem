@@ -2,11 +2,11 @@
 # ═══════════════════════════════════════════════════════════
 #  Start Prometheus + Grafana for vLLM / XMem monitoring.
 #  Prometheus data is wiped on every start (fresh slate).
-#  Run setup_monitoring.sh once before first use.
+#  Run ../setup.sh once before first use.
 #
 #  Usage:
-#    ./start_monitoring.sh            # fresh start (default)
-#    ./start_monitoring.sh --keep     # keep existing Prometheus data
+#    ./run.sh            # fresh start (default)
+#    ./run.sh --keep     # keep existing Prometheus data
 # ═══════════════════════════════════════════════════════════
 set -euo pipefail
 
@@ -41,13 +41,12 @@ for arg in "$@"; do
 done
 
 # ── 1. Kill any existing instances ──────────────────────────
-echo "Stopping any running Prometheus / Grafana / kv_exporter / gpu_exporter..."
+echo "Stopping any running Prometheus / Grafana / gpu_metrics_recorder..."
 pkill -f "prometheus --config.file" 2>/dev/null || true
 # The grafana binary spawns as "grafana server" (space, not hyphen).
 # Match on "grafana" broadly to catch manually started instances too.
 pkill -f "grafana"                  2>/dev/null || true
-pkill -f "kv_exporter.py"          2>/dev/null || true
-pkill -f "gpu_exporter.py"         2>/dev/null || true
+pkill -f "gpu_metrics_recorder.py" 2>/dev/null || true
 sleep 2  # wait for processes to die before wiping data dir
 
 # ── 2. Reset Prometheus data (only if --wipe) ─────────────────
@@ -72,7 +71,7 @@ echo "  log: $MON_LOG_DIR/prometheus.log"
 # ── 4. Start Grafana ─────────────────────────────────────────
 if [[ ! -d "$GRAFANA_DIR" ]]; then
     echo "ERROR: Grafana not found at $GRAFANA_DIR"
-    echo "       Run setup_monitoring.sh first."
+    echo "       Run ../setup.sh first."
     kill "$PROM_PID" 2>/dev/null || true
     exit 1
 fi
@@ -98,28 +97,18 @@ disown 2>/dev/null
 echo "Grafana   started (pid $GRAFANA_PID) → http://localhost:3000"
 echo "  log: $MON_LOG_DIR/grafana.log"
 
-# ── 5. Start KV exporter ─────────────────────────────────────
-setsid "$PYTHON_BIN" "$MONITORING_DIR/kv_exporter.py" \
-    --log "/tmp/dynamo_worker_*.log" \
-    --port 9091 </dev/null > "$MON_LOG_DIR/kv_exporter.log" 2>&1 &
-EXPORTER_PID=$!
-disown 2>/dev/null
-echo "KV exporter started (pid $EXPORTER_PID) → http://localhost:9091"
-echo "  log: $MON_LOG_DIR/kv_exporter.log"
-
-# ── 5b. Start GPU exporter (nvidia-smi → prom_client) ────────
-setsid "$PYTHON_BIN" "$MONITORING_DIR/gpu_exporter.py" \
-    --port 9092 --interval 1.0 </dev/null > "$MON_LOG_DIR/gpu_exporter.log" 2>&1 &
+# ── 5. Start GPU metrics recorder (nvidia-smi → prom_client) ────────
+setsid "$PYTHON_BIN" "$MONITORING_DIR/gpu_metrics_recorder.py" \
+    --port 9092 --interval 1.0 </dev/null > "$MON_LOG_DIR/gpu_metrics_recorder.log" 2>&1 &
 GPU_EXPORTER_PID=$!
 disown 2>/dev/null
-echo "GPU exporter started (pid $GPU_EXPORTER_PID) → http://localhost:9092"
-echo "  log: $MON_LOG_DIR/gpu_exporter.log"
+echo "GPU metrics recorder started (pid $GPU_EXPORTER_PID) → http://localhost:9092"
+echo "  log: $MON_LOG_DIR/gpu_metrics_recorder.log"
 
 echo ""
 echo "Dashboard auto-loaded: 'vLLM + XMem — Unified'"
 echo "  Prometheus:   http://localhost:9090"
 echo "  Grafana:      http://localhost:3000  (no login required)"
-echo "  KV exporter:  http://localhost:9091/metrics"
 echo ""
 if [[ -n "$HEADLESS" ]]; then
     echo "Headless mode — services launched detached; this script exits now."

@@ -12,21 +12,21 @@
 #
 # Usage modes:
 #   # Agent capture (SWE-bench tasks via Claude Code, mtier only):
-#   ./bench.sh --concurrency 16 --sustained-mins 20 --save-trace
-#   ./bench.sh --concurrency 16 --sustained-mins 20 --save-trace --deterministic
+#   ./benchmark.sh --concurrency 16 --sustained-mins 20 --save-trace
+#   ./benchmark.sh --concurrency 16 --sustained-mins 20 --save-trace --deterministic
 #
 #   # Synthetic capture (controlled ISL/ISL_new/OSL, no GPU, no agents):
-#   ./bench.sh --save-trace --isl 27000 --osl 110 --isl-new 500 \
+#   ./benchmark.sh --save-trace --isl 27000 --osl 110 --isl-new 500 \
 #              --n-turns 50 --n-sessions 30
 #
 #   # Replay any capture (mtier + cpu side-by-side):
-#   ./bench.sh --from-trace results_benchmarks/bench_sweep_xxx/c016/ --concurrency 16
-#   ./bench.sh --from-trace <dir> --concurrency 16 --deterministic
-#   ./bench.sh --from-trace <dir> --concurrency 16 --osl 1   # override OSL to 1
+#   ./benchmark.sh --from-trace results_benchmarks/bench_sweep_xxx/c016/ --concurrency 16
+#   ./benchmark.sh --from-trace <dir> --concurrency 16 --deterministic
+#   ./benchmark.sh --from-trace <dir> --concurrency 16 --osl 1   # override OSL to 1
 #
 #   # Plain dual-backend benchmark (no trace work):
-#   ./bench.sh --concurrency 16 --sustained-mins 20
-#   ./bench.sh --concurrency 16 --sustained-mins 20 --deterministic
+#   ./benchmark.sh --concurrency 16 --sustained-mins 20
+#   ./benchmark.sh --concurrency 16 --sustained-mins 20 --deterministic
 #
 # View live: http://localhost:3000 (Grafana, no login)
 set -euo pipefail
@@ -36,13 +36,13 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 PY="${PY:-${REPO_ROOT}/.venv/bin/python}"
 [[ -x "$PY" ]] || PY="$(command -v python3)"
 
-# Determinism is controlled by bench.py's --deterministic flag; we don't
-# default VLLM_BATCH_INVARIANT here. bench.py sets the env explicitly.
+# Determinism is controlled by cli.py's --deterministic flag; we don't
+# default VLLM_BATCH_INVARIANT here. cli.py sets the env explicitly.
 
 # ── Auto-start the monitoring stack if Grafana is not already up ──────────
 if ! curl -fsS http://localhost:3000/api/health > /dev/null 2>&1; then
     echo "[bench] Starting monitoring stack (Prometheus + Grafana + exporters)..."
-    MON_SCRIPT="${SCRIPT_DIR}/../monitoring/start_monitoring.sh"
+    MON_SCRIPT="${SCRIPT_DIR}/../monitoring/run.sh"
     nohup bash "$MON_SCRIPT" > /tmp/monitoring.log 2>&1 &
     for i in {1..30}; do
         sleep 1
@@ -58,4 +58,4 @@ else
     echo "[bench] Monitoring already running — http://localhost:3000"
 fi
 
-exec "$PY" "${SCRIPT_DIR}/utils/bench.py" "$@"
+exec "$PY" "${SCRIPT_DIR}/cli.py" "$@"

@@ -1,6 +1,5 @@
-#!/usr/bin/env python3
 """
-Prometheus exporter for per-GPU utilization via `nvidia-smi`.
+Export GPU hardware metrics to prometheus
 
 Polls nvidia-smi every --interval seconds and exposes one labeled time series
 per GPU (label: gpu="0", "1", ...). Metrics:
@@ -13,10 +12,10 @@ per GPU (label: gpu="0", "1", ...). Metrics:
   gpu_power_watts            — current board power draw
   gpu_temperature_c          — die temperature
 
-Default port: 9092 (kv_exporter uses 9091).
+Default port: 9092.
 
 Usage:
-    python3 gpu_exporter.py [--port 9092] [--interval 1.0]
+    python3 gpu_metrics_recorder.py [--port 9092] [--interval 1.0]
 """
 import argparse
 import subprocess

@@ -1,33 +1,48 @@
-# Concurrent coding-agents benchmark
+# Benchmarking Coding Agents - Optimizing TTFT
 
-Drives **hybrid-mtier** (GPU0:8001) and **hybrid-cpu** (GPU1:8002) in parallel
-against the same workload, snapshots Prometheus, and emits analysis figures.
+Our goal is to see if the offload tier can help optimize inference metrics - latency and throughput. 
+
+Simulating a real-life coding environment in production, multiple concurrent agents solve independent coding problems in parallel using the local GPU connected to vLLM and claude code. We compare the metrics using CPU offload and Mtier offload.
+
+All coding agents solve a unique problem from SWE Bench Verified maintaining the number of concurrent agents in the GPU pool. 
+The agents are orchestrated using the harness (claude code), which can use tool calls and makes requests to vLLM turn by turn to reach a solution. The assigned problems are from SWE Bench Verified.
+
+## Modes
+1. Given a setup with Mtier (claude code + vllm + Mtier offload) and CPU, have N concurrent coding agents solving problems one by one from the identical problem queue for T minutes.
+2. Given a setup with Mtier and CPU, first, run 1. from above to obtain the traces. Then use the traces to trigger coding agent runs for both Mtier and CPU setup. Traces have OSL, ISL_new (uncached tokens) and timestamps to trigger agentic runs
+
+Use 1. to profile and get the isolated end-to-end measurements between Mtier and CPU. Comparing Mtier and CPU may diverge in the HBM usage and offloading behavior.
+Use 2. to compare apples-to-apples comparison between Mtier and CPU fairly. Both Mtier and CPU recapitulated the HBM usage and offloading behavior.
+
+
+# How to run
 
 ## Setup (one time)
 
+Install necessary dependencies in `coding_agents/`:
 ```bash
-bash install.sh
+bash ../setup.sh
 ```
-
-## Live monitoring
-
-`bench.sh` auto-starts the monitoring stack (Prometheus + Grafana + KV/GPU
-exporters) on first invocation, and the bench reuses an already-running
-Prometheus on subsequent runs. Open while a run is in flight:
-
-| URL | What you see |
-|-----|--------------|
-| http://localhost:3000 | Grafana (no login). Two dashboards auto-provisioned: **vLLM xmem** (TTFT, E2E, queue p50/p95/p99, cache hit %, KV offload bandwidth) and **MTier vs CPU — Live** (side-by-side) |
-| http://localhost:9090 | Prometheus query UI — ad-hoc PromQL |
-| http://localhost:8001/metrics | vLLM mtier raw `/metrics` |
-| http://localhost:8002/metrics | vLLM cpu raw `/metrics`   |
-
-All runs are capped at **20 min** by default (`--sustained-mins` for run/record,
-`--duration-cap-mins` for replay). Pass either flag to override.
 
 ## Run modes
 
-`bench.sh` is the single entrypoint. All modes share the same flags;
+For mode 1. (live concurrent agents on both backends — no trace):
+```bash
+./benchmark.sh --concurrency 16 --sustained-mins 20
+```
+
+For mode 2. (capture once on mtier, then replay the same trace against both backends):
+```bash
+# Step 2a: capture a trace by running mode 1 with --save-trace (mtier only)
+./benchmark.sh --concurrency 16 --sustained-mins 20 --save-trace
+
+# Step 2b: replay the captured trace against mtier + cpu in parallel.
+#          --deterministic pins OSL + sampling so the workload is byte-identical.
+./benchmark.sh --from-trace results_benchmarks/bench_sweep_<ts>/c016/ \
+               --concurrency 16 --deterministic
+```
+
+`benchmark.sh` is the single entrypoint. All modes share the same flags;
 which mode you get is decided by which flags you pass.
 
 | Flag | Effect |
@@ -46,14 +61,31 @@ which mode you get is decided by which flags you pass.
 | `--shuffle-seed N` | Pin the shuffle seed for reproducible task ordering. |
 | `--model`, `--tp`, `--gpu-util`, `--max-num-seqs` | vLLM server overrides. |
 
+
+## Live monitoring
+
+`benchmark.sh` auto-starts the monitoring stack (Prometheus + Grafana + KV/GPU
+exporters) on first invocation, and the bench reuses an already-running
+Prometheus on subsequent runs. Open while a run is in flight:
+
+| URL | What you see |
+|-----|--------------|
+| http://localhost:3000 | Grafana (no login). Two dashboards auto-provisioned: **vLLM xmem** (TTFT, E2E, queue p50/p95/p99, cache hit %, KV offload bandwidth) and **MTier vs CPU — Live** (side-by-side) |
+| http://localhost:9090 | Prometheus query UI — ad-hoc PromQL |
+| http://localhost:8001/metrics | vLLM mtier raw `/metrics` |
+| http://localhost:8002/metrics | vLLM cpu raw `/metrics`   |
+
+All runs are capped at **20 min** by default (`--sustained-mins` for run/record,
+`--duration-cap-mins` for replay). Pass either flag to override.
+
 ### 1. Plain dual-backend run
 
 Both backends drive SWE-bench tasks via Claude Code. No trace captured.
 Useful when you only care about Prom metrics from a live workload.
 
 ```bash
-./bench.sh --concurrency 16 --sustained-mins 20
-./bench.sh --concurrency 16 --sustained-mins 20 --deterministic
+./benchmark.sh --concurrency 16 --sustained-mins 20
+./benchmark.sh --concurrency 16 --sustained-mins 20 --deterministic
 ```
 
 ### 2. Agent capture (record SWE-bench + Claude workload)
@@ -63,8 +95,8 @@ Runs Claude Code agents against SWE-bench, mtier-only, and tees every
 trace can be replayed against both backends later, byte-identical.
 
 ```bash
-./bench.sh --concurrency 16 --sustained-mins 20 --save-trace
-./bench.sh --concurrency 16 --sustained-mins 20 --save-trace --deterministic
+./benchmark.sh --concurrency 16 --sustained-mins 20 --save-trace
+./benchmark.sh --concurrency 16 --sustained-mins 20 --save-trace --deterministic
 ```
 
 Trace data is written **inside the run's own folder** (alongside the
@@ -79,7 +111,7 @@ is turn N-1's prompt + the prior assistant's recorded `OSL` tokens + a
 new user message of `ISL_new` tokens. Initial turn has `ISL` total tokens.
 
 ```bash
-./bench.sh --save-trace \
+./benchmark.sh --save-trace \
            --isl 27000 --osl 110 --isl-new 500 \
            --n-turns 50 --n-sessions 30
 ```
@@ -103,16 +135,16 @@ the captured timing schedule. Closed-loop floor: `max(captured_gap, response_tim
 
 ```bash
 # OSL pinned to each turn's recorded value (model-decided sampling):
-./bench.sh --from-trace results_benchmarks/bench_sweep_<ts>/c016/ --concurrency 16
+./benchmark.sh --from-trace results_benchmarks/bench_sweep_<ts>/c016/ --concurrency 16
 
 # Deterministic + exact OSL (byte-identical workload on both backends):
-./bench.sh --from-trace <dir> --concurrency 16 --deterministic
+./benchmark.sh --from-trace <dir> --concurrency 16 --deterministic
 
 # Force every turn's OSL to a constant (e.g. 1 — artificial micro-benchmark):
-./bench.sh --from-trace <dir> --concurrency 16 --osl 1
+./benchmark.sh --from-trace <dir> --concurrency 16 --osl 1
 
 # Sweep concurrencies with the same recorded workload:
-./bench.sh --from-trace <dir> --concurrency 12 14 16 18 --deterministic
+./benchmark.sh --from-trace <dir> --concurrency 12 14 16 18 --deterministic
 ```
 
 ---
@@ -120,54 +152,36 @@ the captured timing schedule. Closed-loop floor: `max(captured_gap, response_tim
 ## System design
 
 ```
-                 ┌──────────────────────────────────────────┐
-                 │   bench.sh   (single user entrypoint)    │
-                 └─────────────────────┬────────────────────┘
-                                       │ flags
-                                       ▼
-                 ┌──────────────────────────────────────────┐
-                 │   utils/bench.py → CodingAgents class    │
-                 └────┬───────────────────────┬─────────────┘
-                      │ run / record           │ from-trace
-                      ▼                        ▼
-   ┌─────────────────────────┐    ┌──────────────────────────┐
-   │  utils/bench_concurrent │    │  utils/from_trace.py     │
-   │       _users.py         │    │  + from_trace_session.py │
-   │                         │    │                          │
-   │  spawn N Claude Code    │    │  load recorded trace     │
-   │  subprocesses per setup │    │  replay HTTP requests    │
-   │  in parallel:           │    │  to each backend on the  │
-   │                         │    │  recorded schedule.      │
-   │  ┌─────────────────┐    │    │  OSL pinned to recorded  │
-   │  │   Claude Code   │    │    │  value (or --osl N).     │
-   │  │  (per session,  │    │    │                          │
-   │  │   one per task) │    │    │                          │
-   │  └────┬────────────┘    │    │                          │
-   │       │ HTTP            │    │                          │
-   │       ▼                 │    │                          │
-   │  ┌───────────────────┐  │    │                          │
-   │  │ record_proxy.py   │  │    │                          │
-   │  │ (when --save-     │  │    │                          │
-   │  │  trace is on)     │  │    │                          │
-   │  │ tees /v1/messages │  │    │                          │
-   │  │ + SSE to JSONL    │  │    │                          │
-   │  └────┬──────────────┘  │    │                          │
-   └───────┼─────────────────┘    └──────────┬───────────────┘
-           │                                 │
-           │  vLLM /v1/messages              │
-           ▼                                 ▼
-   ┌─────────────────────────────────────────────────────────┐
-   │  hybrid-mtier vLLM (GPU0)    hybrid-cpu vLLM (GPU1)     │
-   │  ├─ HBM prefix cache          ├─ HBM prefix cache        │
-   │  └─ MTier-chip offload tier   └─ CPU DRAM offload tier   │
-   └────────────────────────┬────────────────────────────────┘
-                            │ metrics scraped per second
-                            ▼
-   ┌─────────────────────────────────────────────────────────┐
-   │  Prometheus (admin API)  →  per-level TSDB snapshot     │
-   │  analyze_snapshot.py     →  timeseries + offload PNGs   │
-   │  extract_per_turn.py     →  per_turn.csv (record mode)  │
-   └─────────────────────────────────────────────────────────┘
+              ┌──────────────────────────────┐
+              │  benchmark.sh  (entrypoint)  │
+              └──────────────┬───────────────┘
+                             │
+                ┌────────────┴────────────┐
+                ▼                         ▼
+         ┌──────────────┐          ┌──────────────┐
+         │  Mode 1:     │          │  Mode 2:     │
+         │  Claude Code │          │  Replay a    │
+         │  agents (N   │          │  recorded    │
+         │  in parallel)│          │  trace       │
+         └──────┬───────┘          └──────┬───────┘
+                │                         │
+                └────────────┬────────────┘
+                             │ /v1/messages (Anthropic API)
+                             ▼
+       ┌──────────────────────────────────────────────────┐
+       │                  vLLM dual-backend               │
+       │  ┌─────────────────────┐  ┌─────────────────────┐│
+       │  │  mtier  (GPU 0)     │  │   cpu  (GPU 1)      ││
+       │  │  HBM + MTier offload│  │   HBM + CPU DRAM    ││
+       │  └─────────────────────┘  └─────────────────────┘│
+       └─────────────────────┬────────────────────────────┘
+                             │ metrics scraped per second
+                             ▼
+       ┌──────────────────────────────────────────────────┐
+       │  Prometheus  →  per-concurrency TSDB snapshot    │
+       │  Grafana     →  live dashboards                  │
+       │  Analysis    →  timeseries + offload figures     │
+       └──────────────────────────────────────────────────┘
 ```
 
 Determinism:
