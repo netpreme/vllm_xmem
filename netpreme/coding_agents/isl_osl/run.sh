@@ -14,11 +14,9 @@
 # data.npz and renders the figures.
 #
 # Usage:
-#   ./run.sh                              # vllm × Verified × 500 (defaults)
-#   ./run.sh --dataset pro
-#   ./run.sh --limit 50
-#   ./run.sh --random 100 --seed 0
-#   ./run.sh --no-analysis
+#   ./run.sh                              # all 500 SWE-bench Verified problems
+#   ./run.sh --limit 50                   # first 50
+#   ./run.sh --random 100 --seed 0        # random sample of 100
 set -euo pipefail
 
 
@@ -52,24 +50,15 @@ SWE_DATASET="princeton-nlp/SWE-bench_Verified"
 SWE_LIMIT=500           # take first N rows of the dataset
 SWE_RANDOM=0            # >0 = uniformly random sample, overrides SWE_LIMIT
 SWE_SEED=0
-RUN_ANALYSIS=1
 MODEL_FLAG=""
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --dataset)
-            case "$2" in
-                verified) SWE_DATASET="princeton-nlp/SWE-bench_Verified" ;;
-                pro)      SWE_DATASET="ScaleAI/SWE-bench_Pro" ;;
-                *) echo "unknown --dataset: $2" >&2; exit 2 ;;
-            esac
-            shift 2 ;;
-        --limit)       SWE_LIMIT="$2";  shift 2 ;;
-        --random)      SWE_RANDOM="$2"; shift 2 ;;
-        --seed)        SWE_SEED="$2";   shift 2 ;;
-        --model)       MODEL_FLAG="$2"; shift 2 ;;
-        --no-analysis) RUN_ANALYSIS=0;  shift   ;;
-        -h|--help)     sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        --limit)   SWE_LIMIT="$2";  shift 2 ;;
+        --random)  SWE_RANDOM="$2"; shift 2 ;;
+        --seed)    SWE_SEED="$2";   shift 2 ;;
+        --model)   MODEL_FLAG="$2"; shift 2 ;;
+        -h|--help) sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *) echo "unknown flag: $1" >&2; exit 2 ;;
     esac
 done
@@ -315,8 +304,5 @@ echo
 echo "[run] done. results at $RUN_DIR"
 echo "[run]   solved.txt:       $(wc -l <"$SOLVED") of $TOTAL"
 echo "[run]   per-problem CSVs: $(ls "$CSV_DIR" | wc -l)"
-
-if [[ "$RUN_ANALYSIS" -eq 1 ]]; then
-    echo
-    bash "$HERE/analyze.sh" "$RUN_DIR"
-fi
+echo
+bash "$HERE/analyze.sh" "$RUN_DIR"
