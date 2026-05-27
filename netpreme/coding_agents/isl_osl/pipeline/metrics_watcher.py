@@ -9,7 +9,7 @@ How it works (concurrency must be 1):
        request has just completed; the delta of every other counter
        across the two snapshots is that request's contribution.
     3. We attribute the resulting row to whichever `instance_id` the
-       caller has written to the control file (`run.sh` updates it before
+       caller has written to the control file (`run.py` updates it before
        launching `claude -p` for each problem).
     4. The row gets appended to `<csv_dir>/<instance_id>.csv` in the same
        schema the analysis pipeline already consumes.
@@ -316,7 +316,7 @@ class PerProblemCSV:
 
 
 # ---------------------------------------------------------------------------
-# Control file: a tiny text file `run.sh` rewrites to tell us which
+# Control file: a tiny text file `run.py` rewrites to tell us which
 # problem is currently active. Watcher reads it at every scrape so each
 # row gets the right instance_id.
 # ---------------------------------------------------------------------------
@@ -337,7 +337,7 @@ class MetricsWatcher:
     """Polls vLLM `/metrics` and writes one CSV row per detected request.
 
     Designed to be run as a background process for the lifetime of a
-    `run.sh` invocation. Polling is asynchronous so we never block the
+    `run.py` invocation. Polling is asynchronous so we never block the
     GPU; one HTTP call per tick.
     """
 
@@ -413,7 +413,7 @@ def main() -> int:
     parser.add_argument("--vllm-url",        required=True,
                         help="vLLM base URL, e.g. http://localhost:8000")
     parser.add_argument("--control-file",    required=True, type=Path,
-                        help="text file that run.sh updates with the "
+                        help="text file that run.py updates with the "
                              "current instance_id")
     parser.add_argument("--per-problem-csv-dir", required=True, type=Path,
                         help="directory to write per-problem CSVs into")

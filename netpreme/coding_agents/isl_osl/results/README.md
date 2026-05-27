@@ -42,6 +42,6 @@ t[t["instance_id"] == "astropy__astropy-12907"] # one problem's full trace
 ```bash
 cd /root/vllm_xmem/netpreme/coding_agents/isl_osl
 bash ../server.sh > /tmp/vllm.log 2>&1 &            # vLLM only
-./run.sh                                            # results in ./runs/<stamp>/
+./run.py                                            # results in ./runs/<stamp>/
 ./analyze.sh runs/<stamp>                           # builds data.npz + figures
 ```

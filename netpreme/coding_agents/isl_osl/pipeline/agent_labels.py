@@ -64,7 +64,7 @@ class LabelReader:
     """Streaming reader that pops one record per call in append order.
 
     Uses a byte-offset cursor rather than a persistent file handle so it
-    naturally handles run.sh truncating the file between problems: if the
+    naturally handles run.py truncating the file between problems: if the
     file shrinks below the cursor, we reset to the start.
 
     Returns `None` if no new record is available (file missing, empty, or

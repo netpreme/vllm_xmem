@@ -4,7 +4,18 @@
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-[[ -f "$HERE/.env" ]] && { set -a; source "$HERE/.env"; set +a; }
+
+# Variable precedence is: caller env > .env file > hardcoded defaults.
+# `run.sh` exports overridden values before invoking reset_vllm.sh → us,
+# so caller-set vars must win over what's in .env.
+if [[ -f "$HERE/.env" ]]; then
+    while IFS='=' read -r key val; do
+        [[ -z "$key" || "$key" =~ ^[[:space:]]*# ]] && continue
+        val="${val%%[[:space:]]#*}"             # strip inline comment
+        val="${val%"${val##*[![:space:]]}"}"    # rtrim trailing whitespace
+        [[ -z "${!key+x}" ]] && export "$key=$val"
+    done < "$HERE/.env"
+fi
 
 : "${MODEL_NAME:=Qwen/Qwen3-Coder-30B-A3B-Instruct-FP8}"
 : "${TENSOR_PARALLEL_SIZE:=1}"

@@ -216,7 +216,7 @@ def main() -> int:
         cmd,
         cwd=str(repo_dir),
         env=env,
-        # claude -p appends stdin to its prompt; isolate it from run.sh's
+        # claude -p appends stdin to its prompt; isolate it from run.py's
         # 8 MB problems.jsonl by closing it explicitly.
         stdin=subprocess.DEVNULL,
         stdout=subprocess.PIPE,

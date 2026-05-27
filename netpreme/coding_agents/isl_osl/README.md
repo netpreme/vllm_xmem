@@ -47,18 +47,35 @@ Simulating a single coding agent run in an isolated environment, coding problems
 ## How to run
 
 ```bash
-bash ../server.sh > /tmp/vllm.log 2>&1 &      # start vLLM
-./run.sh                                      # all 500 SWE-bench Verified problems
-./analyze.sh runs/<stamp>                     # (run.sh already calls this; only re-run if you tweak plots)
+bash ../server.sh > /tmp/vllm.log 2>&1 &      # start vLLM (initial boot)
+./run.py                                      # all 500 SWE-bench Verified problems
+./analyze.sh runs/<stamp>                     # (run.py already calls this; only re-run if you tweak plots)
 ```
 
-`run.sh` flags:
+To swap the served model, pass the flags to `run.py` — between problems
+`reset_vllm.sh` relaunches the server, picking up the overridden env vars:
+
+```bash
+# Qwen3-Coder
+./run.py --model Qwen/Qwen3-Coder-30B-A3B-Instruct-FP8 --tool-call-parser qwen3_coder
+
+# GPT-OSS 120B
+./run.py --model openai/gpt-oss-120b --tool-call-parser gpt_oss
+```
+
+`run.py` flags:
 
 | flag | default | meaning |
 |---|---|---|
-| `--limit N`              | 500 | use the first `N` problems from the dataset |
-| `--random N --seed S`    | —   | random sample of `N` problems with seed `S` (overrides `--limit`) |
-| `--model HF_ID`          | `Qwen/Qwen3-Coder-30B-A3B-Instruct-FP8` | model id claude sends; must match the model vLLM is serving |
+| `--limit N`                    | 500   | use the first `N` problems |
+| `--random N --seed S`          | —     | random sample of `N` problems (overrides `--limit`) |
+| `--model HF_ID`                | `Qwen/Qwen3-Coder-30B-A3B-Instruct-FP8` | model id; what claude sends AND what vLLM serves |
+| `--tool-call-parser NAME`      | `qwen3_coder` | vLLM's tool-call parser. Must match the model family (`qwen3_coder` for Qwen, `gpt_oss` for GPT-OSS, `hermes` / `mistral` / `llama3_json` for others) |
+| `--tensor-parallel-size N`     | `1`   | vLLM `--tensor-parallel-size` (bump for multi-GPU) |
+| `--max-model-len N`            | `262144` | vLLM `--max-model-len`; cap is the model's `max_position_embeddings` |
+| `--gpu-memory-utilization F`   | `0.90` | vLLM `--gpu-memory-utilization` (0-1) |
+
+All vLLM-side flags are exported as env vars before `reset_vllm.sh` runs, so the cold-restarted server picks them up. The same vars can also be set in `../.env`; CLI flags win over `.env` defaults.
 
 
 ## Setup
