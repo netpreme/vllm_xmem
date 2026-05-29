@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -32,8 +33,12 @@ from pipeline import claude, datasets, git_repo, http_utils, sidecar
 HERE = Path(__file__).resolve().parent
 PIPELINE = HERE / "pipeline"
 ANALYZE_SH = HERE / "analyze.sh"
-VLLM_URL = "http://localhost:8000"
-LABELER_PORT = 8001
+
+# Ports are env-overridable so multiple TP1 shards can run side by side
+# on the same host (one shard per GPU, distinct port pairs).
+VLLM_PORT = int(os.environ.get("VLLM_PORT", "8000"))
+LABELER_PORT = int(os.environ.get("LABELER_PORT", "8001"))
+VLLM_URL = f"http://localhost:{VLLM_PORT}"
 QUIESCE_S = 0.3
 DATASET = "princeton-nlp/SWE-bench_Verified"
 

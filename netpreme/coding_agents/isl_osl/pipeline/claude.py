@@ -43,6 +43,12 @@ def _env(model: str, base_url: str) -> dict[str, str]:
     ):
         env[slot] = model
     env["IS_SANDBOX"] = "1"  # allows --dangerously-skip-permissions as root
+    # Cap every Bash tool invocation. Without this, claude can wedge on a
+    # long-running server (e.g. `manage.py runserver`) and block the whole
+    # benchmark indefinitely. Defaults: each command has 5 min; max ceiling
+    # is 10 min so explicit `timeout=` calls in claude's prompt can't exceed it.
+    env.setdefault("BASH_DEFAULT_TIMEOUT_MS", "300000")
+    env.setdefault("BASH_MAX_TIMEOUT_MS",     "600000")
     return env
 
 
