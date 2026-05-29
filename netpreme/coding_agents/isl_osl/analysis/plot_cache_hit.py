@@ -17,7 +17,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 
-from dataset import VERIFIED_BUCKETS, cache_hit_rate, load_data
+from metrics import VERIFIED_BUCKETS, cache_hit_rate, load_data
 
 BUCKET_COLOR = {
     "<15 min fix": "#3b82f6",
@@ -156,7 +156,7 @@ def _plot_per_bucket(ax, by_bucket) -> None:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--run-dir", required=True, type=Path)
+    ap.add_argument("--save-dir", required=True, type=Path)
     ap.add_argument("--out", required=True, type=Path)
     ap.add_argument("--title-suffix", default="")
     ap.add_argument(
@@ -173,7 +173,7 @@ def main() -> int:
     )
     args = ap.parse_args()
 
-    t = load_data(args.run_dir)
+    t = load_data(args.save_dir)
     by_turn, by_bucket = _build_buckets(t)
 
     fig, axes = plt.subplots(1, 2, figsize=(16, 6), constrained_layout=True)

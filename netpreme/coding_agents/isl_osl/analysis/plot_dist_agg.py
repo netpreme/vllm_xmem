@@ -12,7 +12,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 
-from dataset import load_data
+from metrics import load_data
 from plot_dist_grid import (
     CLAUDE_BASELINE_ISL,
     METRICS,
@@ -38,12 +38,12 @@ LEGEND_OVERRIDES = {
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--run-dir", required=True, type=Path)
+    ap.add_argument("--save-dir", required=True, type=Path)
     ap.add_argument("--out", required=True, type=Path)
     ap.add_argument("--title-suffix", default="")
     args = ap.parse_args()
 
-    t = load_data(args.run_dir)
+    t = load_data(args.save_dir)
     real = t[t["osl"] > 0]
     vals = {m: real[m].astype(float) for m, *_ in METRICS}
 

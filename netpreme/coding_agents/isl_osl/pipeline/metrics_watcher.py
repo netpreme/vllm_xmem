@@ -10,7 +10,7 @@ The instance_id is read from `--control-file` on each completion, which
 What this file does NOT do:
     - Compute derivations (isl_cached, cache_hit_rate, ttft_ms, …).
       Those live in the analysis layer.
-    - Merge proxy data. The agent_labeler writes its own JSONL; the
+    - Merge proxy data. The proxy writes its own JSONL; the
       analysis layer joins on turn index.
 
 How completion detection works:
@@ -27,13 +27,12 @@ import argparse
 import asyncio
 import json
 import re
-import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
 
 import httpx
-
+from loguru import logger
 
 # ---------------------------------------------------------------------------
 # vLLM Prometheus metric names. See `curl localhost:8000/metrics`.
@@ -66,8 +65,18 @@ class _Metric:
     # by 1 between scrapes is the stop_reason for this turn.
     FINISH_REASON = "vllm:request_success_total"
 
-    # Instantaneous gauge.
+    # Instantaneous gauge: HBM (GPU) block-pool occupancy, 0..1.
     KV_USAGE_PCT = "vllm:kv_cache_usage_perc"
+
+    # Prefix-cache hit counters (cumulative tokens). `_total` suffix is
+    # required so we match the counter value and not its `_created` line.
+    # The denominator is `isl` (request_prompt_tokens), so we don't store
+    # the redundant vllm:prefix_cache_queries counter.
+    #   hits           — tokens served from the local HBM/GPU prefix cache
+    #   external hits  — tokens served from the offload tier (KV connector);
+    #                    absent (→ 0) unless an offloading connector is on.
+    PREFIX_CACHE_HITS = "vllm:prefix_cache_hits_total"
+    EXTERNAL_PREFIX_CACHE_HITS = "vllm:external_prefix_cache_hits_total"
 
     # Completion trigger.
     REQUEST_COUNT = "vllm:request_prompt_tokens_count"
@@ -128,6 +137,8 @@ class Snapshot:
     prefill_kv_computed: int
     finished_reason_counts: dict[str, int]
     kv_usage_pct: float
+    prefix_cache_hits: int
+    external_prefix_cache_hits: int
     wall_time: float
 
     @classmethod
@@ -157,6 +168,10 @@ class Snapshot:
             ),
             finished_reason_counts=finished,
             kv_usage_pct=metric_value(metrics, _Metric.KV_USAGE_PCT),
+            prefix_cache_hits=int(metric_value(metrics, _Metric.PREFIX_CACHE_HITS)),
+            external_prefix_cache_hits=int(
+                metric_value(metrics, _Metric.EXTERNAL_PREFIX_CACHE_HITS)
+            ),
             wall_time=time.time(),
         )
 
@@ -196,6 +211,14 @@ def derive_row(before: Snapshot, after: Snapshot) -> dict:
         "e2e_ms": round(delta_ms("e2e"), 2),
         "stop_reason": _diff_finished_reason(before, after),
         "kv_cache_usage_pct": round(after.kv_usage_pct * 100, 3),
+        # Prefix-cache hit-token deltas for this turn (rates derived in
+        # analysis, over `isl` as the denominator):
+        #   local (HBM) hit rate     = prefix_cache_hits / isl
+        #   offload-tier hit rate    = external_prefix_cache_hits / isl
+        "prefix_cache_hits": after.prefix_cache_hits - before.prefix_cache_hits,
+        "external_prefix_cache_hits": (
+            after.external_prefix_cache_hits - before.external_prefix_cache_hits
+        ),
     }
 
 
@@ -269,28 +292,16 @@ class MetricsWatcher:
                 try:
                     previous = await self._scrape(client)
                 except httpx.HTTPError as exc:
-                    print(
-                        f"[metrics-watcher] baseline scrape error: {exc!r}",
-                        file=sys.stderr,
-                        flush=True,
-                    )
+                    logger.warning("baseline scrape error: {!r}", exc)
                     await asyncio.sleep(self._poll_interval_s)
-            print(
-                f"[metrics-watcher] baseline scrape: "
-                f"request_count={previous.request_count}",
-                flush=True,
-            )
+            logger.info("baseline scrape: request_count={}", previous.request_count)
 
             while True:
                 await asyncio.sleep(self._poll_interval_s)
                 try:
                     current = await self._scrape(client)
                 except httpx.HTTPError as exc:
-                    print(
-                        f"[metrics-watcher] scrape error: {exc!r}",
-                        file=sys.stderr,
-                        flush=True,
-                    )
+                    logger.warning("scrape error: {!r}", exc)
                     previous = None
                     continue
                 if previous is None:
@@ -303,11 +314,10 @@ class MetricsWatcher:
                     row = derive_row(previous, current)
                     self._out.write(instance_id, row)
                     if completed > 1:
-                        print(
-                            f"[metrics-watcher] WARNING: {completed} "
-                            f"requests completed in one tick — "
-                            f"attribution may be lossy",
-                            flush=True,
+                        logger.warning(
+                            "{} requests completed in one tick — "
+                            "attribution may be lossy",
+                            completed,
                         )
                 previous = current
 

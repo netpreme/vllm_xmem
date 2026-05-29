@@ -30,7 +30,7 @@ import numpy as np
 from matplotlib.patches import Patch
 from matplotlib.ticker import FuncFormatter
 
-from dataset import agent, cache_hit_rate, isl_cached, load_data, ttft_ms
+from metrics import agent, cache_hit_rate, isl_cached, load_data, ttft_ms
 
 # Hatch pattern used to mark Task-tool sub-agent turns on every stacked bar.
 SUB_AGENT_HATCH = "///"
@@ -255,7 +255,7 @@ def render(t: np.ndarray, iid: str, out: Path, title_suffix: str) -> None:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--run-dir", required=True, type=Path)
+    ap.add_argument("--save-dir", required=True, type=Path)
     ap.add_argument(
         "--out",
         required=True,
@@ -278,7 +278,7 @@ def main() -> int:
     )
     args = ap.parse_args()
 
-    t = load_data(args.run_dir)
+    t = load_data(args.save_dir)
     iid = args.instance_id or pick_representative(t)
     render(t, iid, args.out, args.title_suffix)
 

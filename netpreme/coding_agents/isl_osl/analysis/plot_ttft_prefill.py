@@ -19,8 +19,8 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 
-from dataset import isl_cached as _isl_cached
-from dataset import load_data, ttft_ms
+from metrics import isl_cached as _isl_cached
+from metrics import load_data, ttft_ms
 
 
 def fit_tier3(
@@ -78,12 +78,12 @@ def _decode_vs_ttft(ax, ttft, decode, isl):
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--run-dir", required=True, type=Path)
+    ap.add_argument("--save-dir", required=True, type=Path)
     ap.add_argument("--out", required=True, type=Path)
     ap.add_argument("--title-suffix", default="")
     args = ap.parse_args()
 
-    t = load_data(args.run_dir)
+    t = load_data(args.save_dir)
     ttft_all = ttft_ms(t)
     real_mask = (t["osl"] > 0) & (ttft_all > 0) & (t["isl"] > 0)
     real = t[real_mask]

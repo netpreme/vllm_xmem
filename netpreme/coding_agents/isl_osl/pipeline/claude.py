@@ -1,7 +1,7 @@
 """claude-cli invocation.
 
 Drives Claude Code as a subprocess. All per-turn telemetry comes from
-the metrics_watcher (vLLM-side) and agent_labeler (HTTP-side); claude's
+the metrics_watcher (vLLM-side) and proxy (HTTP-side); claude's
 own stream-json output is discarded.
 """
 
@@ -10,7 +10,6 @@ from __future__ import annotations
 import os
 import subprocess
 from pathlib import Path
-
 
 PROMPT = """You are working on a real software-engineering bug from SWE-bench Verified. \
 Solve it by editing files in this repository.
@@ -48,7 +47,7 @@ def _env(model: str, base_url: str) -> dict[str, str]:
     # benchmark indefinitely. Defaults: each command has 5 min; max ceiling
     # is 10 min so explicit `timeout=` calls in claude's prompt can't exceed it.
     env.setdefault("BASH_DEFAULT_TIMEOUT_MS", "300000")
-    env.setdefault("BASH_MAX_TIMEOUT_MS",     "600000")
+    env.setdefault("BASH_MAX_TIMEOUT_MS", "600000")
     return env
 
 

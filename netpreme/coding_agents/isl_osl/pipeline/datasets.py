@@ -1,55 +1,42 @@
-"""SWE-bench dataset + run-directory helpers.
+"""SWE-bench dataset helper.
 
-User-facing functions take primitive types only (str, int, Path). They
-don't depend on argparse Namespaces or on each other.
+``get_dataset`` is responsible for one thing: returning the list of
+problems to work on. It fetches from HuggingFace, selects a slice (or a
+seeded random sample), and drops any ids already solved. No file I/O —
+the caller infers `solved_ids` from prior per-problem results, so a run
+is reproducible from ``(name, start, end, random, seed)`` and resuming
+is just calling it again.
 """
 
 from __future__ import annotations
 
-import json
 import random as _random
-from datetime import datetime
-from pathlib import Path
+
 from datasets import load_dataset
-
-HERE = Path(__file__).resolve().parent.parent  # .../isl_osl
-
-
-def setup_run_dir(stamp: str | None = None) -> Path:
-    """Create runs/<stamp>/ (fresh timestamp if stamp is None). Idempotent
-    on existing directories — safe to call for a resume."""
-    if stamp is None:
-        stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    run_dir = HERE / "runs" / stamp
-    run_dir.mkdir(parents=True, exist_ok=True)
-    return run_dir
 
 
 def get_dataset(
-    name: str, out_path: Path, num_problems: int = 500, random: int = 0, seed: int = 0
+    name: str,
+    *,
+    start: int = 0,
+    end: int | None = None,
+    random: int = 0,
+    seed: int = 0,
+    solved_ids: set[str] | None = None,
 ) -> list[dict]:
-    """Return SWE-bench problems as a list of dicts.
+    """Return the SWE-bench problems to run, as a list of dicts.
 
-    Downloads `name` from HuggingFace into `out_path` (one JSON object
-    per line) the first time. Reuses the file on subsequent calls, which
-    makes resuming an interrupted run a natural no-op."""
-    if not out_path.exists():
-        rows = list(load_dataset(name, split="test"))
-        if random:
-            _random.Random(seed).shuffle(rows)
-            rows = rows[:random]
-        else:
-            rows = rows[:num_problems]
-        out_path.parent.mkdir(parents=True, exist_ok=True)
-        with out_path.open("w") as f:
-            for r in rows:
-                f.write(json.dumps(r) + "\n")
-    return [json.loads(l) for l in out_path.read_text().splitlines() if l.strip()]
+    With ``random > 0``, deterministically shuffle by ``seed`` and take
+    that many; otherwise take the ``[start:end]`` slice. Then drop every
+    problem whose ``instance_id`` is in ``solved_ids`` — which is what
+    makes a resume skip work already done."""
+    rows = list(load_dataset(name, split="test"))
+    if random:
+        _random.Random(seed).shuffle(rows)
+        rows = rows[:random]
+    else:
+        rows = rows[start:end]
 
-
-def pending_problems(dataset: list[dict], solved_path: Path) -> list[dict]:
-    """Drop any problem whose instance_id is already in `solved_path`."""
-    if not solved_path.exists():
-        return list(dataset)
-    solved = {x for x in solved_path.read_text().split() if x}
-    return [p for p in dataset if p["instance_id"] not in solved]
+    if solved_ids:
+        rows = [r for r in rows if r["instance_id"] not in solved_ids]
+    return rows

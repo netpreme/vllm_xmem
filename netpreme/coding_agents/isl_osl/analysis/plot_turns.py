@@ -13,7 +13,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 
-from dataset import VERIFIED_BUCKETS, load_data
+from metrics import VERIFIED_BUCKETS, load_data
 
 BUCKET_COLOR = {
     "<15 min fix": "#3b82f6",
@@ -66,12 +66,12 @@ def hist_panel(ax, vals: np.ndarray, title: str, color: str, x_max: int) -> int:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--run-dir", required=True, type=Path)
+    ap.add_argument("--save-dir", required=True, type=Path)
     ap.add_argument("--out", required=True, type=Path)
     ap.add_argument("--title-suffix", default="")
     args = ap.parse_args()
 
-    counts = turns_per_problem(load_data(args.run_dir))
+    counts = turns_per_problem(load_data(args.save_dir))
     # Share x-axis range across all panels so they're visually comparable.
     # Clip the very long tail (some hard problems have >500 turns) at p99
     # so the bulk of the distribution is readable.

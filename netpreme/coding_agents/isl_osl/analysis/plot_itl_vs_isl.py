@@ -16,7 +16,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 
-from dataset import load_data
+from metrics import load_data
 
 
 def fit_decode(
@@ -85,7 +85,7 @@ def decode_panel(ax, isl, decode_ms, osl) -> tuple:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--run-dir", required=True, type=Path)
+    ap.add_argument("--save-dir", required=True, type=Path)
     ap.add_argument("--out", required=True, type=Path)
     ap.add_argument("--title-suffix", default="")
     ap.add_argument(
@@ -96,7 +96,7 @@ def main() -> int:
     )
     args = ap.parse_args()
 
-    t = load_data(args.run_dir)
+    t = load_data(args.save_dir)
     real = t[(t["osl"] > 0) & (t["isl"] > 0) & (t["osl"] > 0)]
     dec = real[real["decode_ms"] > 0]
     itl = real[

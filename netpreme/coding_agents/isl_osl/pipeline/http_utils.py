@@ -12,10 +12,10 @@ import urllib.error
 import urllib.request
 
 
-def check_initialized(url: str, timeout_s: float) -> bool:
+def check_server_initialized(url: str, timeout: float) -> bool:
     """Poll `url` until it returns a 2xx (i.e. the service is up), or
-    `timeout_s` elapses."""
-    deadline = time.monotonic() + timeout_s
+    `timeout` in seconds elapses."""
+    deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         try:
             with urllib.request.urlopen(url, timeout=1.0) as r:
@@ -27,7 +27,7 @@ def check_initialized(url: str, timeout_s: float) -> bool:
     return False
 
 
-def get_model_name(vllm_url: str) -> str:
+def get_model_name(url: str) -> str:
     """Ask vLLM which model it's serving — that's what claude-cli sends."""
-    with urllib.request.urlopen(f"{vllm_url}/v1/models", timeout=2.0) as r:
+    with urllib.request.urlopen(f"{url}/v1/models", timeout=2.0) as r:
         return json.loads(r.read())["data"][0]["id"]

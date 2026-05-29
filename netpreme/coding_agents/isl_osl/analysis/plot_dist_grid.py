@@ -20,7 +20,7 @@ import matplotlib.patheffects as pe
 import matplotlib.pyplot as plt
 import numpy as np
 
-from dataset import VERIFIED_BUCKETS, load_data
+from metrics import VERIFIED_BUCKETS, load_data
 
 # ----- styling constants ----------------------------------------------------
 
@@ -161,12 +161,12 @@ OVERLAYS = {
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--run-dir", required=True, type=Path)
+    ap.add_argument("--save-dir", required=True, type=Path)
     ap.add_argument("--out", required=True, type=Path)
     ap.add_argument("--title-suffix", default="")
     args = ap.parse_args()
 
-    t = load_data(args.run_dir)
+    t = load_data(args.save_dir)
     real = t[t["osl"] > 0]
     # Group values by (metric, difficulty bucket).
     vals: dict[tuple[str, str], np.ndarray] = {}

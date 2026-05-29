@@ -1,19 +1,23 @@
-"""Reverse-proxy between claude-cli and vLLM, capturing per-turn metadata.
+"""Reverse proxy between claude-cli and vLLM — server *and* its controller.
 
-For each `POST /v1/messages` we parse the JSON request body and the SSE
-response stream, then append one JSON object — RAW measurements only —
-to `<out_dir>/<instance_id>.proxy.jsonl`. The active `instance_id` is
-read from `--control-file` (the same control file the metrics_watcher
-uses), which `coding_agent.py` rewrites before each `claude -p` launch.
+This one file plays two roles:
 
-What this file does NOT do:
-    - Derive `agent` (main vs sub) or `category` (text/tool/mixed/empty).
-      Those are pure functions of stored measurements and live in the
-      analysis layer.
+  * ``class Proxy`` — a context manager used in-process by the runner. It
+    starts the per-turn telemetry subprocesses around one problem (the
+    metrics_watcher, and — with capture=True — this proxy server) and
+    tears them down on exit. ``with Proxy(...) as proxy`` → proxy.base_url.
 
-Other endpoints (e.g. `/v1/models`) are streamed through unchanged.
+  * a runnable reverse-proxy server — when launched as
+    ``python proxy.py --upstream ... --listen-port ...`` (which is exactly
+    what ``Proxy`` spawns). For each `POST /v1/messages` it parses the JSON
+    request + SSE response and appends one RAW row to
+    `<out_dir>/<instance_id>.proxy.jsonl`; other paths stream through.
 
-Code layout:
+Derivations (`agent` main/sub, category, …) are NOT done here — they live
+in the analysis layer. The active `instance_id` is read from
+`--control-file`, which ``Proxy`` rewrites per problem.
+
+Server code layout:
     1. Request parsing  — pure functions over the JSON request body.
     2. SSE parsing      — walks the response stream, extracts content blocks.
     3. Reverse proxy    — forwards request, tees the response, writes the row.
@@ -25,6 +29,7 @@ import argparse
 import asyncio
 import json
 import re
+import subprocess
 import sys
 import time
 from contextlib import asynccontextmanager
@@ -34,12 +39,141 @@ from typing import Iterable
 
 import httpx
 import uvicorn
+from loguru import logger
 from starlette.applications import Starlette
 from starlette.background import BackgroundTask
 from starlette.requests import Request
 from starlette.responses import Response, StreamingResponse
 from starlette.routing import Route
 
+PIPELINE = Path(__file__).resolve().parent
+
+
+# ===========================================================================
+# 0. Proxy — context manager that runs the telemetry subprocesses for one
+#    problem (the watcher + this proxy server). Used in-process by the runner.
+# ===========================================================================
+
+
+class Proxy:
+    """Start/stop the watcher (+ optional reverse proxy) around one problem."""
+
+    def __init__(
+        self,
+        save_dir: Path,
+        instance_id: str,
+        *,
+        vllm_url: str,
+        proxy_port: int = 8001,
+        capture: bool = False,
+    ) -> None:
+        self.save_dir = save_dir
+        self.instance_id = instance_id
+        self.vllm_url = vllm_url
+        self.proxy_port = proxy_port
+        self.capture = capture
+
+        # The watcher and proxy streams currently land in the same
+        # per-problem directory (joined by turn index in analysis); the
+        # separate attributes let callers split them later without a
+        # signature change.
+        self.per_problem_dir = save_dir / "per_problem"
+        self.per_problem_dir.mkdir(parents=True, exist_ok=True)
+        self.watcher_dir = self.per_problem_dir
+        self.proxy_dir = self.per_problem_dir
+        self.control = save_dir / ".active_instance"
+
+        self.base_url = vllm_url
+        self._watcher: tuple | None = None
+        self._proxy: tuple | None = None
+
+    def __enter__(self) -> Proxy:
+        # Imported lazily so this module still runs as a bare `python
+        # proxy.py` server (where the `pipeline` package isn't importable).
+        from pipeline import http_utils
+
+        self.control.write_text(self.instance_id)
+        # Truncate any prior trace files for this id (retry-on-resume safety).
+        for suffix in (".vllm.jsonl", ".proxy.jsonl"):
+            (self.per_problem_dir / f"{self.instance_id}{suffix}").unlink(
+                missing_ok=True
+            )
+
+        if self.capture:
+            self._proxy = self._start(
+                "proxy",
+                [
+                    sys.executable,
+                    str(PIPELINE / "proxy.py"),
+                    "--upstream",
+                    self.vllm_url,
+                    "--control-file",
+                    str(self.control),
+                    "--out-dir",
+                    str(self.proxy_dir),
+                    "--listen-port",
+                    str(self.proxy_port),
+                ],
+                self.save_dir / ".proxy.log",
+            )
+            if not http_utils.check_server_initialized(
+                f"http://127.0.0.1:{self.proxy_port}/v1/models", 10.0
+            ):
+                self.__exit__(None, None, None)
+                raise RuntimeError(
+                    f"proxy did not start; see {self.save_dir}/.proxy.log"
+                )
+            self.base_url = f"http://127.0.0.1:{self.proxy_port}"
+
+        self._watcher = self._start(
+            "metrics_watcher",
+            [
+                sys.executable,
+                str(PIPELINE / "metrics_watcher.py"),
+                "--vllm-url",
+                self.vllm_url,
+                "--control-file",
+                str(self.control),
+                "--out-dir",
+                str(self.watcher_dir),
+            ],
+            self.save_dir / ".metrics_watcher.log",
+        )
+        return self
+
+    def __exit__(self, *exc) -> bool:
+        if self._watcher is not None:
+            self._stop("metrics_watcher", self._watcher)
+            self._watcher = None
+        if self._proxy is not None:
+            self._stop("proxy", self._proxy)
+            self._proxy = None
+        self.control.write_text("")
+        return False
+
+    @staticmethod
+    def _start(name: str, argv: list[str], log_path: Path) -> tuple:
+        """Launch `argv` in its own session, stdout/stderr → log_path."""
+        log = log_path.open("w")
+        proc = subprocess.Popen(
+            argv, stdout=log, stderr=subprocess.STDOUT, start_new_session=True
+        )
+        logger.info("started {} (pid {})", name, proc.pid)
+        return proc, log
+
+    @staticmethod
+    def _stop(name: str, sidecar: tuple) -> None:
+        """SIGTERM then wait; SIGKILL if it doesn't exit in 10 s."""
+        proc, log = sidecar
+        if proc.poll() is None:
+            logger.info("stopping {} (pid {})", name, proc.pid)
+            proc.terminate()
+            try:
+                proc.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait()
+        log.close()
 
 # ===========================================================================
 # 1. Request parsing — pure functions over the request JSON.
@@ -204,9 +338,7 @@ async def _proxy_messages(
     try:
         parsed_req = parse_request(json.loads(raw_body))
     except (json.JSONDecodeError, ValueError) as exc:
-        print(
-            f"[agent-labeler] request parse error: {exc!r}", file=sys.stderr, flush=True
-        )
+        logger.warning("request parse error: {!r}", exc)
         parsed_req = ParsedRequest(
             system_prompt_chars=0, num_tool_defs=0, num_messages=0
         )
