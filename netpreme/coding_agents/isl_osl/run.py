@@ -56,10 +56,14 @@ PY = Path("/root/vllm_xmem/.venv/bin/python3")
 if not PY.exists():
     PY = Path(sys.executable)
 
-DATASET     = "princeton-nlp/SWE-bench_Verified"
-VLLM_URL    = "http://localhost:8000"
-LABELER_URL = "http://127.0.0.1:8001"
-LABELER_PORT = 8001
+DATASET = "princeton-nlp/SWE-bench_Verified"
+
+# Ports are env-overridable so multiple TP1 shards can run side by side
+# on the same host (one shard per GPU, distinct port pairs).
+VLLM_PORT    = int(os.environ.get("VLLM_PORT", "8000"))
+LABELER_PORT = int(os.environ.get("LABELER_PORT", "8001"))
+VLLM_URL     = f"http://localhost:{VLLM_PORT}"
+LABELER_URL  = f"http://127.0.0.1:{LABELER_PORT}"
 
 # Watcher must see at least one post-restart scrape before the first claude
 # request lands (and at least one post-claude scrape before we change the
@@ -206,7 +210,8 @@ class RunPaths:
     def initialise(self) -> None:
         self.csv_dir.mkdir(parents=True, exist_ok=True)
         self.workdirs.mkdir(parents=True, exist_ok=True)
-        self.solved.write_text("")
+        if not self.solved.exists():
+            self.solved.write_text("")
         self.control.write_text("")
 
 
@@ -355,7 +360,8 @@ def solve_one(paths: RunPaths, cfg: RunConfig, problem: dict) -> int:
     quiesce → claude → quiesce → clear control file) is what keeps the
     per-turn watcher's row attribution aligned with the right instance_id.
     """
-    subprocess.run(["bash", str(RESET_VLLM_SH)], check=False)
+    if os.environ.get("SKIP_VLLM_RESET", "0") != "1":
+        subprocess.run(["bash", str(RESET_VLLM_SH)], check=False)
     paths.labels.write_text("")
     paths.control.write_text(problem["instance_id"])
     time.sleep(WATCHER_QUIESCE_S)
@@ -400,7 +406,7 @@ def main() -> int:
         print(f"      bash {ROOT}/server.sh", file=sys.stderr)
         return 1
 
-    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    stamp = os.environ.get("RUN_STAMP") or datetime.now().strftime("%Y%m%d_%H%M%S")
     paths = RunPaths.for_stamp(stamp)
     paths.initialise()
     print(f"[run] writing to {paths.root}")
@@ -432,7 +438,11 @@ def main() -> int:
             return 1
         sidecars[1].start()
 
-        total = fetch_problems(cfg, paths)
+        if paths.problems.exists():
+            total = sum(1 for _ in iter_problems(paths.problems))
+            print(f"[run] reusing existing problems.jsonl ({total} problems)")
+        else:
+            total = fetch_problems(cfg, paths)
         print(f"[run] {total} problems queued")
 
         for i, problem in enumerate(iter_problems(paths.problems), start=1):

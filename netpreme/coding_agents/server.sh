@@ -22,6 +22,7 @@ fi
 : "${MAX_MODEL_LEN:=131072}"
 : "${GPU_MEMORY_UTILIZATION:=0.9}"
 : "${TOOL_CALL_PARSER:=qwen3_coder}"
+: "${PORT:=8000}"
 
 # Model-specific args that have no sensible shared default. Only set what the
 # model genuinely requires; never override knobs the user can pick.
@@ -32,13 +33,13 @@ case "$MODEL_NAME" in
         ;;
 esac
 
-echo "[server] model=$MODEL_NAME tp=$TENSOR_PARALLEL_SIZE max_model_len=$MAX_MODEL_LEN"
+echo "[server] model=$MODEL_NAME tp=$TENSOR_PARALLEL_SIZE max_model_len=$MAX_MODEL_LEN port=$PORT"
 
 VLLM_BIN=/root/vllm_xmem/.venv/bin/vllm
 [[ -x "$VLLM_BIN" ]] || VLLM_BIN=vllm
 
 exec "$VLLM_BIN" serve "$MODEL_NAME" \
-    --host 0.0.0.0 --port 8000 \
+    --host 0.0.0.0 --port "$PORT" \
     --tensor-parallel-size "$TENSOR_PARALLEL_SIZE" \
     --max-model-len "$MAX_MODEL_LEN" \
     --gpu-memory-utilization "$GPU_MEMORY_UTILIZATION" \
