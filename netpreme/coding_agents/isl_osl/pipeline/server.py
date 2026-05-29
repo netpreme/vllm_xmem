@@ -1,135 +1,268 @@
-"""vLLM server lifecycle.
+"""vLLM server lifecycle (+ the tiny HTTP helpers for talking to it).
 
-``initialize_server`` is a context manager that owns the server for the
-duration of the ``with`` block: on enter it clears any stale vLLM, launches
-a fresh one (``server.sh``) and blocks until it serves; on exit it kills it
-again. Each problem gets its own clean, empty-cache server.
+``VLLMServer`` is a context manager that owns the server for the duration of
+the ``with`` block: on enter it clears any stale vLLM, launches a fresh one
+(``server.sh``) and blocks until it serves; on exit it kills it. Each
+problem gets its own clean, empty-cache server.
 
-    with initialize_server(VLLM_URL) as model:      # start fresh vLLM
+    with VLLMServer(VLLM_URL, model=...) as served:     # start fresh vLLM
         with Proxy(save_dir, iid, vllm_url=VLLM_URL, ...) as proxy:
-            agent.solve(task=task, save_dir=save_dir,
-                        model=model, base_url=proxy.base_url)
+            agent.solve(task=task, model=served, base_url=proxy.base_url)
     # vLLM killed here
 
+Launch knobs (model, tensor-parallel size, …) are constructor args; any left
+``None`` fall back to ``server.sh``'s .env/defaults, with a one-time warning.
 All process handling is pure Python (psutil); the only shell file is
-``server.sh``, which is just the vLLM launch command.
+``server.sh``, the vLLM launch command.
 """
 
 from __future__ import annotations
 
+import json
+import os
 import socket
 import subprocess
 import time
-from contextlib import contextmanager
+import urllib.error
+import urllib.request
 from pathlib import Path
 from urllib.parse import urlparse
 
 import psutil
 from loguru import logger
-from pipeline import http_utils
 
-# coding_agents/server.sh — pipeline/ is two levels down from there.
+# coding_agents/ — pipeline/ is two levels down from there.
 SERVER_SH = Path(__file__).resolve().parents[2] / "server.sh"
+ENV_PATH = SERVER_SH.parent / ".env"
 LOG = Path("/tmp/vllm_server.log")
 
-# vLLM forks an EngineCore worker that escapes a plain process-group kill,
-# so (like the old `pkill -f`) we match the whole tree by cmdline substring.
-_KILL_PATTERNS = (
-    "vllm serve",
-    "VLLM::EngineCore",
-    "vllm.v1.engine",
-    "multiprocessing.resource_tracker",
-)
-_GPU_RELEASE_TIMEOUT = 60.0
-_READY_TIMEOUT = 600.0
+
+# ---------------------------------------------------------------------------
+# HTTP helpers — stdlib urllib (no `requests` dep for a couple one-shot calls).
+# ---------------------------------------------------------------------------
 
 
-def _kill_vllm() -> None:
-    killed = []
-    for p in psutil.process_iter(["cmdline"]):
-        try:
-            cmd = " ".join(p.info["cmdline"] or [])
-        except (psutil.NoSuchProcess, psutil.AccessDenied):
-            continue
-        if any(pat in cmd for pat in _KILL_PATTERNS):
-            try:
-                p.kill()
-                killed.append(p.pid)
-            except (psutil.NoSuchProcess, psutil.AccessDenied):
-                pass
-    if killed:
-        logger.info("killed vllm pids {}", killed)
-
-
-def _wait_port_free(port: int, timeout: float = 30.0) -> None:
+def check_server_initialized(url: str, timeout: float) -> bool:
+    """Poll `url` until it returns a 2xx (service up), or `timeout` s elapse."""
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        with socket.socket() as s:
-            s.settimeout(0.5)
-            if s.connect_ex(("localhost", port)) != 0:
-                return
-        time.sleep(0.5)
+        try:
+            with urllib.request.urlopen(url, timeout=1.0) as r:
+                if 200 <= r.status < 300:
+                    return True
+        except (urllib.error.URLError, ConnectionError, OSError):
+            pass
+        time.sleep(0.1)
+    return False
 
 
-def _gpu_used_mib() -> int:
+def get_model_name(url: str) -> str:
+    """Ask vLLM which model it's serving — that's what claude-cli sends."""
+    with urllib.request.urlopen(f"{url}/v1/models", timeout=2.0) as r:
+        return json.loads(r.read())["data"][0]["id"]
+
+
+def gpu_used_mib() -> int:
+    """GPU memory in use (MiB), via nvidia-smi; 0 if it can't be read."""
     try:
-        out = subprocess.run(
+        output = subprocess.run(
             ["nvidia-smi", "--query-gpu=memory.used", "--format=csv,noheader,nounits"],
             capture_output=True,
             text=True,
             timeout=10,
         ).stdout
-        return int(out.splitlines()[0].strip())
+        return int(output.splitlines()[0].strip())
     except (subprocess.SubprocessError, ValueError, IndexError):
         return 0
 
 
-def _wait_gpu_free() -> None:
-    # Without this the next vllm can OOM during CUDA-context init.
-    deadline = time.monotonic() + _GPU_RELEASE_TIMEOUT
-    while _gpu_used_mib() >= 1000 and time.monotonic() < deadline:
-        time.sleep(2)
-
-
-def _stop(port: int) -> None:
-    _kill_vllm()
-    _wait_port_free(port)
-    _wait_gpu_free()
-
-
-def _tail(path: Path, n: int = 40) -> str:
+def read_tail(n: int = 40) -> str:
+    """Last `n` lines of the vLLM server log."""
     try:
-        return "\n".join(path.read_text().splitlines()[-n:])
+        return "\n".join(LOG.read_text().splitlines()[-n:])
     except OSError:
         return ""
 
 
-@contextmanager
-def initialize_server(url: str):
-    """Start a fresh vLLM on enter, kill it on exit; yield the served model."""
-    port = urlparse(url).port or 8000
-    logger.info("starting vllm at {}", url)
-    _stop(port)  # clear any stale server first
-    proc = subprocess.Popen(
-        ["bash", str(SERVER_SH)],
-        stdout=LOG.open("w"),
-        stderr=subprocess.STDOUT,
-        start_new_session=True,
+# ---------------------------------------------------------------------------
+# Server lifecycle.
+# ---------------------------------------------------------------------------
+
+
+class VLLMServer:
+    """Start a fresh vLLM on enter, kill it on exit; yields the served model.
+
+    Launch knobs map to the env vars server.sh reads; any left ``None`` fall
+    back to server.sh's .env/defaults (warned once). ``server_args`` forward
+    straight to `vllm serve`."""
+
+    # vLLM forks an EngineCore worker that escapes a plain process-group
+    # kill, so (like `pkill -f`) we match the whole tree by cmdline substring.
+    _KILL_PATTERNS = (
+        "vllm serve",
+        "VLLM::EngineCore",
+        "vllm.v1.engine",
+        "multiprocessing.resource_tracker",
     )
+    _GPU_RELEASE_TIMEOUT = 60.0
+    _READY_TIMEOUT = 600.0
+    _warned = False  # warn about .env fallback once per process
 
-    deadline = time.monotonic() + _READY_TIMEOUT
-    while not http_utils.check_server_initialized(f"{url}/v1/models", 2.0):
-        if proc.poll() is not None:
-            raise RuntimeError(f"vllm died on startup; tail of {LOG}:\n{_tail(LOG)}")
-        if time.monotonic() > deadline:
-            raise RuntimeError(
-                f"vllm not ready after {_READY_TIMEOUT:.0f}s (see {LOG})"
+    def __init__(
+        self,
+        url: str,
+        *,
+        model: str | None = None,
+        tensor_parallel_size: int | None = None,
+        max_model_len: int | None = None,
+        gpu_memory_utilization: float | None = None,
+        tool_call_parser: str | None = None,
+        server_args: tuple[str, ...] = (),
+    ) -> None:
+        self.url = url
+        self.port = urlparse(url).port or 8000
+        self.model = model
+        self.tensor_parallel_size = tensor_parallel_size
+        self.max_model_len = max_model_len
+        self.gpu_memory_utilization = gpu_memory_utilization
+        self.tool_call_parser = tool_call_parser
+        self.server_args = list(server_args)
+        self._proc: subprocess.Popen | None = None
+
+    # -- lifecycle ---------------------------------------------------------
+    def __enter__(self) -> VLLMServer:
+        logger.info("starting vllm at {}", self.url)
+        self._stop()  # clear any stale server first
+        self._proc = subprocess.Popen(
+            ["bash", str(SERVER_SH), *self.server_args],
+            env=self._env(),
+            stdout=LOG.open("w"),
+            stderr=subprocess.STDOUT,
+            start_new_session=True,
+        )
+
+        deadline = time.monotonic() + self._READY_TIMEOUT
+        while not check_server_initialized(f"{self.url}/v1/models", 2.0):
+            if self._proc.poll() is not None:
+                raise RuntimeError(
+                    f"vllm died on startup; tail of {LOG}:\n{read_tail()}"
+                )
+            if time.monotonic() > deadline:
+                raise RuntimeError(
+                    f"vllm not ready after {self._READY_TIMEOUT:.0f}s (see {LOG})"
+                )
+
+        # Pin the actual served model so callers can read `server.model`.
+        self.model = self.model or get_model_name(self.url)
+        logger.info(
+            "vllm ready at {} — {}",
+            self.url,
+            " ".join(f"{k}={v}" for k, v in self.serving_config().items()),
+        )
+        return self
+
+    def __exit__(self, *exc) -> bool:
+        logger.info("stopping vllm at {}", self.url)
+        self._stop()
+        return False
+
+    def _env(self) -> dict[str, str]:
+        """server.sh env: set each provided knob; warn (once) about any left
+        to server.sh's .env. PORT always comes from the url."""
+        env = os.environ.copy()
+        knobs = {
+            "MODEL_NAME": self.model,
+            "TENSOR_PARALLEL_SIZE": self.tensor_parallel_size,
+            "MAX_MODEL_LEN": self.max_model_len,
+            "GPU_MEMORY_UTILIZATION": self.gpu_memory_utilization,
+            "TOOL_CALL_PARSER": self.tool_call_parser,
+        }
+        for var, val in knobs.items():
+            if val is not None:
+                env[var] = str(val)
+        env["PORT"] = str(self.port)
+
+        # Not passed AND not set in the environment → server.sh falls back
+        # to its .env/defaults; worth a one-time heads-up.
+        missing = [
+            var for var, val in knobs.items() if val is None and var not in os.environ
+        ]
+        if missing and not VLLMServer._warned:
+            logger.warning(
+                "not provided, reading from .env ({}): {}",
+                ENV_PATH,
+                ", ".join(missing),
             )
+            VLLMServer._warned = True
+        return env
 
-    model = http_utils.get_model_name(url)
-    logger.info("vllm ready at {}, serving {}", url, model)
+    def serving_config(self) -> dict[str, str]:
+        """Effective serving knobs (caller arg → os env → .env) — for logging
+        and run metadata."""
+        dotenv = _read_env_file()
+
+        def pick(var: str, val: object) -> str:
+            if val is not None:
+                return str(val)
+            return os.environ.get(var) or dotenv.get(var) or "(server.sh default)"
+
+        return {
+            "model": pick("MODEL_NAME", self.model),
+            "tp": pick("TENSOR_PARALLEL_SIZE", self.tensor_parallel_size),
+            "max_model_len": pick("MAX_MODEL_LEN", self.max_model_len),
+            "gpu_util": pick("GPU_MEMORY_UTILIZATION", self.gpu_memory_utilization),
+            "tool_call_parser": pick("TOOL_CALL_PARSER", self.tool_call_parser),
+            "port": str(self.port),
+        }
+
+    # -- process control ---------------------------------------------------
+    def _stop(self) -> None:
+        self._kill_vllm()
+        self._wait_port_free()
+        self._wait_gpu_free()
+
+    def _kill_vllm(self) -> None:
+        killed = []
+        for proc in psutil.process_iter(["cmdline"]):
+            try:
+                cmdline = " ".join(proc.info["cmdline"] or [])
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                continue
+            if any(pattern in cmdline for pattern in self._KILL_PATTERNS):
+                try:
+                    proc.kill()
+                    killed.append(proc.pid)
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    pass
+        if killed:
+            logger.info("killed vllm pids {}", killed)
+
+    def _wait_port_free(self, timeout: float = 30.0) -> None:
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            with socket.socket() as sock:
+                sock.settimeout(0.5)
+                if sock.connect_ex(("localhost", self.port)) != 0:
+                    return
+            time.sleep(0.5)
+
+    def _wait_gpu_free(self) -> None:
+        # Without this the next vllm can OOM during CUDA-context init.
+        deadline = time.monotonic() + self._GPU_RELEASE_TIMEOUT
+        while gpu_used_mib() >= 1000 and time.monotonic() < deadline:
+            time.sleep(2)
+
+
+def _read_env_file() -> dict[str, str]:
+    """Parse server.sh's .env (KEY=VALUE, ignoring comments) — for display."""
+    out: dict[str, str] = {}
     try:
-        yield model
-    finally:
-        logger.info("stopping vllm at {}", url)
-        _stop(port)
+        for line in ENV_PATH.read_text().splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, val = line.split("=", 1)
+            out[key.strip()] = val.split("#", 1)[0].strip()
+    except OSError:
+        pass
+    return out

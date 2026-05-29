@@ -48,22 +48,22 @@ Simulating a single coding agent run in an isolated environment, coding problems
 
 ```bash
 bash ../server.sh > /tmp/vllm.log 2>&1 &      # start vLLM (initial boot)
-./coding_agent.py                      # all 500 SWE-bench Verified problems
-./analyze.sh runs/<stamp>                     # (coding_agent.py already calls this; only re-run if you tweak plots)
+./main.py                      # all 500 SWE-bench Verified problems
+./analyze.sh runs/<stamp>                     # (main.py already calls this; only re-run if you tweak plots)
 ```
 
-To swap the served model, pass the flags to `coding_agent.py` — between problems
+To swap the served model, pass the flags to `main.py` — between problems
 `reset_vllm.sh` relaunches the server, picking up the overridden env vars:
 
 ```bash
 # Qwen3-Coder
-./coding_agent.py --model Qwen/Qwen3-Coder-30B-A3B-Instruct-FP8 --tool-call-parser qwen3_coder
+./main.py --model Qwen/Qwen3-Coder-30B-A3B-Instruct-FP8 --tool-call-parser qwen3_coder
 
 # GPT-OSS 120B
-./coding_agent.py --model openai/gpt-oss-120b --tool-call-parser gpt_oss
+./main.py --model openai/gpt-oss-120b --tool-call-parser gpt_oss
 ```
 
-`coding_agent.py` flags:
+`main.py` flags:
 
 | flag | default | meaning |
 |---|---|---|

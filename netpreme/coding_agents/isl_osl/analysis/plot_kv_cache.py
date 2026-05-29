@@ -83,7 +83,9 @@ def _legend_handles(components, n_sub: int) -> list[Patch]:
 
 
 def pick_representative(t: np.ndarray) -> str:
-    """Medium difficulty, num_turns near 32, no compaction, median total isl_new."""
+    """Prefer a medium-difficulty problem with ~25-40 substantive turns, no
+    compaction, median total isl_new. On a small run none may qualify, so fall
+    back to the problem with the most substantive (osl>0) turns."""
     candidates: list[tuple[str, int, int]] = []
     for iid in np.unique(t["instance_id"]):
         rows = t[t["instance_id"] == iid]
@@ -97,8 +99,19 @@ def pick_representative(t: np.ndarray) -> str:
         if (hit < 0.5).any() and (real["isl_new"] > 50_000).any():
             continue
         candidates.append((iid, n, int(real["isl_new"].sum())))
-    candidates.sort(key=lambda x: x[2])
-    return candidates[len(candidates) // 2][0]
+    if candidates:
+        candidates.sort(key=lambda x: x[2])
+        return candidates[len(candidates) // 2][0]
+
+    # Fallback: most substantive-turn problem (keeps small runs from crashing).
+    by_turns = [
+        (iid, int((t[t["instance_id"] == iid]["osl"] > 0).sum()))
+        for iid in np.unique(t["instance_id"])
+    ]
+    by_turns.sort(key=lambda x: x[1], reverse=True)
+    if not by_turns or by_turns[0][1] == 0:
+        raise SystemExit("plot_kv_cache: no substantive turns to plot")
+    return by_turns[0][0]
 
 
 def pick_samples(t: np.ndarray, n: int = 10) -> list[str]:

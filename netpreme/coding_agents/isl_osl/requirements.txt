@@ -1,4 +1,3 @@
-# Runtime deps for the isl_osl coding-agent benchmark + analysis.
 datasets
 httpx
 uvicorn

@@ -3,16 +3,16 @@
 The canonical per-turn dataset (`<save-dir>/data.npz`) stores RAW
 MEASUREMENTS ONLY. This module owns its whole lifecycle:
 
-  * `build_records` / `main` — join the raw per-problem capture streams
-    (`*.vllm.jsonl` + `*.proxy.jsonl` + `*.meta.json`) into data.npz.
-    Run as a script:  `python metrics.py --save-dir <save-dir>`.
+  * `build_records` / `main` — join each problem's raw capture streams
+    (`<iid>/vllm.jsonl` + `<iid>/proxy.jsonl` + `<iid>/meta.json`) into
+    data.npz. Run as a script:  `python metrics.py --save-dir <save-dir>`.
   * `load_data` — read the structured array back.
   * Derivation helpers — compute non-stored fields (`isl_cached`,
     `cache_hit_rate`, per-tier hit rates, `ttft_ms`, `agent`) on the fly.
     Use these from plot scripts instead of expecting the field on the array.
 
 Raw schema is set by pipeline/metrics_watcher.py (vLLM-side fields) and
-pipeline/proxy.py (proxy-side fields).
+pipeline/proxy/ (proxy-side fields).
 """
 
 from __future__ import annotations
@@ -68,10 +68,6 @@ def cache_hit_rate(t: np.ndarray) -> np.ndarray:
 # external_prefix_cache_hits, recompute = isl - those two.
 
 
-def _rate(num: np.ndarray, isl: np.ndarray) -> np.ndarray:
-    return np.divide(num, isl, out=np.zeros_like(isl), where=isl > 0)
-
-
 def hbm_hit_rate(t: np.ndarray) -> np.ndarray:
     """Fraction of input served from the local HBM/GPU prefix cache."""
     isl = t["isl"].astype(np.float64)
@@ -122,21 +118,21 @@ def agent(
 
 
 def load_per_problem_rows(save_dir: Path) -> dict[str, list[dict]]:
-    """Read every `<save_dir>/per_problem/<iid>.vllm.jsonl` into
+    """Read every `<save_dir>/telemetry/<iid>/vllm.jsonl` into
     `{instance_id: [vllm_row_dict, ...]}`. Use `load_data` for plotting;
     this is for scripts that want raw watcher dicts."""
     out: dict[str, list[dict]] = {}
-    for f in sorted((save_dir / "per_problem").glob("*.vllm.jsonl")):
-        iid = f.name[: -len(".vllm.jsonl")]
-        out[iid] = [json.loads(l) for l in f.read_text().splitlines() if l.strip()]
+    for f in sorted((save_dir / "telemetry").glob("*/vllm.jsonl")):
+        iid = f.parent.name
+        out[iid] = [json.loads(ln) for ln in f.read_text().splitlines() if ln.strip()]
     return out
 
 
 def load_problem_field(save_dir: Path, field: str) -> dict[str, str]:
-    """Pull `<field>` from per_problem/<iid>.meta.json, keyed by instance_id.
+    """Pull `<field>` from telemetry/<iid>/meta.json, keyed by instance_id.
     `difficulty` is run through DIFFICULTY_REMAP."""
     out: dict[str, str] = {}
-    for f in sorted((save_dir / "per_problem").glob("*.meta.json")):
+    for f in sorted((save_dir / "telemetry").glob("*/meta.json")):
         meta = json.loads(f.read_text())
         v = meta.get(field)
         if isinstance(v, list):
@@ -173,6 +169,8 @@ DTYPE = np.dtype(
         ("stop_reason", "U16"),
         # Proxy-side raw measurements (proxy; zero/empty if not captured).
         ("system_prompt_chars", "i4"),
+        ("tools_chars", "i4"),
+        ("messages_chars", "i4"),
         ("num_tool_defs", "i4"),
         ("num_messages", "i4"),
         ("num_tool_calls", "i4"),
@@ -184,92 +182,102 @@ DTYPE = np.dtype(
 )
 
 
-def _load_jsonl(path: Path) -> list[dict]:
-    if not path.exists():
-        return []
-    return [json.loads(ln) for ln in path.read_text().splitlines() if ln.strip()]
-
-
-def _f(v) -> float:
-    """Coerce to float; NaN for None/missing."""
-    try:
-        return float(v) if v is not None else float("nan")
-    except (TypeError, ValueError):
-        return float("nan")
-
-
-def _i(v) -> int:
-    try:
-        return int(v) if v is not None else 0
-    except (TypeError, ValueError):
-        return 0
-
-
 def build_records(save_dir: Path) -> np.ndarray:
     """Join each problem's watcher + proxy turns (by index) into one
     structured array; difficulty is pulled from meta.json and remapped."""
-    per_problem_dir = save_dir / "per_problem"
+    telemetry_dir = save_dir / "telemetry"
     rows: list[tuple] = []
-    for meta_path in sorted(per_problem_dir.glob("*.meta.json")):
+    for meta_path in sorted(telemetry_dir.glob("*/meta.json")):
         meta = json.loads(meta_path.read_text())
-        iid = meta["instance_id"]
-        difficulty = DIFFICULTY_REMAP.get(meta.get("difficulty") or "", meta.get("difficulty") or "")
+        instance_id = meta["instance_id"]
+        raw_difficulty = meta.get("difficulty") or ""
+        difficulty = DIFFICULTY_REMAP.get(raw_difficulty, raw_difficulty)
 
-        vllm_rows = _load_jsonl(per_problem_dir / f"{iid}.vllm.jsonl")
-        proxy_rows = _load_jsonl(per_problem_dir / f"{iid}.proxy.jsonl")
+        problem_dir = meta_path.parent
+        vllm_rows = _load_jsonl(problem_dir / "vllm.jsonl")
+        proxy_rows = _load_jsonl(problem_dir / "proxy.jsonl")
 
         # At concurrency=1 the two streams should align row-for-row. If
         # they don't, truncate to the shorter and warn.
-        n = min(len(vllm_rows), len(proxy_rows)) if proxy_rows else len(vllm_rows)
+        num_turns = (
+            min(len(vllm_rows), len(proxy_rows)) if proxy_rows else len(vllm_rows)
+        )
         if proxy_rows and len(vllm_rows) != len(proxy_rows):
             print(
-                f"[metrics] {iid}: vllm={len(vllm_rows)} "
-                f"proxy={len(proxy_rows)} — truncating to {n}"
+                f"[metrics] {instance_id}: vllm={len(vllm_rows)} "
+                f"proxy={len(proxy_rows)} — truncating to {num_turns}"
             )
 
-        for turn, v in enumerate(vllm_rows[:n], start=1):
-            p = proxy_rows[turn - 1] if proxy_rows else {}
+        for turn, vllm in enumerate(vllm_rows[:num_turns], start=1):
+            proxy = proxy_rows[turn - 1] if proxy_rows else {}
             rows.append(
                 (
-                    iid,
+                    instance_id,
                     difficulty,
                     turn,
-                    _f(v.get("ts")),
-                    _i(v.get("isl")),
-                    _i(v.get("osl")),
-                    _i(v.get("isl_new")),
-                    _f(v.get("prefill_ms")),
-                    _f(v.get("decode_ms")),
-                    _f(v.get("queue_ms")),
-                    _f(v.get("e2e_ms")),
-                    _f(v.get("itl_ms")),
-                    _f(v.get("kv_cache_usage_pct")),
-                    _i(v.get("prefix_cache_hits")),
-                    _i(v.get("external_prefix_cache_hits")),
-                    v.get("stop_reason") or "",
-                    _i(p.get("system_prompt_chars")),
-                    _i(p.get("num_tool_defs")),
-                    _i(p.get("num_messages")),
-                    _i(p.get("num_tool_calls")),
-                    p.get("claude_stop_reason") or "",
-                    ",".join(p.get("tool_names") or [])[:256],
-                    bool(p.get("has_thinking")),
-                    _i(p.get("response_text_chars")),
+                    _as_float(vllm.get("ts")),
+                    _as_int(vllm.get("isl")),
+                    _as_int(vllm.get("osl")),
+                    _as_int(vllm.get("isl_new")),
+                    _as_float(vllm.get("prefill_ms")),
+                    _as_float(vllm.get("decode_ms")),
+                    _as_float(vllm.get("queue_ms")),
+                    _as_float(vllm.get("e2e_ms")),
+                    _as_float(vllm.get("itl_ms")),
+                    _as_float(vllm.get("kv_cache_usage_pct")),
+                    _as_int(vllm.get("prefix_cache_hits")),
+                    _as_int(vllm.get("external_prefix_cache_hits")),
+                    vllm.get("stop_reason") or "",
+                    _as_int(proxy.get("system_prompt_chars")),
+                    _as_int(proxy.get("tools_chars")),
+                    _as_int(proxy.get("messages_chars")),
+                    _as_int(proxy.get("num_tool_defs")),
+                    _as_int(proxy.get("num_messages")),
+                    _as_int(proxy.get("num_tool_calls")),
+                    proxy.get("claude_stop_reason") or "",
+                    ",".join(proxy.get("tool_names") or [])[:256],
+                    bool(proxy.get("has_thinking")),
+                    _as_int(proxy.get("response_text_chars")),
                 )
             )
     return np.array(rows, dtype=DTYPE)
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--save-dir", required=True, type=Path)
-    args = ap.parse_args()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--save-dir", required=True, type=Path)
+    args = parser.parse_args()
 
     turns = build_records(args.save_dir)
-    out = args.save_dir / "data.npz"
-    np.savez_compressed(out, turns=turns)
-    print(f"wrote {out}  ({len(turns):,} turns)")
+    out_path = args.save_dir / "data.npz"
+    np.savez_compressed(out_path, turns=turns)
+    print(f"wrote {out_path}  ({len(turns):,} turns)")
     return 0
+
+
+def _rate(num: np.ndarray, isl: np.ndarray) -> np.ndarray:
+    return np.divide(num, isl, out=np.zeros_like(isl), where=isl > 0)
+
+
+def _load_jsonl(path: Path) -> list[dict]:
+    if not path.exists():
+        return []
+    return [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+
+
+def _as_float(value) -> float:
+    """Coerce to float; NaN for None/missing."""
+    try:
+        return float(value) if value is not None else float("nan")
+    except (TypeError, ValueError):
+        return float("nan")
+
+
+def _as_int(value) -> int:
+    try:
+        return int(value) if value is not None else 0
+    except (TypeError, ValueError):
+        return 0
 
 
 if __name__ == "__main__":
