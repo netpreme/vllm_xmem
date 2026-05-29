@@ -4,6 +4,7 @@ Reads data.npz, counts substantive turns per problem (drops 'empty' rows),
 and renders a 1×4 row: [aggregate, <15 min fix, 15 min - 1 hour, 1+ hours].
 Each panel is a histogram with median + mean overlays.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -12,13 +13,13 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 
-from data import VERIFIED_BUCKETS, load_data
+from dataset import VERIFIED_BUCKETS, load_data
 
 BUCKET_COLOR = {
-    "<15 min fix":     "#3b82f6",
+    "<15 min fix": "#3b82f6",
     "15 min - 1 hour": "#ec4899",
-    "1+ hours":        "#22c55e",
-    "all":             "#6b7280",
+    "1+ hours": "#22c55e",
+    "all": "#6b7280",
 }
 
 
@@ -46,13 +47,15 @@ def hist_panel(ax, vals: np.ndarray, title: str, color: str, x_max: int) -> int:
     """Render one histogram panel; returns the tallest bar so the caller
     can uniformize y across selected panels."""
     if not len(vals):
-        ax.set_title(f"{title}\n(no data)"); return 0
+        ax.set_title(f"{title}\n(no data)")
+        return 0
     bins = np.arange(0, x_max + 5, 5)
-    counts, _, _ = ax.hist(vals, bins=bins, color=color,
-                           edgecolor="white", linewidth=0.4)
+    counts, _, _ = ax.hist(
+        vals, bins=bins, color=color, edgecolor="white", linewidth=0.4
+    )
     med, mean = float(np.median(vals)), float(np.mean(vals))
-    ax.axvline(med,  color="black", ls="--", lw=1.4, label=f"med={med:.0f}")
-    ax.axvline(mean, color="black", ls=":",  lw=1.2, label=f"mean={mean:.0f}")
+    ax.axvline(med, color="black", ls="--", lw=1.4, label=f"med={med:.0f}")
+    ax.axvline(mean, color="black", ls=":", lw=1.2, label=f"mean={mean:.0f}")
     ax.set_xlim(0, x_max)
     ax.set_title(f"{title}\nn={len(vals)} problems", fontsize=10, fontweight="bold")
     ax.set_xlabel("turns per problem")
@@ -63,8 +66,8 @@ def hist_panel(ax, vals: np.ndarray, title: str, color: str, x_max: int) -> int:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--run-dir",      required=True, type=Path)
-    ap.add_argument("--out",          required=True, type=Path)
+    ap.add_argument("--run-dir", required=True, type=Path)
+    ap.add_argument("--out", required=True, type=Path)
     ap.add_argument("--title-suffix", default="")
     args = ap.parse_args()
 
@@ -76,8 +79,9 @@ def main() -> int:
     x_max = max(x_max, 50)
 
     panels = [("all", "all problems"), *((b, b) for b in VERIFIED_BUCKETS)]
-    fig, axes = plt.subplots(1, len(panels), figsize=(5 * len(panels), 4.5),
-                             constrained_layout=True)
+    fig, axes = plt.subplots(
+        1, len(panels), figsize=(5 * len(panels), 4.5), constrained_layout=True
+    )
     suffix = f" — {args.title_suffix}" if args.title_suffix else ""
     fig.suptitle(f"Turns per problem{suffix}", fontsize=13)
 

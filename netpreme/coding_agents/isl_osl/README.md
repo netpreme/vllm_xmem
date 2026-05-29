@@ -48,22 +48,22 @@ Simulating a single coding agent run in an isolated environment, coding problems
 
 ```bash
 bash ../server.sh > /tmp/vllm.log 2>&1 &      # start vLLM (initial boot)
-./run.py                                      # all 500 SWE-bench Verified problems
-./analyze.sh runs/<stamp>                     # (run.py already calls this; only re-run if you tweak plots)
+./coding_agent.py                      # all 500 SWE-bench Verified problems
+./analyze.sh runs/<stamp>                     # (coding_agent.py already calls this; only re-run if you tweak plots)
 ```
 
-To swap the served model, pass the flags to `run.py` — between problems
+To swap the served model, pass the flags to `coding_agent.py` — between problems
 `reset_vllm.sh` relaunches the server, picking up the overridden env vars:
 
 ```bash
 # Qwen3-Coder
-./run.py --model Qwen/Qwen3-Coder-30B-A3B-Instruct-FP8 --tool-call-parser qwen3_coder
+./coding_agent.py --model Qwen/Qwen3-Coder-30B-A3B-Instruct-FP8 --tool-call-parser qwen3_coder
 
 # GPT-OSS 120B
-./run.py --model openai/gpt-oss-120b --tool-call-parser gpt_oss
+./coding_agent.py --model openai/gpt-oss-120b --tool-call-parser gpt_oss
 ```
 
-`run.py` flags:
+`coding_agent.py` flags:
 
 | flag | default | meaning |
 |---|---|---|
@@ -103,8 +103,8 @@ All vLLM-side flags are exported as env vars before `reset_vllm.sh` runs, so the
               │ POSTs /v1/messages, one per turn
               ▼
    ┌──────────────────────┐
-   │   agent_labeler      │   classify main vs sub from system-prompt size →
-   │   (reverse proxy)    │   append record to .agent_labels (FIFO queue)
+   │   agent_labeler      │   parse request body + SSE response →
+   │   (reverse proxy)    │   append row to per_problem/<iid>.proxy.jsonl
    └──────────┬───────────┘
               │ forwards unmodified
               ▼
@@ -116,29 +116,45 @@ All vLLM-side flags are exported as env vars before `reset_vllm.sh` runs, so the
    ┌──────────────────────┐         ┌─────┴────────────────────┐
    │      claude-cli      │         │   metrics_watcher        │
    │  (next turn, repeat) │         │   on each completion:    │
-   └──────────────────────┘         │     · pop one label      │
-                                    │     · merge with vLLM    │
-                                    │       counter deltas     │
-                                    │     · write CSV row      │
+   └──────────────────────┘         │     · diff counters      │
+                                    │     · append row to      │
+                                    │       per_problem/<iid>  │
+                                    │       .vllm.jsonl        │
                                     └──────────────────────────┘
                                                   │
                                                   ▼
                                      analyze.sh ─► data.npz + figures
+                                     (joins .vllm.jsonl + .proxy.jsonl on turn index)
 ```
 
 
 ## Per-run output (`runs/<stamp>/`)
 
-- `config.json`, `problems.jsonl`, `solved.txt`
-- `per_problem/<id>.csv` — one row per assistant turn (watcher's output)
-- `per_problem/<id>.summary.json` — per-problem totals from claude's `result` event
-- `.active_instance`, `.agent_labels` — control + label-queue files
-- `.labeler.log`, `.watcher.log` — sidecar stderr
-- `data.npz` — canonical per-turn array (built by `analyze.sh`)
+- `run_meta.json`, `problems.jsonl`, `solved.txt`
+- `per_problem/<id>.vllm.jsonl` — one row per assistant turn (vLLM-side raw metrics)
+- `per_problem/<id>.proxy.jsonl` — one row per `/v1/messages` (proxy-side raw metrics; only with `--capture`)
+- `per_problem/<id>.meta.json` — per-problem metadata (difficulty, started_at, ended_at, exit_code, …)
+- `.active_instance` — control file used by both sidecars to attribute turns
+- `.agent_labeler.log`, `.metrics_watcher.log` — sidecar stderr
+- `data.npz` — canonical per-turn array (built by `analyze.sh` — joins the two JSONL streams on turn index)
 - `analysis/*.png` — figures
 
 
 ## Results
+
+Setup: **Qwen-3-Coder-30B-Instruct-FP8 × SWE-bench Verified × 500 problems**.
+
+### Sequence-length distributions
+
+| field | p50 | p90 | p99 | max |
+|---|---:|---:|---:|---:|
+| `isl`, tokens                 | 52,504 | 115,753 | 161,617 | 166,988 |
+| `isl_new`, uncached prefill   |     99 |   1,563 |  27,316 | 143,421 |
+| `isl_cached`                  | 51,616 | 115,353 | 161,579 | 166,960 |
+| `osl`                         |    126 |     484 |   1,298 |  32,000 |
+| turns / problem               |     29 |      63 |       — |     471 |
+
+Cache hit rate: **mean = 0.959, p50 = 0.998**.
 
 ![Aggregate OSL / ISL / ISL_uncached distributions](results/analysis_dist_agg.png)
 
@@ -152,6 +168,73 @@ All vLLM-side flags are exported as env vars before `reset_vllm.sh` runs, so the
 
 `analysis_turns.png` — distribution of turns-per-problem. Median 29 overall, monotone shift by difficulty (`<15min` median 26 → `15min–1h` median 30 → `1+h` median 34). Long tail reaches 471 turns.
 
+### Latency
+
+| field | p50 | p90 | p99 | max |
+|---|---:|---:|---:|---:|
+| `ttft_ms`    |    140 |    493 |   4,139 |  52,333 |
+| `prefill_ms` |    140 |    493 |   4,139 |  52,333 |
+| `decode_ms`  |  1,226 |  5,348 |  14,099 | 434,180 |
+| `itl_ms`     |   10.1 |   14.0 |    16.6 |    16.9 |
+| `queue_ms`   |      0 |      0 |       0 |       0 |
+
+Decode dominates: **59,670 s decode vs 8,192 s prefill** over the full run. The prefix cache removes most prefill cost, but every output token still pays ITL.
+
+### Prefill vs. ISL
+
+![TTFT / prefill vs ISL](results/analysis_ttft_prefill.png)
+
+Median prefill rises mildly with total ISL because of cached-prefix attention overhead, not because uncached-token cost grows.
+
+| ISL bucket    |    n  | `isl_new` p50 | prefill p50 |
+|---|---:|---:|---:|
+| 10k–25k       |   333 | 124           |  56 ms      |
+| 25k–50k       | 9,327 | 162           |  95 ms      |
+| 50k–75k       | 6,340 | 152           | 128 ms      |
+| 75k–100k      | 2,221 |  64           | 153 ms      |
+| 100k–125k     | 1,213 |  32           | 183 ms      |
+| 125k–200k     | 1,709 |  30           | 228 ms      |
+
+Per-uncached-token prefill cost drops with larger `isl_new`: about 2.8 ms/token below 100 new tokens and 0.12 ms/token above 20k new tokens. Residual cached-prefix overhead is roughly 50 ms per 25k cached ISL.
+
+### ITL vs. ISL
+
+![ITL and decode_ms vs ISL](results/analysis_itl_vs_isl.png)
+
+This is the main scaling result.
+
+| ISL bucket  |    n  | ITL p50, ms/token |
+|---|---:|---:|
+| 10k–25k     |   333 |  8.0 |
+| 25k–50k     | 9,327 |  9.3 |
+| 50k–75k     | 6,340 | 10.6 |
+| 75k–100k    | 2,221 | 12.0 |
+| 100k–125k   | 1,213 | 13.7 |
+| 125k–200k   | 1,709 | 15.6 |
+
+Decode is memory-bandwidth-bound because each decode step reads the KV cache.
+
+### Decode factorization
+
+`decode_ms ≈ ITL(ISL) × OSL`. Evidence:
+
+- `corr(decode_ms, osl) = 0.992`
+- `corr(decode_ms, isl) = 0.10`
+- median `|decode − itl × osl| = 10 ms`
+
+ISL affects decode mainly through ITL; OSL determines how many times that ITL cost is paid.
+
+### Per-problem KV / time breakdown
+
 ![Per-turn KV cache + time breakdown — matplotlib-23412 (142 turns)](results/samples/kv_matplotlib__matplotlib-23412.png)
 
 `samples/kv_matplotlib__matplotlib-23412.png` — example per-turn breakdown for one representative problem. **Top**: KV cache (GB) — blue cached, red recompute, green decode. **Bottom**: per-turn wall time, decomposed the same way.
+
+### Takeaways
+
+- **ISL is large but mostly cached**: median `isl_new` is only 99 tokens.
+- **Prefill is no longer the main bottleneck** under high prefix-cache hit rate.
+- **Decode is the bottleneck** because every generated token pays ITL.
+- **Longer ISL still hurts** even with perfect caching, because ITL grows with KV-cache size.
+- **Context compaction is the strongest lever**: it reduces both ITL and often OSL.
+- **Runaway OSL dominates tail cost**: max `osl` is 32k and max `decode_ms` is 434 s.
