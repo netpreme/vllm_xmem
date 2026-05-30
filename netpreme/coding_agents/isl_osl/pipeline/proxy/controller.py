@@ -12,9 +12,9 @@ from pathlib import Path
 
 import uvicorn
 from loguru import logger
-from pipeline.jsonl import instance_dir
+from pipeline.utils.jsonl import instance_dir
 from pipeline.proxy.app import ProxyApp
-from pipeline.server import check_server_initialized
+from pipeline.vllm_server import check_server_initialized
 
 # Loopback host the proxy binds to and claude-cli connects back through.
 PROXY_HOST = "127.0.0.1"

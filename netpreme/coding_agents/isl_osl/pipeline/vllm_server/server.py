@@ -1,11 +1,11 @@
-"""vLLM server lifecycle (+ the tiny HTTP helpers for talking to it).
+"""vLLM server lifecycle.
 
-``VLLMServer`` is a context manager that owns the server for the duration of
+``Server`` is a context manager that owns the server for the duration of
 the ``with`` block: on enter it clears any stale vLLM, launches a fresh one
 (``server.sh``) and blocks until it serves; on exit it kills it. Each
 problem gets its own clean, empty-cache server.
 
-    with VLLMServer(VLLM_URL, model=...) as served:     # start fresh vLLM
+    with Server(VLLM_URL, model=...) as served:     # start fresh vLLM
         with Proxy(save_dir, iid, vllm_url=VLLM_URL, ...) as proxy:
             agent.solve(task=task, model=served, base_url=proxy.base_url)
     # vLLM killed here
@@ -13,83 +13,34 @@ problem gets its own clean, empty-cache server.
 Launch knobs (model, tensor-parallel size, …) are constructor args; any left
 ``None`` fall back to ``server.sh``'s .env/defaults, with a one-time warning.
 All process handling is pure Python (psutil); the only shell file is
-``server.sh``, the vLLM launch command.
+``server.sh``, the vLLM launch command. Stateless helpers (HTTP probes, GPU
+queries, .env parsing) live in ``utils.py``.
 """
 
 from __future__ import annotations
 
-import json
 import os
 import socket
 import subprocess
 import time
-import urllib.error
-import urllib.request
-from pathlib import Path
 from urllib.parse import urlparse
 
 import psutil
 from loguru import logger
 
-# coding_agents/ — pipeline/ is two levels down from there.
-SERVER_SH = Path(__file__).resolve().parents[2] / "server.sh"
-ENV_PATH = SERVER_SH.parent / ".env"
-LOG = Path("/tmp/vllm_server.log")
+from pipeline.vllm_server.utils import (
+    ENV_PATH,
+    LOG,
+    SERVER_SH,
+    _read_env_file,
+    check_server_initialized,
+    get_model_name,
+    gpu_used_mib,
+    read_tail,
+)
 
 
-# ---------------------------------------------------------------------------
-# HTTP helpers — stdlib urllib (no `requests` dep for a couple one-shot calls).
-# ---------------------------------------------------------------------------
-
-
-def check_server_initialized(url: str, timeout: float) -> bool:
-    """Poll `url` until it returns a 2xx (service up), or `timeout` s elapse."""
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        try:
-            with urllib.request.urlopen(url, timeout=1.0) as r:
-                if 200 <= r.status < 300:
-                    return True
-        except (urllib.error.URLError, ConnectionError, OSError):
-            pass
-        time.sleep(0.1)
-    return False
-
-
-def get_model_name(url: str) -> str:
-    """Ask vLLM which model it's serving — that's what claude-cli sends."""
-    with urllib.request.urlopen(f"{url}/v1/models", timeout=2.0) as r:
-        return json.loads(r.read())["data"][0]["id"]
-
-
-def gpu_used_mib() -> int:
-    """GPU memory in use (MiB), via nvidia-smi; 0 if it can't be read."""
-    try:
-        output = subprocess.run(
-            ["nvidia-smi", "--query-gpu=memory.used", "--format=csv,noheader,nounits"],
-            capture_output=True,
-            text=True,
-            timeout=10,
-        ).stdout
-        return int(output.splitlines()[0].strip())
-    except (subprocess.SubprocessError, ValueError, IndexError):
-        return 0
-
-
-def read_tail(n: int = 40) -> str:
-    """Last `n` lines of the vLLM server log."""
-    try:
-        return "\n".join(LOG.read_text().splitlines()[-n:])
-    except OSError:
-        return ""
-
-
-# ---------------------------------------------------------------------------
-# Server lifecycle.
-# ---------------------------------------------------------------------------
-
-
-class VLLMServer:
+class Server:
     """Start a fresh vLLM on enter, kill it on exit; yields the served model.
 
     Launch knobs map to the env vars server.sh reads; any left ``None`` fall
@@ -130,7 +81,7 @@ class VLLMServer:
         self._proc: subprocess.Popen | None = None
 
     # -- lifecycle ---------------------------------------------------------
-    def __enter__(self) -> VLLMServer:
+    def __enter__(self) -> Server:
         logger.info("starting vllm at {}", self.url)
         self._stop()  # clear any stale server first
         self._proc = subprocess.Popen(
@@ -187,13 +138,13 @@ class VLLMServer:
         missing = [
             var for var, val in knobs.items() if val is None and var not in os.environ
         ]
-        if missing and not VLLMServer._warned:
+        if missing and not Server._warned:
             logger.warning(
                 "not provided, reading from .env ({}): {}",
                 ENV_PATH,
                 ", ".join(missing),
             )
-            VLLMServer._warned = True
+            Server._warned = True
         return env
 
     def serving_config(self) -> dict[str, str]:
@@ -251,18 +202,3 @@ class VLLMServer:
         deadline = time.monotonic() + self._GPU_RELEASE_TIMEOUT
         while gpu_used_mib() >= 1000 and time.monotonic() < deadline:
             time.sleep(2)
-
-
-def _read_env_file() -> dict[str, str]:
-    """Parse server.sh's .env (KEY=VALUE, ignoring comments) — for display."""
-    out: dict[str, str] = {}
-    try:
-        for line in ENV_PATH.read_text().splitlines():
-            line = line.strip()
-            if not line or line.startswith("#") or "=" not in line:
-                continue
-            key, val = line.split("=", 1)
-            out[key.strip()] = val.split("#", 1)[0].strip()
-    except OSError:
-        pass
-    return out

@@ -12,7 +12,7 @@ from pathlib import Path
 
 import httpx
 from loguru import logger
-from pipeline.jsonl import JsonlWriter, instance_dir
+from pipeline.utils.jsonl import JsonlWriter, instance_dir
 from pipeline.vllm_metrics.prometheus import parse_raw_response
 from pipeline.vllm_metrics.snapshot import Snapshot, compute_turn_metrics
 
@@ -100,7 +100,7 @@ class Poller:
         """Polling loop; returns when `stop_event` is set.
 
         Transient `/metrics` failures never raise: vLLM is killed and
-        restarted between problems by `VLLMServer`. A failed scrape clears
+        restarted between problems by `Server`. A failed scrape clears
         the baseline; the next successful one re-baselines.
         """
         async with httpx.AsyncClient() as client:

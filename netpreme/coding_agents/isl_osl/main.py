@@ -4,7 +4,7 @@
 Orchestrates the per-problem loop; the actual work lives elsewhere. Each
 problem is wrapped in four context managers, each driving one thing:
 
-    VLLMServer     fresh vLLM for this problem (empty cache; killed on exit)
+    Server         fresh vLLM for this problem (empty cache; killed on exit)
     MetricsScraper polls vLLM's Prometheus /metrics once per turn
                    → results/<stamp>/telemetry/<iid>/vllm.jsonl
     Proxy          sits between claude-cli and vLLM (with --capture); normalizes
@@ -17,7 +17,7 @@ The agent only solves; analysis is a single separate pass at the end
 (results/<stamp>/telemetry/<iid>/meta.json) doubles as the resume ledger.
 
     for task in dataset:
-        with VLLMServer(...) as server, MetricsScraper(...), \\
+        with Server(...) as server, MetricsScraper(...), \\
              Proxy(...) as proxy, Sandbox(...) as sandbox:
             exit_code = coding_agent(task, sandbox.dir, server.model, proxy.base_url)
         write_meta(...)
@@ -29,12 +29,9 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import platform
-import subprocess
 import sys
 import time
 from datetime import datetime
-from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
 from loguru import logger
@@ -45,10 +42,11 @@ from tqdm import tqdm
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from analysis.report import run as run_report
-from pipeline import datasets
-from pipeline.agent import Sandbox, coding_agent, write_meta
+from pipeline.agent import coding_agent
+from pipeline.datasets import Sandbox, get_dataset
 from pipeline.proxy import Proxy
-from pipeline.server import VLLMServer
+from pipeline.utils.metadata import write_meta, write_run_config
+from pipeline.vllm_server import Server
 from pipeline.vllm_metrics import MetricsScraper
 
 HERE = Path(__file__).resolve().parent
@@ -103,7 +101,7 @@ def main() -> int:
         if meta.get("exit_code") == 0:
             solved_ids.add(meta["instance_id"])
 
-    dataset = datasets.get_dataset(
+    dataset = get_dataset(
         name=DATASET,
         random=args.random,
         seed=args.seed,
@@ -118,7 +116,7 @@ def main() -> int:
         logger.info("{} ({} @ {})", instance_id, task["repo"], task["base_commit"][:5])
         # Each component drives one thing: server, watcher, proxy, sandbox.
         with (
-            VLLMServer(
+            Server(
                 url=VLLM_URL,
                 model=args.model,
                 tensor_parallel_size=args.tensor_parallel_size,
@@ -151,6 +149,19 @@ def main() -> int:
             ended_at=sandbox.ended,
             exit_code=exit_code,
         )
+        # Once, after the first server is up: snapshot the run inputs with the
+        # real server's resolved config (incl. the actually-served model).
+        if not (save_dir / "run_config.json").exists():
+            write_run_config(
+                save_dir=save_dir,
+                args=args,
+                server=server,
+                dataset=dataset,
+                dataset_name=DATASET,
+                solved_ids=solved_ids,
+                proxy_port=PROXY_PORT,
+                started_at=started_at,
+            )
 
     (save_dir / "run_meta.json").write_text(
         json.dumps(
@@ -169,53 +180,6 @@ def main() -> int:
 
     run_report(save_dir=save_dir)
     return 0
-
-
-def _claude_version() -> str:
-    """claude-cli version string, e.g. '2.1.156 (Claude Code)'."""
-    try:
-        return subprocess.run(
-            ["claude", "--version"], capture_output=True, text=True, timeout=10
-        ).stdout.strip()
-    except (subprocess.SubprocessError, OSError):
-        return ""
-
-
-def _vllm_version() -> str:
-    """Installed vLLM distribution version (cheap — no package import)."""
-    try:
-        return version("vllm")
-    except PackageNotFoundError:
-        return ""
-
-
-def _gpu_info() -> dict:
-    """GPU name / count / total-memory (MiB) via nvidia-smi; {} if unavailable."""
-    try:
-        lines = (
-            subprocess.run(
-                [
-                    "nvidia-smi",
-                    "--query-gpu=name,memory.total",
-                    "--format=csv,noheader,nounits",
-                ],
-                capture_output=True,
-                text=True,
-                timeout=10,
-            )
-            .stdout.strip()
-            .splitlines()
-        )
-    except (subprocess.SubprocessError, OSError):
-        return {}
-    names = [ln.split(",")[0].strip() for ln in lines if ln.strip()]
-    if not names:
-        return {}
-    try:
-        memory_mib = int(lines[0].split(",")[1])
-    except (ValueError, IndexError):
-        memory_mib = 0
-    return {"name": names[0], "count": len(names), "memory_mib": memory_mib}
 
 
 if __name__ == "__main__":

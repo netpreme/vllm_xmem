@@ -28,6 +28,16 @@ Base commit: {base_commit}
 """
 
 
+def claude_version() -> str:
+    """claude-cli version string, e.g. '2.1.156 (Claude Code)'; '' if unavailable."""
+    try:
+        return subprocess.run(
+            ["claude", "--version"], capture_output=True, text=True, timeout=10
+        ).stdout.strip()
+    except (subprocess.SubprocessError, OSError):
+        return ""
+
+
 def solve(problem: dict, repo_dir: Path, model: str, url: str) -> int:
     """Run claude-cli on `problem` inside `repo_dir`. Returns the exit code.
 

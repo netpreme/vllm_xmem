@@ -12,6 +12,9 @@ from __future__ import annotations
 
 import random as _random
 
+# Absolute import — resolves to the HuggingFace ``datasets`` lib in
+# site-packages, NOT this ``pipeline.datasets`` package (which is only
+# reachable via its dotted name). Py3 imports are absolute by default.
 from datasets import load_dataset
 
 

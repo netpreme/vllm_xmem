@@ -16,7 +16,7 @@ from typing import Iterable
 
 import httpx
 from loguru import logger
-from pipeline.jsonl import JsonlWriter
+from pipeline.utils.jsonl import JsonlWriter
 from pipeline.proxy.parse import (
     ParsedRequest,
     parse_request,
