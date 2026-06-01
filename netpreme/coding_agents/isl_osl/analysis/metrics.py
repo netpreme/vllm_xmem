@@ -105,10 +105,34 @@ def ttft_ms(t: np.ndarray) -> np.ndarray:
     return t["queue_ms"].astype(np.float64) + t["prefill_ms"].astype(np.float64)
 
 
+# Claude Code's sub-agent spawner is the tool named exactly "Task". The
+# todo-list tools (TaskCreate / TaskUpdate / TaskOutput) are NOT spawners, so
+# match the bare name — substring matching would false-positive on those.
+SUBAGENT_TOOL = "Task"
+
+
+def uses_subagents(t: np.ndarray) -> bool:
+    """True iff any turn invoked the Task sub-agent spawner.
+
+    The toolset is the harness's (claude-cli), not the model's, so Task is
+    offered regardless of model — but a served model may simply never spawn a
+    sub-agent. When it doesn't, there is no sub tier to label and callers
+    should not draw a main/sub split at all."""
+    return any(SUBAGENT_TOOL in names.split(",") for names in t["tool_names"])
+
+
 def agent(
     t: np.ndarray, threshold: int = SUB_AGENT_SYSTEM_PROMPT_THRESHOLD
 ) -> np.ndarray:
-    """Classify each turn as 'main' or 'sub' from system_prompt_chars."""
+    """Classify each turn as 'main' or 'sub'.
+
+    A sub-agent runs on its own (smaller) system prompt, so within a run that
+    actually spawns sub-agents the prompt size separates the tiers. But if the
+    run never invokes the Task spawner, there is no sub tier — the size
+    threshold would otherwise misfire (e.g. a model whose only system prompt
+    is already below `threshold`), so label everything 'main'."""
+    if not uses_subagents(t):
+        return np.full(len(t), "main")
     return np.where(t["system_prompt_chars"] < threshold, "sub", "main")
 
 

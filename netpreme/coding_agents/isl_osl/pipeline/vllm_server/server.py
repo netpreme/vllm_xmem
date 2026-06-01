@@ -23,6 +23,7 @@ import os
 import socket
 import subprocess
 import time
+from pathlib import Path
 from urllib.parse import urlparse
 
 import psutil
@@ -57,6 +58,7 @@ class Server:
     )
     _GPU_RELEASE_TIMEOUT = 60.0
     _READY_TIMEOUT = 600.0
+    _TERM_GRACE_S = 5.0  # let vLLM unlink its /dev/shm IPC before we SIGKILL
     _warned = False  # warn about .env fallback once per process
 
     def __init__(
@@ -171,22 +173,53 @@ class Server:
         self._kill_vllm()
         self._wait_port_free()
         self._wait_gpu_free()
+        self._clean_shm()
 
     def _kill_vllm(self) -> None:
-        killed = []
+        procs = []
         for proc in psutil.process_iter(["cmdline"]):
             try:
                 cmdline = " ".join(proc.info["cmdline"] or [])
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 continue
             if any(pattern in cmdline for pattern in self._KILL_PATTERNS):
-                try:
-                    proc.kill()
-                    killed.append(proc.pid)
-                except (psutil.NoSuchProcess, psutil.AccessDenied):
-                    pass
-        if killed:
-            logger.info("killed vllm pids {}", killed)
+                procs.append(proc)
+        if not procs:
+            return
+
+        # SIGTERM first so vLLM can unlink its own /dev/shm/psm_* IPC segments;
+        # SIGKILL whatever ignores it within the grace window (the forked
+        # EngineCore often does — _clean_shm then mops up its leaked segment).
+        for proc in procs:
+            try:
+                proc.terminate()
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                pass
+        _, alive = psutil.wait_procs(procs, timeout=self._TERM_GRACE_S)
+        for proc in alive:
+            try:
+                proc.kill()
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                pass
+        logger.info("killed vllm pids {}", [proc.pid for proc in procs])
+
+    def _clean_shm(self) -> None:
+        """Remove orphaned vLLM IPC segments from /dev/shm.
+
+        vLLM uses POSIX shared memory (/dev/shm/psm_*) for EngineCore↔worker
+        IPC and leaks it when SIGKILLed. Left to pile up they fill /dev/shm (a
+        64 MiB container default is common), and the NEXT vLLM dies on its
+        first request — the engine inits on the GPU fine, then can't allocate
+        IPC shm. We've just killed every vLLM, so any psm_* are orphaned."""
+        removed = 0
+        for seg in Path("/dev/shm").glob("psm_*"):
+            try:
+                seg.unlink()
+                removed += 1
+            except OSError:
+                pass
+        if removed:
+            logger.info("cleaned {} orphaned /dev/shm vllm segment(s)", removed)
 
     def _wait_port_free(self, timeout: float = 30.0) -> None:
         deadline = time.monotonic() + timeout

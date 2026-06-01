@@ -133,6 +133,20 @@ def pick_samples(t: np.ndarray, n: int = 10) -> list[str]:
     return [stats[i][0] for i in idx]
 
 
+def render_all_to_telemetry(t: np.ndarray, telemetry_dir: Path, title_suffix: str) -> None:
+    """Render the per-turn KV/time figure for EVERY problem, writing each into
+    its own raw-capture dir as `<telemetry_dir>/<iid>/kv_cache.png`.
+
+    Unlike `pick_samples`, this is unfiltered: one figure per problem so each
+    telemetry/<problem>/ dir is self-contained. Problems with no substantive
+    (osl>0) turns have nothing to plot and are skipped."""
+    for iid in np.unique(t["instance_id"]):
+        if not (t[t["instance_id"] == iid]["osl"] > 0).any():
+            print(f"skip {iid}: no substantive turns")
+            continue
+        render(t, iid, telemetry_dir / iid / "kv_cache.png", title_suffix)
+
+
 def render(t: np.ndarray, iid: str, out: Path, title_suffix: str) -> None:
     """Render one two-panel figure for one problem and save to `out`."""
     problem = t[(t["instance_id"] == iid) & (t["osl"] > 0)]
@@ -171,10 +185,12 @@ def render(t: np.ndarray, iid: str, out: Path, title_suffix: str) -> None:
         2, 1, figsize=(13, 9.5), sharex=True, constrained_layout=True
     )
     suffix = f" — {title_suffix}" if title_suffix else ""
-    subtitle = (
-        f"{iid}  ({difficulty}, {len(turns)} turns: "
-        f"{len(turns) - n_sub} main / {n_sub} sub){suffix}"
-    )
+    # Only show the main/sub split when this problem actually spawned a
+    # sub-agent; otherwise it's a flat "N turns" (see metrics.uses_subagents).
+    turns_desc = f"{len(turns)} turns"
+    if n_sub:
+        turns_desc += f": {len(turns) - n_sub} main / {n_sub} sub"
+    subtitle = f"{iid}  ({difficulty}, {turns_desc}){suffix}"
     fig.suptitle(subtitle, fontsize=11)
 
     # ---- top panel: KV cache (GB) -----------------------------------------
@@ -289,6 +305,13 @@ def main() -> int:
         help="if set, also write 10 diverse-problem samples "
         "as kv_<iid>.png to this directory",
     )
+    ap.add_argument(
+        "--telemetry-dir",
+        type=Path,
+        default=None,
+        help="if set, write one figure per problem to "
+        "<telemetry-dir>/<iid>/kv_cache.png (every problem, unfiltered)",
+    )
     args = ap.parse_args()
 
     t = load_data(args.save_dir)
@@ -303,6 +326,9 @@ def main() -> int:
                 args.samples_dir / f"kv_{sample_iid}.png",
                 args.title_suffix,
             )
+
+    if args.telemetry_dir is not None:
+        render_all_to_telemetry(t, args.telemetry_dir, args.title_suffix)
     return 0
 
 

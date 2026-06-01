@@ -48,7 +48,8 @@ def run(save_dir: Path) -> None:
     for script, fname in _PLOTS:
         _plot(script, save_dir, ["--out", str(out / fname), "--title-suffix", suffix])
 
-    # plot_kv_cache.py also emits per-sample figures into analysis/samples/.
+    # plot_kv_cache.py also emits per-sample figures into analysis/samples/ and
+    # one per-problem figure into each telemetry/<iid>/kv_cache.png.
     _plot(
         "plot_kv_cache.py",
         save_dir,
@@ -57,6 +58,8 @@ def run(save_dir: Path) -> None:
             str(out / "analysis_kv_cache.png"),
             "--samples-dir",
             str(out / "samples"),
+            "--telemetry-dir",
+            str(save_dir / "telemetry"),
             "--title-suffix",
             suffix,
         ],
