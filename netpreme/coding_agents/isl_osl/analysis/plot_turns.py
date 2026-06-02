@@ -72,32 +72,17 @@ def main() -> int:
     args = ap.parse_args()
 
     counts = turns_per_problem(load_data(args.save_dir))
-    # Share x-axis range across all panels so they're visually comparable.
     # Clip the very long tail (some hard problems have >500 turns) at p99
     # so the bulk of the distribution is readable.
     x_max = int(np.percentile(counts["all"], 99) * 1.1) if len(counts["all"]) else 50
     x_max = max(x_max, 50)
 
-    panels = [("all", "all problems"), *((b, b) for b in VERIFIED_BUCKETS)]
-    fig, axes = plt.subplots(
-        1, len(panels), figsize=(5 * len(panels), 4.5), constrained_layout=True
-    )
+    fig, ax = plt.subplots(figsize=(6, 4.5), constrained_layout=True)
     suffix = f" — {args.title_suffix}" if args.title_suffix else ""
     fig.suptitle(f"Turns per problem{suffix}", fontsize=13)
 
-    bucket_maxes = []
-    for ax, (key, title) in zip(axes, panels):
-        bar_max = hist_panel(ax, counts[key], title, BUCKET_COLOR[key], x_max)
-        if key != "all":
-            bucket_maxes.append(bar_max)
-    # Aggregate panel keeps its own y-axis (it has many more samples).
-    # Per-difficulty panels share the same y so bars are visually comparable.
-    if bucket_maxes:
-        ymax = max(bucket_maxes) * 1.05
-        for ax, (key, _) in zip(axes, panels):
-            if key != "all":
-                ax.set_ylim(0, ymax)
-    axes[0].set_ylabel("problems")
+    hist_panel(ax, counts["all"], "all problems", BUCKET_COLOR["all"], x_max)
+    ax.set_ylabel("problems")
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(args.out, dpi=130, bbox_inches="tight")

@@ -16,14 +16,20 @@ from pipeline import claude
 from pipeline.utils import git_repo as git
 
 
-def coding_agent(task: dict, sandbox_dir: Path, model: str, base_url: str) -> int:
+def coding_agent(
+    task: dict,
+    sandbox_dir: Path,
+    model: str,
+    base_url: str,
+    timeout_s: float = claude.DEFAULT_TIMEOUT_S,
+) -> int:
     """Clone the task's repo into `sandbox_dir` and drive claude-cli over it.
 
     Returns the exit code; subprocess failures (clone or claude) map to a
-    non-zero code."""
+    non-zero code. `timeout_s` bounds the claude session (see claude.solve)."""
     try:
         repo = git.clone(task, sandbox_dir)
-        return claude.solve(task, repo, model=model, url=base_url)
+        return claude.solve(task, repo, model=model, url=base_url, timeout_s=timeout_s)
     except subprocess.SubprocessError as exc:
         logger.error("{}: clone/solve failed: {!r}", task["instance_id"], exc)
         return 1

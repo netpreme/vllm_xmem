@@ -2,10 +2,13 @@
 
 Two stacked-bar subplots sharing the x-axis (turn index within the problem):
 
-  TOP — KV cache (GB)
-    prefill (cached) = isl_cached × per_token_kv_bytes  ← inherited from prev turns
-    recompute        = isl_new    × per_token_kv_bytes  ← fresh prefill this turn
-    decode           = osl        × per_token_kv_bytes  ← generated this turn
+  TOP — per-turn sequence length (tokens), dual y-axis
+    ISL cached = isl_cached  ← inherited from prev turns (blue)
+    ISL new    = isl_new     ← fresh prefill this turn   (red)
+    OSL        = osl         ← generated this turn        (green)
+    Right axis re-scales the same bars to KV cache (GB) = tokens ×
+    per_token_kv_bytes, so the two are one panel rather than two
+    identical-shaped ones.
 
   BOTTOM — time (ms)
     cached lookup    = γ × isl_cached     (γ ≈ 5.97 ms / 1k cached tokens, from TTFT fit)
@@ -48,12 +51,6 @@ GAMMA_CACHE_MS_PER_TOK = 5.97 / 1000
 COLOR_CACHED = "#3b82f6"
 COLOR_RECOMPUTE = "#ef4444"
 COLOR_DECODE = "#22c55e"
-
-KV_COMPONENTS = [
-    ("prefill (cached)", "isl_cached", COLOR_CACHED),  # derived, see render()
-    ("recompute", "isl_new", COLOR_RECOMPUTE),
-    ("decode", "osl", COLOR_DECODE),
-]
 
 
 def _apply_sub_agent_hatch(bars, is_sub: np.ndarray) -> None:
@@ -156,17 +153,15 @@ def render(t: np.ndarray, iid: str, out: Path, title_suffix: str) -> None:
     is_sub = agent(problem) == "sub"
     n_sub = int(is_sub.sum())
 
-    # ---- KV (GB) components ------------------------------------------------
-    # `isl_cached` is derived; everything else is a raw column.
+    # ---- token-count components -------------------------------------------
+    # `isl_cached` is derived; everything else is a raw column. KV (GB) is the
+    # same series times a constant, so we plot tokens once and hang a second
+    # y-axis (GB) off it rather than drawing an identical-shaped second panel.
     cached_tokens = isl_cached(problem)
     token_series = {
         "isl_cached": cached_tokens,
         "isl_new": problem["isl_new"],
         "osl": problem["osl"],
-    }
-    kv_series = {
-        name: token_series[col].astype(float) * KV_BYTES_PER_TOKEN / 1024**3
-        for name, col, _ in KV_COMPONENTS
     }
 
     # ---- Time (ms) components ---------------------------------------------
@@ -181,7 +176,16 @@ def render(t: np.ndarray, iid: str, out: Path, title_suffix: str) -> None:
         ("decode", dec, COLOR_DECODE),
     ]
 
-    fig, (ax_kv, ax_t) = plt.subplots(
+    # ---- Token (count) components -----------------------------------------
+    # Same three-way split as the KV panel, but in raw tokens (no GB scaling):
+    # how much of each turn was cached input, freshly-prefilled input, decode.
+    token_stack = [
+        ("ISL cached", token_series["isl_cached"].astype(float), COLOR_CACHED),
+        ("ISL new", token_series["isl_new"].astype(float), COLOR_RECOMPUTE),
+        ("OSL", token_series["osl"].astype(float), COLOR_DECODE),
+    ]
+
+    fig, (ax_tok, ax_t) = plt.subplots(
         2, 1, figsize=(13, 9.5), sharex=True, constrained_layout=True
     )
     suffix = f" — {title_suffix}" if title_suffix else ""
@@ -193,47 +197,56 @@ def render(t: np.ndarray, iid: str, out: Path, title_suffix: str) -> None:
     subtitle = f"{iid}  ({difficulty}, {turns_desc}){suffix}"
     fig.suptitle(subtitle, fontsize=11)
 
-    # ---- top panel: KV cache (GB) -----------------------------------------
-    # Stacked bars first, then a single pass that hatches the sub-agent
-    # bars in-place. Keeping the hatching as a post-processing step keeps
-    # the main bar-drawing loop readable.
-    bottom = np.zeros(len(turns))
-    for name, col, color in KV_COMPONENTS:
-        vals = kv_series[name]
-        bars = ax_kv.bar(
+    # ---- top panel: token counts (ISL cached / ISL new / OSL) -------------
+    # Per-turn sequence length, stacked. Bars are drawn once in tokens; a twin
+    # y-axis on the right re-expresses the same heights as KV cache (GB), since
+    # GB is just tokens × KV_BYTES_PER_TOKEN — same shape, no second panel.
+    bottom_tok = np.zeros(len(turns))
+    for name, vals, color in token_stack:
+        bars = ax_tok.bar(
             turns,
             vals,
             width=1.0,
-            bottom=bottom,
+            bottom=bottom_tok,
             color=color,
             edgecolor="white",
             linewidth=0.3,
             label=name,
         )
         _apply_sub_agent_hatch(bars, is_sub)
-        bottom += vals
-    for x, total in zip(turns, bottom):
+        bottom_tok += vals
+    for x, total in zip(turns, bottom_tok):
         if x % 5 == 0:
-            ax_kv.text(
+            ax_tok.text(
                 x,
                 total * 1.015,
-                f"{total:.1f}",
+                f"{int(total / 1000)}k" if total >= 1000 else f"{int(total)}",
                 ha="center",
                 va="bottom",
                 fontsize=7,
                 color="#374151",
             )
-    ax_kv.set_ylabel("KV cache (GB)")
-    ax_kv.set_ylim(0, bottom.max() * 1.10 if len(bottom) else 1)
-    ax_kv.yaxis.set_major_formatter(FuncFormatter(lambda v, _: f"{v:.1f}"))
-    ax_kv.grid(True, axis="y", ls="--", alpha=0.3)
-    ax_kv.legend(
-        handles=_legend_handles(KV_COMPONENTS, n_sub),
+    ax_tok.set_ylabel("tokens (sequence length)")
+    top_tok = bottom_tok.max() * 1.10 if len(bottom_tok) else 1
+    ax_tok.set_ylim(0, top_tok)
+    ax_tok.yaxis.set_major_formatter(
+        FuncFormatter(lambda v, _: f"{v / 1000:.0f}k" if v >= 1000 else f"{v:.0f}")
+    )
+    ax_tok.grid(True, axis="y", ls="--", alpha=0.3)
+    ax_tok.legend(
+        handles=_legend_handles(token_stack, n_sub),
         loc="upper left",
         fontsize=10,
         framealpha=0.95,
-        title="KV component / agent",
+        title="token / KV component / agent",
     )
+
+    # Right y-axis: the same bars re-scaled to KV cache (GB).
+    kv_gb_per_token = KV_BYTES_PER_TOKEN / 1024**3
+    ax_gb = ax_tok.twinx()
+    ax_gb.set_ylim(0, top_tok * kv_gb_per_token)
+    ax_gb.set_ylabel("KV cache (GB)")
+    ax_gb.yaxis.set_major_formatter(FuncFormatter(lambda v, _: f"{v:.1f}"))
 
     # ---- bottom panel: per-turn wall-clock time (ms) ----------------------
     bottom_t = np.zeros(len(turns))

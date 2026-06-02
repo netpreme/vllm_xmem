@@ -42,6 +42,7 @@ from tqdm import tqdm
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from analysis.report import run as run_report
+from pipeline import claude
 from pipeline.agent import coding_agent
 from pipeline.datasets import Sandbox, get_dataset
 from pipeline.proxy import Proxy
@@ -85,6 +86,15 @@ def main() -> int:
     parser.add_argument("--max-model-len", type=int, default=None)
     parser.add_argument("--gpu-memory-utilization", type=float, default=None)
     parser.add_argument("--tool-call", dest="tool_call_parser", default=None)
+    parser.add_argument(
+        "--agent-timeout",
+        dest="agent_timeout_s",
+        type=float,
+        default=claude.DEFAULT_TIMEOUT_S,
+        help="wall-clock cap (seconds) per claude session; on timeout the "
+        "process tree is killed and the problem recorded as unsolved "
+        f"(default: {claude.DEFAULT_TIMEOUT_S})",
+    )
     args = parser.parse_args()
 
     stamp = (
@@ -141,6 +151,7 @@ def main() -> int:
                 sandbox_dir=sandbox.dir,
                 model=server.model,
                 base_url=proxy.base_url,
+                timeout_s=args.agent_timeout_s,
             )
         write_meta(
             save_dir=save_dir,

@@ -22,12 +22,10 @@ HERE = Path(__file__).resolve().parent
 
 # (plot script, output filename) — each is its own CLI script.
 _PLOTS = [
-    ("plot_itl_vs_isl.py", "analysis_itl_vs_isl.png"),
-    ("plot_ttft_prefill.py", "analysis_ttft_prefill.png"),
     ("plot_dist_agg.py", "analysis_dist_agg.png"),
-    ("plot_dist_grid.py", "analysis_dist_grid.png"),
     ("plot_turns.py", "analysis_turns.png"),
     ("plot_cache_hit.py", "analysis_cache.png"),
+    ("plot_latency_model.py", "analysis_latency_model.png"),
 ]
 
 
@@ -47,23 +45,6 @@ def run(save_dir: Path) -> None:
     # 2. Figures.
     for script, fname in _PLOTS:
         _plot(script, save_dir, ["--out", str(out / fname), "--title-suffix", suffix])
-
-    # plot_kv_cache.py also emits per-sample figures into analysis/samples/ and
-    # one per-problem figure into each telemetry/<iid>/kv_cache.png.
-    _plot(
-        "plot_kv_cache.py",
-        save_dir,
-        [
-            "--out",
-            str(out / "analysis_kv_cache.png"),
-            "--samples-dir",
-            str(out / "samples"),
-            "--telemetry-dir",
-            str(save_dir / "telemetry"),
-            "--title-suffix",
-            suffix,
-        ],
-    )
 
 
 def main() -> int:
