@@ -62,9 +62,6 @@ class ProxyApp:
         self._raw = raw
         self._raw_writer = JsonlWriter(out_dir, "raw.jsonl") if raw else None
         self._prev_units: list[str] = []
-        # Previous turn's prompt token ids, for the cross-turn id diff that
-        # yields isl_new_ids (the token-level analogue of isl_new_text).
-        self._prev_ids: list[int] = []
 
     def build(self) -> Starlette:
         return Starlette(
@@ -192,22 +189,15 @@ class ProxyApp:
                          prefix stripped off; == isl_text on the first turn),
           osl_text     — the generated assistant text (incl. tool calls),
           isl_ids      — exact full prompt token ids for this turn (input_ids),
-          isl_new_ids  — exact prompt token ids appended since the previous turn
-                         (cross-turn id diff; == isl_ids on turn 1),
           osl_ids      — exact generated output token ids.
         The *_ids fields are present only when vLLM returned them (the trailing
-        `vllm_token_ids` event); they are the precise token-level analogue of
-        isl_text / isl_new_text / osl_text, not a re-tokenization of the text.
+        `vllm_token_ids` event); they are exact, not a re-tokenization. There is
+        no isl_new_ids: it is just the tail of isl_ids, derived at analysis time
+        as isl_ids[-isl_new:] using the isl_new count from vllm.jsonl.
         """
         units = request_units(body)
         k = common_prefix_len(self._prev_units, units)
         self._prev_units = units
-
-        # Token-level new suffix: diff this turn's prompt ids against the prev
-        # turn's (append-only conversation → shared prefix), mirroring isl_new.
-        cur_ids = parsed_resp.prompt_token_ids
-        ki = common_prefix_len(self._prev_ids, cur_ids)
-        self._prev_ids = cur_ids
 
         assert self._raw_writer is not None
         self._raw_writer.write(
@@ -217,8 +207,7 @@ class ProxyApp:
                 "isl_text": "\n".join(units),
                 "isl_new_text": "\n".join(units[k:]),
                 "osl_text": parsed_resp.response_text,
-                "isl_ids": cur_ids,
-                "isl_new_ids": cur_ids[ki:],
+                "isl_ids": parsed_resp.prompt_token_ids,
                 "osl_ids": parsed_resp.output_token_ids,
             },
         )
