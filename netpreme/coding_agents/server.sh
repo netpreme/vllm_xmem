@@ -35,7 +35,13 @@ esac
 
 echo "[server] model=$MODEL_NAME tp=$TENSOR_PARALLEL_SIZE max_model_len=$MAX_MODEL_LEN port=$PORT"
 
-VLLM_BIN=/root/vllm_xmem/.venv/bin/vllm
+# Use the `vllm` console script from the SAME env that launched the run: the
+# Server exports VLLM_PYTHON=sys.executable, and the vllm entrypoint sits next
+# to that interpreter (e.g. <env>/bin/vllm). This never hardcodes a venv path
+# and always matches the env the user is actually in — which carries our
+# editable vLLM patches (e.g. return_token_ids). Fall back to PATH if absent.
+VLLM_BIN=""
+[[ -n "${VLLM_PYTHON:-}" ]] && VLLM_BIN="$(dirname "$VLLM_PYTHON")/vllm"
 [[ -x "$VLLM_BIN" ]] || VLLM_BIN=vllm
 
 exec "$VLLM_BIN" serve "$MODEL_NAME" \

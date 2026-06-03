@@ -36,12 +36,14 @@ class Proxy:
         url: str,
         proxy_port: int = 8001,
         capture: bool = False,
+        raw: bool = False,
     ) -> None:
         self.save_dir = save_dir
         self.instance_id = instance_id
         self.url = url
         self.proxy_port = proxy_port
         self.capture = capture
+        self.raw = raw
         self.out_dir = save_dir / "telemetry"
         self.out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -54,10 +56,13 @@ class Proxy:
             return self  # no proxy; claude talks to vLLM directly
 
         # Truncate any prior file for this id (retry-on-resume safety).
-        (instance_dir(self.out_dir, self.instance_id) / "proxy.jsonl").unlink(
-            missing_ok=True
-        )
-        app = ProxyApp(self.url, self.out_dir, self.instance_id).build()
+        idir = instance_dir(self.out_dir, self.instance_id)
+        (idir / "proxy.jsonl").unlink(missing_ok=True)
+        if self.raw:
+            (idir / "raw.jsonl").unlink(missing_ok=True)
+        app = ProxyApp(
+            self.url, self.out_dir, self.instance_id, raw=self.raw
+        ).build()
         self._server = uvicorn.Server(
             uvicorn.Config(
                 app,

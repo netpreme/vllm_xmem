@@ -187,7 +187,7 @@ DTYPE = np.dtype(
         ("queue_ms", "f4"),
         ("e2e_ms", "f4"),
         ("itl_ms", "f4"),  # NaN when osl=0
-        ("kv_cache_usage_pct", "f4"),
+        ("kv_cache_usage_pct_peak", "f4"),  # peak gauge mid-turn — real occupancy
         ("prefix_cache_hits", "i4"),  # tokens served from local HBM cache
         ("external_prefix_cache_hits", "i4"),  # tokens served from offload tier
         ("stop_reason", "U16"),
@@ -221,7 +221,24 @@ def build_records(save_dir: Path) -> np.ndarray:
         vllm_rows = _load_jsonl(problem_dir / "vllm.jsonl")
         proxy_rows = _load_jsonl(problem_dir / "proxy.jsonl")
 
-        # At concurrency=1 the two streams should align row-for-row. If
+        # Drop Claude Code's session-title requests. claude-cli fires a
+        # one-shot "generate a title" request (no tools, fired concurrently
+        # with the first real turn) to label the session in its sidebar; it
+        # has nothing to do with solving the problem. vLLM intercepts it
+        # before the engine (vllm/entrypoints/anthropic/serving.py), so it
+        # never lands in vllm.jsonl — but the proxy tees it, leaving 2 extra
+        # leading rows in proxy.jsonl that would shift the positional
+        # vllm<->proxy join. Toolless (num_tool_defs == 0) identifies them
+        # uniquely: every real agent turn carries the full tool set. (Guard
+        # for older proxy.jsonl that never captured the field — keep those
+        # rows rather than drop everything.)
+        proxy_rows = [
+            r
+            for r in proxy_rows
+            if "num_tool_defs" not in r or _as_int(r["num_tool_defs"]) > 0
+        ]
+
+        # At concurrency=1 the two streams should now align row-for-row. If
         # they don't, truncate to the shorter and warn.
         num_turns = (
             min(len(vllm_rows), len(proxy_rows)) if proxy_rows else len(vllm_rows)
@@ -248,7 +265,7 @@ def build_records(save_dir: Path) -> np.ndarray:
                     _as_float(vllm.get("queue_ms")),
                     _as_float(vllm.get("e2e_ms")),
                     _as_float(vllm.get("itl_ms")),
-                    _as_float(vllm.get("kv_cache_usage_pct")),
+                    _as_float(vllm.get("kv_cache_usage_pct_peak")),
                     _as_int(vllm.get("prefix_cache_hits")),
                     _as_int(vllm.get("external_prefix_cache_hits")),
                     vllm.get("stop_reason") or "",

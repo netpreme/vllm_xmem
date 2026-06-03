@@ -29,6 +29,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import platform
 import sys
 import time
 from datetime import datetime
@@ -47,7 +48,7 @@ from pipeline.agent import coding_agent
 from pipeline.datasets import Sandbox, get_dataset
 from pipeline.proxy import Proxy
 from pipeline.utils.metadata import write_meta, write_run_config
-from pipeline.vllm_server import Server
+from pipeline.vllm_server import Server, vllm_version
 from pipeline.vllm_metrics import MetricsScraper
 
 HERE = Path(__file__).resolve().parent
@@ -63,13 +64,24 @@ DATASET = "princeton-nlp/SWE-bench_Verified"
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--random", type=int, default=0)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument(
         "--capture",
-        action="store_true",
-        help="run the proxy to capture per-turn "
-        "agentic metadata (system_prompt_chars, tool calls, stop reason)",
+        nargs="?",
+        const="raw",
+        default=None,
+        choices=["raw"],
+        help="run the proxy and capture per-turn data: agentic metadata "
+        "(system_prompt_chars, tool calls, stop reason) → proxy.jsonl, AND the "
+        "raw text + exact token-id traces (isl/isl_new/osl) → raw.jsonl. "
+        "Omit the flag to skip the proxy entirely. `--capture` and "
+        "`--capture raw` are equivalent.",
+    )
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="run at most N (pending) problems this invocation (e.g. --limit 1)",
     )
     parser.add_argument(
         "--resume",
@@ -111,12 +123,9 @@ def main() -> int:
         if meta.get("exit_code") == 0:
             solved_ids.add(meta["instance_id"])
 
-    dataset = get_dataset(
-        name=DATASET,
-        random=args.random,
-        seed=args.seed,
-        solved_ids=solved_ids,
-    )
+    dataset = get_dataset(name=DATASET, solved_ids=solved_ids)
+    if args.limit is not None:
+        dataset = dataset[: args.limit]
     logger.info("{} problems pending → {}", len(dataset), save_dir)
 
     sandbox_root = Path(f"/tmp/swe_sandboxes/{save_dir.name}")
@@ -140,7 +149,8 @@ def main() -> int:
                 instance_id=instance_id,
                 url=VLLM_URL,
                 proxy_port=PROXY_PORT,
-                capture=args.capture,
+                capture=args.capture is not None,
+                raw=args.capture is not None,  # capture always implies raw now
             ) as proxy,
             Sandbox(root=sandbox_root, prefix=f"{instance_id}.") as sandbox,
         ):
@@ -181,6 +191,16 @@ def main() -> int:
                 "vllm_url": VLLM_URL,
                 "dataset": DATASET,
                 "capture": args.capture,
+                # Versions of THIS invocation (run_meta is rewritten every run,
+                # unlike run_config.json which is only written on a fresh run).
+                # This is where the claude-cli version we strip from the prompt
+                # billing header is preserved.
+                "versions": {
+                    "claude": claude.claude_version(),
+                    "vllm": vllm_version(),
+                    "python": platform.python_version(),
+                    "platform": platform.platform(),
+                },
                 "started_at": round(started_at, 3),
                 "ended_at": round(time.time(), 3),
             },

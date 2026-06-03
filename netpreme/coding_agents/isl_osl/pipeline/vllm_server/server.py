@@ -22,6 +22,7 @@ from __future__ import annotations
 import os
 import socket
 import subprocess
+import sys
 import time
 from pathlib import Path
 from urllib.parse import urlparse
@@ -134,6 +135,11 @@ class Server:
             if val is not None:
                 env[var] = str(val)
         env["PORT"] = str(self.port)
+        # Launch vLLM with the SAME interpreter that's running this process —
+        # i.e. whatever env the user invoked main.py with — so server.sh never
+        # hardcodes a venv path. (Our anthropic-serving patches live in that
+        # env's editable vLLM.)
+        env["VLLM_PYTHON"] = sys.executable
 
         # Not passed AND not set in the environment → server.sh falls back
         # to its .env/defaults; worth a one-time heads-up.

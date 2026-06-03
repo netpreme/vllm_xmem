@@ -7,6 +7,7 @@ the analysis layer. This just extracts RAW per-turn fields.
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
 
 # ---------------------------------------------------------------------------
@@ -77,6 +78,53 @@ class ParsedResponse:
     has_thinking: bool = False
     response_text_chars: int = 0
     claude_stop_reason: str = ""
+    response_text: str = ""  # the raw generated assistant text (osl as text)
+    # Exact token ids from the trailing `vllm_token_ids` event (present only
+    # when the request was sent with return_token_ids=True). Empty otherwise.
+    prompt_token_ids: list[int] = field(default_factory=list)
+    output_token_ids: list[int] = field(default_factory=list)
+
+
+# claude-cli prepends a per-request billing header to the system prompt, e.g.
+# `x-anthropic-billing-header: cc_version=…; cc_entrypoint=sdk-cli; cch=04bbe;`.
+# The `cch` nonce (and cc_version) change every turn; left in, they make the
+# whole system block — and thus every later unit — look "new", defeating the
+# cross-turn diff. vLLM's own prefix cache still hits ~98% despite it, so it's
+# pure noise for our purposes. Strip the preamble through the `cch=…;` token.
+_BILLING_RE = re.compile(r"^x-anthropic-billing-header:.*?cch=[^;]*;", re.S)
+
+
+def _strip_volatile_system(text: str) -> str:
+    return _BILLING_RE.sub("", text, count=1)
+
+
+def request_units(body: dict) -> list[str]:
+    """Ordered serialized 'units' of the request input, for prefix-diffing
+    across turns. The conversation is append-only, so turn N's units share a
+    common prefix with turn N-1's; the new suffix is ``isl_new`` as raw text.
+
+    Units: the (static) system text, then the (static) tools blob, then one
+    per message — so on later turns only freshly-appended messages differ."""
+    units: list[str] = []
+    system = _strip_volatile_system(_system_prompt_text(body))
+    if system:
+        units.append("SYSTEM:" + system)
+    tools = body.get("tools") or []
+    if tools:
+        units.append("TOOLS:" + json.dumps(tools))
+    for message in body.get("messages") or []:
+        units.append("MSG:" + json.dumps(message))
+    return units
+
+
+def common_prefix_len(a: list[str], b: list[str]) -> int:
+    """Length of the shared leading run of two unit lists."""
+    n = 0
+    for x, y in zip(a, b):
+        if x != y:
+            break
+        n += 1
+    return n
 
 
 def parse_sse_response(body: bytes) -> ParsedResponse:
@@ -94,20 +142,39 @@ def parse_sse_response(body: bytes) -> ParsedResponse:
             event = json.loads(data)
         except json.JSONDecodeError:
             continue
+        # vLLM's non-standard trailing event (no "type") carrying exact ids.
+        if "prompt_token_ids" in event or "output_token_ids" in event:
+            parsed.prompt_token_ids = event.get("prompt_token_ids") or []
+            parsed.output_token_ids = event.get("output_token_ids") or []
+            continue
         event_type = event.get("type")
         if event_type == "content_block_start":
             block = event.get("content_block") or {}
             block_type = block.get("type")
             if block_type == "tool_use":
                 parsed.num_tool_calls += 1
-                if block.get("name"):
-                    parsed.tool_names.append(block["name"])
+                name = block.get("name") or ""
+                if name:
+                    parsed.tool_names.append(name)
+                # osl text: tool calls ARE output tokens, so include them.
+                parsed.response_text += f"\n[tool_use:{name}] "
             elif block_type == "thinking":
                 parsed.has_thinking = True
         elif event_type == "content_block_delta":
             delta = event.get("delta") or {}
-            if delta.get("type") == "text_delta":
-                parsed.response_text_chars += len(delta.get("text") or "")
+            delta_type = delta.get("type")
+            # response_text (osl as text) accumulates every generated token:
+            # visible text, streamed tool-call args, and reasoning. Only
+            # text_delta counts toward response_text_chars (the metadata's
+            # visible-text length stays as-is).
+            if delta_type == "text_delta":
+                chunk = delta.get("text") or ""
+                parsed.response_text_chars += len(chunk)
+                parsed.response_text += chunk
+            elif delta_type == "input_json_delta":
+                parsed.response_text += delta.get("partial_json") or ""
+            elif delta_type == "thinking_delta":
+                parsed.response_text += delta.get("thinking") or ""
         elif event_type == "message_delta":
             stop_reason = (event.get("delta") or {}).get("stop_reason")
             if stop_reason:

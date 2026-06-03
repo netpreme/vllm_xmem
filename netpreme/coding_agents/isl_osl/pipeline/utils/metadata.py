@@ -46,8 +46,6 @@ def write_run_config(
         "dotenv": _read_env_file(),
         "dataset": {
             "name": dataset_name,
-            "random": args.random,
-            "seed": args.seed,
             "pending": len(dataset),
             "skipped_solved": len(solved_ids),
             "instance_ids": [task["instance_id"] for task in dataset],

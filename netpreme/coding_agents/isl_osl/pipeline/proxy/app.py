@@ -19,8 +19,10 @@ from loguru import logger
 from pipeline.utils.jsonl import JsonlWriter
 from pipeline.proxy.parse import (
     ParsedRequest,
+    common_prefix_len,
     parse_request,
     parse_sse_response,
+    request_units,
     rerole_system_messages,
 )
 from starlette.applications import Starlette
@@ -48,10 +50,21 @@ _HOP_BY_HOP_HEADERS: frozenset[str] = frozenset(
 class ProxyApp:
     """Reverse-proxy ASGI app for one problem (claude-cli ↔ vLLM)."""
 
-    def __init__(self, upstream: str, out_dir: Path, instance_id: str) -> None:
+    def __init__(
+        self, upstream: str, out_dir: Path, instance_id: str, *, raw: bool = False
+    ) -> None:
         self.upstream = upstream.rstrip("/")
         self.instance_id = instance_id
         self._writer = JsonlWriter(out_dir, "proxy.jsonl")
+        # With raw capture: also tee the raw text traces (isl_new + osl) to
+        # raw.jsonl. `_prev_units` is the previous turn's request units, so each
+        # turn's new suffix (isl_new as text) is a pure cross-turn string diff.
+        self._raw = raw
+        self._raw_writer = JsonlWriter(out_dir, "raw.jsonl") if raw else None
+        self._prev_units: list[str] = []
+        # Previous turn's prompt token ids, for the cross-turn id diff that
+        # yields isl_new_ids (the token-level analogue of isl_new_text).
+        self._prev_ids: list[int] = []
 
     def build(self) -> Starlette:
         return Starlette(
@@ -95,11 +108,16 @@ class ProxyApp:
         that's invisible — claude still parses the SSE chunks the same way."""
         ts = time.time()
         forward_body = raw_body
+        body: dict | None = None
         try:
             body = json.loads(raw_body)
             # claude-cli injects role:"system" messages that vLLM 400s on; the
             # top-level `system` (cached prefix) is left untouched.
             rerole_system_messages(body)
+            # With raw capture, ask vLLM for exact token ids (returned in a
+            # trailing `vllm_token_ids` event we tee then strip below).
+            if self._raw:
+                body["return_token_ids"] = True
             forward_body = json.dumps(body).encode()
             parsed_req = parse_request(body)
         except (json.JSONDecodeError, ValueError) as exc:
@@ -120,6 +138,21 @@ class ProxyApp:
         )
 
         parsed_resp = parse_sse_response(upstream_resp.content)
+
+        # Skip Claude Code's session-title request — a one-shot, toolless
+        # "generate a title" call fired at session start to label the sidebar.
+        # vLLM short-circuits it before the engine (so it never appears in
+        # vllm.jsonl); teeing it here would leave a phantom leading row in
+        # proxy.jsonl/raw.jsonl that has nothing to do with solving the problem
+        # (and shifts the positional vllm<->proxy join). We still forward it so
+        # claude-cli gets its title — we just don't record it as a turn.
+        if body is not None and _is_title_request(body):
+            return Response(
+                content=upstream_resp.content,
+                status_code=upstream_resp.status_code,
+                headers=_strip_hop_by_hop(upstream_resp.headers.items()),
+            )
+
         self._writer.write(
             self.instance_id,
             {
@@ -137,10 +170,57 @@ class ProxyApp:
             },
         )
 
+        if self._raw_writer is not None and body is not None:
+            self._write_raw(ts, body, parsed_resp)
+
+        # Strip our non-standard token-ids event before returning, so claude-cli
+        # only ever sees a standard Anthropic stream.
+        content = upstream_resp.content
+        if self._raw:
+            content = _strip_token_ids_event(content)
+
         return Response(
-            content=upstream_resp.content,
+            content=content,
             status_code=upstream_resp.status_code,
             headers=_strip_hop_by_hop(upstream_resp.headers.items()),
+        )
+
+    def _write_raw(self, ts: float, body: dict, parsed_resp) -> None:
+        """Tee the raw text + token-id trace for this turn:
+          isl_text     — the full input (system + tools + messages),
+          isl_new_text — the input appended since the previous turn (cached
+                         prefix stripped off; == isl_text on the first turn),
+          osl_text     — the generated assistant text (incl. tool calls),
+          isl_ids      — exact full prompt token ids for this turn (input_ids),
+          isl_new_ids  — exact prompt token ids appended since the previous turn
+                         (cross-turn id diff; == isl_ids on turn 1),
+          osl_ids      — exact generated output token ids.
+        The *_ids fields are present only when vLLM returned them (the trailing
+        `vllm_token_ids` event); they are the precise token-level analogue of
+        isl_text / isl_new_text / osl_text, not a re-tokenization of the text.
+        """
+        units = request_units(body)
+        k = common_prefix_len(self._prev_units, units)
+        self._prev_units = units
+
+        # Token-level new suffix: diff this turn's prompt ids against the prev
+        # turn's (append-only conversation → shared prefix), mirroring isl_new.
+        cur_ids = parsed_resp.prompt_token_ids
+        ki = common_prefix_len(self._prev_ids, cur_ids)
+        self._prev_ids = cur_ids
+
+        assert self._raw_writer is not None
+        self._raw_writer.write(
+            self.instance_id,
+            {
+                "ts": round(ts, 3),
+                "isl_text": "\n".join(units),
+                "isl_new_text": "\n".join(units[k:]),
+                "osl_text": parsed_resp.response_text,
+                "isl_ids": cur_ids,
+                "isl_new_ids": cur_ids[ki:],
+                "osl_ids": parsed_resp.output_token_ids,
+            },
         )
 
     async def _passthrough(
@@ -160,6 +240,36 @@ class ProxyApp:
             headers=_strip_hop_by_hop(upstream_resp.headers.items()),
             background=BackgroundTask(upstream_resp.aclose),
         )
+
+
+def _strip_token_ids_event(content: bytes) -> bytes:
+    """Remove vLLM's non-standard `vllm_token_ids` SSE record from a buffered
+    response so claude-cli only sees a standard Anthropic stream. SSE records
+    are separated by blank lines; we drop the one carrying that event."""
+    if b"vllm_token_ids" not in content:
+        return content
+    text = content.decode("utf-8", errors="replace")
+    kept = [r for r in text.split("\n\n") if "event: vllm_token_ids" not in r]
+    return "\n\n".join(kept).encode()
+
+
+def _is_title_request(body: dict) -> bool:
+    """True for Claude Code's session-title request.
+
+    Mirrors the signal vLLM's anthropic entrypoint uses to short-circuit it
+    (vllm/entrypoints/anthropic/serving.py): a "generate a … sentence-case
+    title" instruction in the top-level system prompt. `system` may be a
+    string or a list of `{type, text}` blocks.
+    """
+    system = body.get("system")
+    if isinstance(system, str):
+        return "sentence-case title" in system
+    if isinstance(system, list):
+        return any(
+            isinstance(b, dict) and "sentence-case title" in (b.get("text") or "")
+            for b in system
+        )
+    return False
 
 
 def _strip_hop_by_hop(headers: Iterable[tuple[str, str]]) -> dict[str, str]:

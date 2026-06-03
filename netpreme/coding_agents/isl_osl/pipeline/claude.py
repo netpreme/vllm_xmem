@@ -15,12 +15,15 @@ import psutil
 from loguru import logger
 
 # Wall-clock ceiling for one claude session. The per-Bash-command caps
-# (BASH_*_TIMEOUT_MS below) only bound individual tool calls; they can't catch
-# a hang *outside* a Bash call — e.g. claude finishing its turn but never
-# exiting, which wedges the whole benchmark on `proc.wait()`. This is the
-# backstop for that. Observed problems finish in 1-3 min, so 30 min is
-# generous headroom while still bounding any single problem.
-DEFAULT_TIMEOUT_S = 1800
+# (BASH_*_TIMEOUT_MS below) only bound individual tool calls, and only
+# *foreground* ones — they do NOT cover `run_in_background` Bash (which
+# setsids into its own group). So a backgrounded whole-suite test run
+# (e.g. gpt-oss issuing `pytest -q sympy`) runs unbounded and wedges the
+# benchmark on `proc.wait()`; this session backstop is the only thing that
+# catches it. Observed solved problems finish in 1-3 min, so 10 min is
+# ample headroom while failing a wedged problem 3x faster than the old
+# 30 min (which wasted ~30 min/hang, repeatedly, on sympy + gpt-oss).
+DEFAULT_TIMEOUT_S = 600
 
 # Exit code returned when the session is killed for exceeding DEFAULT_TIMEOUT_S
 # (matches coreutils `timeout`). Non-zero, so the problem is recorded as

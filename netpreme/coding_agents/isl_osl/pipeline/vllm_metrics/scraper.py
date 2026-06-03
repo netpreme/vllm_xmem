@@ -114,6 +114,10 @@ class Poller:
             if previous is not None:
                 logger.info("baseline scrape: request_count={}", previous.request_count)
 
+            # Max kv_cache_usage gauge seen across this turn's in-flight polls.
+            # vLLM frees a request's KV the instant it finishes, so the gauge is
+            # ~0 at completion; the peak mid-request is the occupancy we report.
+            peak_kv_usage = 0.0
             while not stop_event.is_set():
                 await asyncio.sleep(self._poll_interval_s)
                 try:
@@ -121,14 +125,16 @@ class Poller:
                 except httpx.HTTPError as exc:
                     logger.warning("scrape error: {!r}", exc)
                     previous = None
+                    peak_kv_usage = 0.0
                     continue
                 if previous is None:
                     previous = current
                     continue
 
+                peak_kv_usage = max(peak_kv_usage, current.kv_usage_pct)
                 completed = current.request_count - previous.request_count
                 if completed >= 1:
-                    row = compute_turn_metrics(previous, current)
+                    row = compute_turn_metrics(previous, current, peak_kv_usage)
                     self._out.write(self._instance_id, row)
                     if completed > 1:
                         logger.warning(
@@ -142,3 +148,4 @@ class Poller:
                     # PREFILL, not completion; advancing every poll would leave
                     # those jumps outside the window and record them as 0.
                     previous = current
+                    peak_kv_usage = 0.0  # start the next turn's peak fresh

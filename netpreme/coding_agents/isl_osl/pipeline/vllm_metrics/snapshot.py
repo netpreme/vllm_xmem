@@ -72,9 +72,18 @@ class Snapshot:
         )
 
 
-def compute_turn_metrics(before: Snapshot, after: Snapshot) -> dict:
+def compute_turn_metrics(
+    before: Snapshot, after: Snapshot, peak_kv_usage: float = 0.0
+) -> dict:
     """Build one row of raw measurements from two consecutive snapshots
-    that bracket exactly one request completion (concurrency=1)."""
+    that bracket exactly one request completion (concurrency=1).
+
+    `peak_kv_usage` is the max of vLLM's instantaneous `kv_cache_usage_perc`
+    gauge (0..1) seen across all polls *during* the turn. The gauge measures
+    currently-allocated KV blocks, which vLLM frees the instant a request
+    finishes — so `after.kv_usage_pct` (sampled at completion) is ~0 and
+    useless. The peak, sampled mid-request, is the occupancy we actually want.
+    """
 
     def delta_ms(name: str) -> float:
         return (
@@ -96,7 +105,10 @@ def compute_turn_metrics(before: Snapshot, after: Snapshot) -> dict:
         "itl_ms": round(delta_ms("tpot"), 3) if osl > 0 else None,
         "e2e_ms": round(delta_ms("e2e"), 2),
         "stop_reason": _diff_finished_reason(before, after),
-        "kv_cache_usage_pct": round(after.kv_usage_pct * 100, 3),
+        # Peak KV-cache gauge across the turn's in-flight polls — the real
+        # occupancy. (The instantaneous gauge sampled at completion is useless
+        # here: vLLM frees the request's blocks on finish, so it reads ~0.)
+        "kv_cache_usage_pct_peak": round(peak_kv_usage * 100, 3),
         # Prefix-cache hit-token deltas for this turn (rates derived in
         # analysis, over `isl` as the denominator):
         #   local (HBM) hit rate     = prefix_cache_hits / isl

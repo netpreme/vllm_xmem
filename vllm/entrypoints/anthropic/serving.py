@@ -356,6 +356,9 @@ class AnthropicServingMessages(OpenAIServingChat):
             top_p=anthropic_request.top_p,
             top_k=anthropic_request.top_k,
             kv_transfer_params=anthropic_request.kv_transfer_params,
+            # Surface exact token ids in the OpenAI stream chunks so the
+            # converter can tee them as a trailing `vllm_token_ids` event.
+            return_token_ids=anthropic_request.return_token_ids,
         )
 
     @classmethod
@@ -574,6 +577,11 @@ class AnthropicServingMessages(OpenAIServingChat):
             state = _ActiveBlockState()
             # Map from tool call index to tool_use_id
             tool_index_to_id: dict[int, str] = {}
+            # Exact token-id capture (only populated when return_token_ids was
+            # set; the OpenAI chunks then carry prompt_token_ids on the first
+            # chunk and per-delta token_ids on each subsequent choice).
+            cap_prompt_ids: list[int] | None = None
+            cap_output_ids: list[int] = []
 
             def stop_active_block():
                 events: list[str] = []
@@ -620,6 +628,17 @@ class AnthropicServingMessages(OpenAIServingChat):
                 if item.startswith("data:"):
                     data_str = item[5:].strip().rstrip("\n")
                     if data_str == "[DONE]":
+                        # Tee exact token ids as a trailing, non-standard event
+                        # (before message_stop) so offline capture can read them;
+                        # standard Anthropic clients ignore unknown event types.
+                        if cap_prompt_ids is not None or cap_output_ids:
+                            ids_payload = json.dumps(
+                                {
+                                    "prompt_token_ids": cap_prompt_ids or [],
+                                    "output_token_ids": cap_output_ids,
+                                }
+                            )
+                            yield wrap_data_with_event(ids_payload, "vllm_token_ids")
                         stop_message = AnthropicStreamEvent(
                             type="message_stop",
                         )
@@ -631,6 +650,13 @@ class AnthropicServingMessages(OpenAIServingChat):
                         origin_chunk = ChatCompletionStreamResponse.model_validate_json(
                             data_str
                         )
+
+                        # Accumulate exact token ids when return_token_ids is on:
+                        # prompt ids arrive on the first chunk, output ids per delta.
+                        if cap_prompt_ids is None and origin_chunk.prompt_token_ids:
+                            cap_prompt_ids = list(origin_chunk.prompt_token_ids)
+                        if origin_chunk.choices and origin_chunk.choices[0].token_ids:
+                            cap_output_ids.extend(origin_chunk.choices[0].token_ids)
 
                         if first_item:
                             _u = origin_chunk.usage
