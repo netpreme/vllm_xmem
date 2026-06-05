@@ -167,8 +167,9 @@ def load_problem_field(save_dir: Path, field: str) -> dict[str, str]:
 
 DTYPE = np.dtype(
     [
-        # Identity / orchestration.
-        ("instance_id", "U64"),
+        # Identity / orchestration. U128: SWE-bench Pro ids run up to 120
+        # chars (instance_<owner>__<repo>-<40-hex>-vnan), past Verified's ~30.
+        ("instance_id", "U128"),
         ("difficulty", "U24"),
         ("turn", "i4"),
         ("ts", "f8"),

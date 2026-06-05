@@ -42,7 +42,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from analysis.report import run as run_report
 from pipeline import claude
 from pipeline.agent import coding_agent
-from pipeline.datasets import Sandbox, get_dataset
+from pipeline.datasets import DATASETS, Sandbox, get_dataset
 from pipeline.proxy import Proxy
 from pipeline.utils.metadata import write_meta, write_run_config
 from pipeline.vllm_server import Server, vllm_version
@@ -54,11 +54,16 @@ SERVER_PORT = int(os.environ.get("SERVER_PORT", "8000"))
 PROXY_PORT = int(os.environ.get("PROXY_PORT", "8001"))
 SERVER_URL = f"http://localhost:{SERVER_PORT}"
 WAIT_TIME = 0.3
-DEFAULT_DATASET = "princeton-nlp/SWE-bench_Verified"
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--dataset",
+        choices=sorted(DATASETS),
+        default="verified",
+        help="benchmark dataset to run (default: %(default)s)",
+    )
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument(
         "--capture",
@@ -116,7 +121,8 @@ def main() -> int:
         if meta.get("exit_code") == 0:
             solved_ids.add(meta["instance_id"])
 
-    dataset = get_dataset(name=DEFAULT_DATASET, solved_ids=solved_ids)
+    dataset_name = DATASETS[args.dataset]
+    dataset = get_dataset(name=dataset_name, solved_ids=solved_ids)
     if args.limit is not None:
         dataset = dataset[: args.limit]
     logger.info("{} problems pending → {}", len(dataset), save_dir)
@@ -169,7 +175,7 @@ def main() -> int:
                 args=args,
                 server=server,
                 dataset=dataset,
-                dataset_name=DATASET,
+                dataset_name=dataset_name,
                 solved_ids=solved_ids,
                 proxy_port=PROXY_PORT,
                 started_at=started_at,
@@ -179,8 +185,8 @@ def main() -> int:
         json.dumps(
             {
                 "model": model,
-                "SERVER_URL": SERVER_URL,
-                "dataset": DATASET,
+                "vllm_url": SERVER_URL,
+                "dataset": dataset_name,
                 "capture": args.capture,
                 "versions": {
                     "claude": claude.claude_version(),

@@ -29,7 +29,7 @@ DEFAULT_TIMEOUT_S = 7200
 # unsolved and a later --resume retries it.
 TIMEOUT_EXIT_CODE = 124
 
-PROMPT = """You are working on a real software-engineering bug from SWE-bench Verified. \
+PROMPT = """You are working on a real software-engineering bug from SWE-bench. \
 Solve it by editing files in this repository.
 
 Repository: {repo}
