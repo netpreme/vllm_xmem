@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Coding-agent benchmark runner — entry point.
 
 Orchestrates the per-problem loop; the actual work lives elsewhere. Each
@@ -21,7 +20,7 @@ The agent only solves; analysis is a single separate pass at the end
              Proxy(...) as proxy, Sandbox(...) as sandbox:
             exit_code = coding_agent(task, sandbox.dir, server.model, proxy.base_url)
         write_meta(...)
-    report.run(save_dir)                                 # once, at the end
+    report.run(save_dir)  # once, at the end
 """
 
 from __future__ import annotations
@@ -38,8 +37,6 @@ from pathlib import Path
 from loguru import logger
 from tqdm import tqdm
 
-# Make `from pipeline import ...` / `from analysis...` work when this script
-# is invoked directly.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from analysis.report import run as run_report
@@ -53,13 +50,11 @@ from pipeline.vllm_metrics import MetricsScraper
 
 HERE = Path(__file__).resolve().parent
 
-# Ports are env-overridable so multiple TP1 shards can run side by side
-# on the same host (one shard per GPU, distinct port pairs).
-VLLM_PORT = int(os.environ.get("VLLM_PORT", "8000"))
+SERVER_PORT = int(os.environ.get("SERVER_PORT", "8000"))
 PROXY_PORT = int(os.environ.get("PROXY_PORT", "8001"))
-VLLM_URL = f"http://localhost:{VLLM_PORT}"
+SERVER_URL = f"http://localhost:{SERVER_PORT}"
 WAIT_TIME = 0.3
-DATASET = "princeton-nlp/SWE-bench_Verified"
+DEFAULT_DATASET = "princeton-nlp/SWE-bench_Verified"
 
 
 def main() -> int:
@@ -88,7 +83,6 @@ def main() -> int:
         type=Path,
         help="reuse <SAVE_DIR>, skipping problems already solved in it",
     )
-    # vLLM launch knobs — each falls back to server.sh's .env/default if unset.
     parser.add_argument(
         "--model", default=None, help="model to serve (default: server.sh's .env)"
     )
@@ -115,15 +109,14 @@ def main() -> int:
     save_dir = HERE / "results" / stamp
     save_dir.mkdir(parents=True, exist_ok=True)
 
-    # Resume = skip problems already solved here, inferred from their
-    # meta.json (exit_code == 0). No separate ledger file needed.
+    # Resume skips problems already solved here (meta.json exit_code == 0).
     solved_ids = set()
     for meta_path in (save_dir / "telemetry").glob("*/meta.json"):
         meta = json.loads(meta_path.read_text())
         if meta.get("exit_code") == 0:
             solved_ids.add(meta["instance_id"])
 
-    dataset = get_dataset(name=DATASET, solved_ids=solved_ids)
+    dataset = get_dataset(name=DEFAULT_DATASET, solved_ids=solved_ids)
     if args.limit is not None:
         dataset = dataset[: args.limit]
     logger.info("{} problems pending → {}", len(dataset), save_dir)
@@ -133,21 +126,20 @@ def main() -> int:
     for task in tqdm(dataset, desc="solving", unit="problem"):
         instance_id = task["instance_id"]
         logger.info("{} ({} @ {})", instance_id, task["repo"], task["base_commit"][:5])
-        # Each component drives one thing: server, watcher, proxy, sandbox.
         with (
             Server(
-                url=VLLM_URL,
+                url=SERVER_URL,
                 model=args.model,
                 tensor_parallel_size=args.tensor_parallel_size,
                 max_model_len=args.max_model_len,
                 gpu_memory_utilization=args.gpu_memory_utilization,
                 tool_call_parser=args.tool_call_parser,
             ) as server,
-            MetricsScraper(url=VLLM_URL, save_dir=save_dir, instance_id=instance_id),
+            MetricsScraper(url=SERVER_URL, save_dir=save_dir, instance_id=instance_id),
             Proxy(
                 save_dir=save_dir,
                 instance_id=instance_id,
-                url=VLLM_URL,
+                url=SERVER_URL,
                 proxy_port=PROXY_PORT,
                 capture=args.capture is not None,
                 raw=args.capture is not None,  # capture always implies raw now
@@ -170,8 +162,7 @@ def main() -> int:
             ended_at=sandbox.ended,
             exit_code=exit_code,
         )
-        # Once, after the first server is up: snapshot the run inputs with the
-        # real server's resolved config (incl. the actually-served model).
+        # Snapshot run inputs once, with the first server's resolved config.
         if not (save_dir / "run_config.json").exists():
             write_run_config(
                 save_dir=save_dir,
@@ -188,13 +179,9 @@ def main() -> int:
         json.dumps(
             {
                 "model": model,
-                "vllm_url": VLLM_URL,
+                "SERVER_URL": SERVER_URL,
                 "dataset": DATASET,
                 "capture": args.capture,
-                # Versions of THIS invocation (run_meta is rewritten every run,
-                # unlike run_config.json which is only written on a fresh run).
-                # This is where the claude-cli version we strip from the prompt
-                # billing header is preserved.
                 "versions": {
                     "claude": claude.claude_version(),
                     "vllm": vllm_version(),

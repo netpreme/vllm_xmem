@@ -60,9 +60,7 @@ class Proxy:
         (idir / "proxy.jsonl").unlink(missing_ok=True)
         if self.raw:
             (idir / "raw.jsonl").unlink(missing_ok=True)
-        app = ProxyApp(
-            self.url, self.out_dir, self.instance_id, raw=self.raw
-        ).build()
+        app = ProxyApp(self.url, self.out_dir, self.instance_id, raw=self.raw).build()
         self._server = uvicorn.Server(
             uvicorn.Config(
                 app,

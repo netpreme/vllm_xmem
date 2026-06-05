@@ -20,10 +20,9 @@ from loguru import logger
 # setsids into its own group). So a backgrounded whole-suite test run
 # (e.g. gpt-oss issuing `pytest -q sympy`) runs unbounded and wedges the
 # benchmark on `proc.wait()`; this session backstop is the only thing that
-# catches it. Observed solved problems finish in 1-3 min, so 10 min is
-# ample headroom while failing a wedged problem 3x faster than the old
-# 30 min (which wasted ~30 min/hang, repeatedly, on sympy + gpt-oss).
-DEFAULT_TIMEOUT_S = 600
+# catches it. Set to 2h so genuinely slow problems get a real chance to
+# finish before we give up (a wedged one still eventually gets reaped).
+DEFAULT_TIMEOUT_S = 7200
 
 # Exit code returned when the session is killed for exceeding DEFAULT_TIMEOUT_S
 # (matches coreutils `timeout`). Non-zero, so the problem is recorded as
@@ -58,7 +57,11 @@ def claude_version() -> str:
 
 
 def solve(
-    problem: dict, repo_dir: Path, model: str, url: str, timeout_s: float = DEFAULT_TIMEOUT_S
+    problem: dict,
+    repo_dir: Path,
+    model: str,
+    url: str,
+    timeout_s: float = DEFAULT_TIMEOUT_S,
 ) -> int:
     """Run claude-cli on `problem` inside `repo_dir`. Returns the exit code.
 

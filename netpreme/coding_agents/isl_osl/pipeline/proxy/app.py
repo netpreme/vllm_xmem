@@ -91,8 +91,10 @@ class ProxyApp:
         raw_body = await request.body()
         client = request.app.state.client
         if request.method == "POST" and request.url.path == "/v1/messages":
-            return await self._messages(client, request, raw_body)
-        return await self._passthrough(client, request, raw_body)
+            return await self._messages(client=client, request=request, raw_body=raw_body)
+        return await self._passthrough(
+            client=client, request=request, raw_body=raw_body
+        )
 
     async def _messages(
         self, client: httpx.AsyncClient, request: Request, raw_body: bytes
@@ -136,13 +138,9 @@ class ProxyApp:
 
         parsed_resp = parse_sse_response(upstream_resp.content)
 
-        # Skip Claude Code's session-title request — a one-shot, toolless
-        # "generate a title" call fired at session start to label the sidebar.
-        # vLLM short-circuits it before the engine (so it never appears in
-        # vllm.jsonl); teeing it here would leave a phantom leading row in
-        # proxy.jsonl/raw.jsonl that has nothing to do with solving the problem
-        # (and shifts the positional vllm<->proxy join). We still forward it so
-        # claude-cli gets its title — we just don't record it as a turn.
+        # Skip Claude Code's session-title request: vLLM short-circuits it
+        # before the engine, so recording it would leave a phantom leading row
+        # that shifts the positional vllm<->proxy join. Still forwarded.
         if body is not None and _is_title_request(body):
             return Response(
                 content=upstream_resp.content,
@@ -151,8 +149,8 @@ class ProxyApp:
             )
 
         self._writer.write(
-            self.instance_id,
-            {
+            instance_id=self.instance_id,
+            row={
                 "ts": round(ts, 3),
                 "system_prompt_chars": parsed_req.system_prompt_chars,
                 "tools_chars": parsed_req.tools_chars,
@@ -168,7 +166,7 @@ class ProxyApp:
         )
 
         if self._raw_writer is not None and body is not None:
-            self._write_raw(ts, body, parsed_resp)
+            self._write_raw(ts=ts, body=body, parsed_resp=parsed_resp)
 
         # Strip our non-standard token-ids event before returning, so claude-cli
         # only ever sees a standard Anthropic stream.
@@ -196,13 +194,13 @@ class ProxyApp:
         as isl_ids[-isl_new:] using the isl_new count from vllm.jsonl.
         """
         units = request_units(body)
-        k = common_prefix_len(self._prev_units, units)
+        k = common_prefix_len(a=self._prev_units, b=units)
         self._prev_units = units
 
         assert self._raw_writer is not None
         self._raw_writer.write(
-            self.instance_id,
-            {
+            instance_id=self.instance_id,
+            row={
                 "ts": round(ts, 3),
                 "isl_text": "\n".join(units),
                 "isl_new_text": "\n".join(units[k:]),

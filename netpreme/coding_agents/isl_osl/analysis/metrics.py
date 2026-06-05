@@ -41,9 +41,7 @@ def load_data(save_dir: Path) -> np.ndarray:
     return np.load(save_dir / "data.npz")["turns"]
 
 
-# ---------------------------------------------------------------------------
 # Derivation helpers — compute on-the-fly from raw fields.
-# ---------------------------------------------------------------------------
 
 
 def isl_cached(t: np.ndarray) -> np.ndarray:
@@ -136,9 +134,7 @@ def agent(
     return np.where(t["system_prompt_chars"] < threshold, "sub", "main")
 
 
-# ---------------------------------------------------------------------------
 # Raw-file loaders (for code that wants the per-turn dicts).
-# ---------------------------------------------------------------------------
 
 
 def load_per_problem_rows(save_dir: Path) -> dict[str, list[dict]]:
@@ -167,9 +163,7 @@ def load_problem_field(save_dir: Path, field: str) -> dict[str, str]:
     return out
 
 
-# ---------------------------------------------------------------------------
 # Build — join the raw per-problem capture streams into data.npz.
-# ---------------------------------------------------------------------------
 
 DTYPE = np.dtype(
     [

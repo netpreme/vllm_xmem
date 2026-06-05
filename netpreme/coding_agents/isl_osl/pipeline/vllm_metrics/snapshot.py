@@ -44,29 +44,43 @@ class Snapshot:
     @classmethod
     def from_metrics(cls, metrics: dict[str, float]) -> "Snapshot":
         timings = {
-            "prefill": extract_metric(metrics, PREFILL_SUM),
-            "decode": extract_metric(metrics, DECODE_SUM),
-            "queue": extract_metric(metrics, QUEUE_SUM),
-            "tpot": extract_metric(metrics, TPOT_SUM),
-            "e2e": extract_metric(metrics, E2E_SUM),
+            "prefill": extract_metric(metrics=metrics, name_prefix=PREFILL_SUM),
+            "decode": extract_metric(metrics=metrics, name_prefix=DECODE_SUM),
+            "queue": extract_metric(metrics=metrics, name_prefix=QUEUE_SUM),
+            "tpot": extract_metric(metrics=metrics, name_prefix=TPOT_SUM),
+            "e2e": extract_metric(metrics=metrics, name_prefix=E2E_SUM),
         }
         finished = {
             reason: int(
-                extract_metric(metrics, FINISH_REASON, f'finished_reason="{reason}"')
+                extract_metric(
+                    metrics=metrics,
+                    name_prefix=FINISH_REASON,
+                    label_substring=f'finished_reason="{reason}"',
+                )
             )
             for reason in FINISHED_REASONS
         }
         return cls(
-            request_count=int(extract_metric(metrics, REQUEST_COUNT)),
+            request_count=int(
+                extract_metric(metrics=metrics, name_prefix=REQUEST_COUNT)
+            ),
             timing_seconds_sum=timings,
-            prompt_tokens=int(extract_metric(metrics, PROMPT_TOKENS_SUM)),
-            gen_tokens=int(extract_metric(metrics, GEN_TOKENS_SUM)),
-            prefill_kv_computed=int(extract_metric(metrics, PREFILL_KV_COMPUTED_SUM)),
+            prompt_tokens=int(
+                extract_metric(metrics=metrics, name_prefix=PROMPT_TOKENS_SUM)
+            ),
+            gen_tokens=int(
+                extract_metric(metrics=metrics, name_prefix=GEN_TOKENS_SUM)
+            ),
+            prefill_kv_computed=int(
+                extract_metric(metrics=metrics, name_prefix=PREFILL_KV_COMPUTED_SUM)
+            ),
             finished_reason_counts=finished,
-            kv_usage_pct=extract_metric(metrics, KV_USAGE_PCT),
-            prefix_cache_hits=int(extract_metric(metrics, PREFIX_CACHE_HITS)),
+            kv_usage_pct=extract_metric(metrics=metrics, name_prefix=KV_USAGE_PCT),
+            prefix_cache_hits=int(
+                extract_metric(metrics=metrics, name_prefix=PREFIX_CACHE_HITS)
+            ),
             external_prefix_cache_hits=int(
-                extract_metric(metrics, EXTERNAL_PREFIX_CACHE_HITS)
+                extract_metric(metrics=metrics, name_prefix=EXTERNAL_PREFIX_CACHE_HITS)
             ),
             wall_time=time.time(),
         )
@@ -104,7 +118,7 @@ def compute_turn_metrics(
         "queue_ms": round(delta_ms("queue"), 2),
         "itl_ms": round(delta_ms("tpot"), 3) if osl > 0 else None,
         "e2e_ms": round(delta_ms("e2e"), 2),
-        "stop_reason": _diff_finished_reason(before, after),
+        "stop_reason": _diff_finished_reason(before=before, after=after),
         # Peak KV-cache gauge across the turn's in-flight polls — the real
         # occupancy. (The instantaneous gauge sampled at completion is useless
         # here: vLLM frees the request's blocks on finish, so it reads ~0.)

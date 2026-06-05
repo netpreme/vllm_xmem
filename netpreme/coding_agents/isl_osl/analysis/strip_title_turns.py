@@ -86,17 +86,15 @@ def run(save_dir: Path, *, dry_run: bool, min_age: float) -> None:
             skipped_running += 1
             continue
         done += 1
-        p = _strip_file(d / "proxy.jsonl", _is_title_proxy, dry_run=dry_run)
-        r = _strip_file(d / "raw.jsonl", _is_title_raw, dry_run=dry_run)
+        p = _strip_file(path=d / "proxy.jsonl", is_title=_is_title_proxy, dry_run=dry_run)
+        r = _strip_file(path=d / "raw.jsonl", is_title=_is_title_raw, dry_run=dry_run)
         if p or r:
             touched += 1
             verb = "would strip" if dry_run else "stripped"
             print(f"  {iid}: {verb} proxy={p} raw={r}")
 
     # A problem mid-flight has no meta.json yet — count those too.
-    in_flight = sum(
-        1 for d in telemetry.glob("*/") if not (d / "meta.json").exists()
-    )
+    in_flight = sum(1 for d in telemetry.glob("*/") if not (d / "meta.json").exists())
     print(
         f"\n{'DRY RUN — ' if dry_run else ''}complete problems scanned={done}, "
         f"modified={touched}, skipped(running/recent)={skipped_running + in_flight}"
@@ -106,9 +104,7 @@ def run(save_dir: Path, *, dry_run: bool, min_age: float) -> None:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--save-dir", required=True, type=Path)
-    ap.add_argument(
-        "--dry-run", action="store_true", help="report only; write nothing"
-    )
+    ap.add_argument("--dry-run", action="store_true", help="report only; write nothing")
     ap.add_argument(
         "--min-age",
         type=float,

@@ -44,7 +44,11 @@ def run(save_dir: Path) -> None:
 
     # 2. Figures.
     for script, fname in _PLOTS:
-        _plot(script, save_dir, ["--out", str(out / fname), "--title-suffix", suffix])
+        _plot(
+            script=script,
+            save_dir=save_dir,
+            args=["--out", str(out / fname), "--title-suffix", suffix],
+        )
 
 
 def main() -> int:

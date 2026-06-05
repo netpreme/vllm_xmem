@@ -10,18 +10,11 @@ import json
 import re
 from dataclasses import dataclass, field
 
-# ---------------------------------------------------------------------------
-# Request — pure functions over the request JSON.
-# ---------------------------------------------------------------------------
-
 
 @dataclass(frozen=True)
 class ParsedRequest:
-    # Where the request's input bulk lives. system is text-only; tools and
-    # messages are serialized-JSON length (what actually gets tokenized).
-    # Together these explain `isl`: input ≈ system + tools + messages.
     system_prompt_chars: int  # text of the top-level `system` field
-    tools_chars: int  # serialized `tools` array (the tool definitions)
+    tools_chars: int  # serialized `tools` array
     messages_chars: int  # serialized `messages` array (problem + history)
     num_tool_defs: int
     num_messages: int
@@ -58,17 +51,10 @@ def rerole_system_messages(body: dict) -> int:
     return moved
 
 
-# ---------------------------------------------------------------------------
-# SSE response — walk the stream.
-#
-# Anthropic's streaming format:
-#     event: message_start         data: {... usage, model, ...}
-#     event: content_block_start   data: {type, content_block: {type, ...}}
-#     event: content_block_delta   data: {type, delta: {type, text | partial_json}}
-#     event: content_block_stop    data: {...}
-#     event: message_delta         data: {delta: {stop_reason, ...}, usage}
-#     event: message_stop          data: {...}
-# ---------------------------------------------------------------------------
+# Anthropic SSE stream:
+#   content_block_start  {content_block: {type, ...}}
+#   content_block_delta  {delta: {type, text | partial_json | thinking}}
+#   message_delta        {delta: {stop_reason}}
 
 
 @dataclass

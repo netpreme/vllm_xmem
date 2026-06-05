@@ -130,7 +130,9 @@ def pick_samples(t: np.ndarray, n: int = 10) -> list[str]:
     return [stats[i][0] for i in idx]
 
 
-def render_all_to_telemetry(t: np.ndarray, telemetry_dir: Path, title_suffix: str) -> None:
+def render_all_to_telemetry(
+    t: np.ndarray, telemetry_dir: Path, title_suffix: str
+) -> None:
     """Render the per-turn KV/time figure for EVERY problem, writing each into
     its own raw-capture dir as `<telemetry_dir>/<iid>/kv_cache.png`.
 
@@ -141,7 +143,12 @@ def render_all_to_telemetry(t: np.ndarray, telemetry_dir: Path, title_suffix: st
         if not (t[t["instance_id"] == iid]["osl"] > 0).any():
             print(f"skip {iid}: no substantive turns")
             continue
-        render(t, iid, telemetry_dir / iid / "kv_cache.png", title_suffix)
+        render(
+            t=t,
+            iid=iid,
+            out=telemetry_dir / iid / "kv_cache.png",
+            title_suffix=title_suffix,
+        )
 
 
 def render(t: np.ndarray, iid: str, out: Path, title_suffix: str) -> None:
@@ -329,15 +336,15 @@ def main() -> int:
 
     t = load_data(args.save_dir)
     iid = args.instance_id or pick_representative(t)
-    render(t, iid, args.out, args.title_suffix)
+    render(t=t, iid=iid, out=args.out, title_suffix=args.title_suffix)
 
     if args.samples_dir is not None:
         for sample_iid in pick_samples(t, n=10):
             render(
-                t,
-                sample_iid,
-                args.samples_dir / f"kv_{sample_iid}.png",
-                args.title_suffix,
+                t=t,
+                iid=sample_iid,
+                out=args.samples_dir / f"kv_{sample_iid}.png",
+                title_suffix=args.title_suffix,
             )
 
     if args.telemetry_dir is not None:

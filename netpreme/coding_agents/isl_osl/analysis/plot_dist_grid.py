@@ -22,7 +22,7 @@ import numpy as np
 
 from metrics import VERIFIED_BUCKETS, load_data
 
-# ----- styling constants ----------------------------------------------------
+# styling constants
 
 # White stroke on region labels so they stay legible over histogram bars.
 LABEL_STROKE = [pe.withStroke(linewidth=3, foreground="white")]
@@ -70,7 +70,7 @@ METRICS = [
 ]
 
 
-# ----- shared rendering helpers --------------------------------------------
+# shared rendering helpers
 
 
 def hist_panel(
@@ -150,7 +150,7 @@ def annotate_regions(ax, vals: np.ndarray, ymax: float, regions: list) -> None:
         )
 
 
-# ----- main -----------------------------------------------------------------
+# main
 
 OVERLAYS = {
     "osl": (REGIONS_OSL, None),

@@ -134,8 +134,10 @@ class Poller:
                 peak_kv_usage = max(peak_kv_usage, current.kv_usage_pct)
                 completed = current.request_count - previous.request_count
                 if completed >= 1:
-                    row = compute_turn_metrics(previous, current, peak_kv_usage)
-                    self._out.write(self._instance_id, row)
+                    row = compute_turn_metrics(
+                        before=previous, after=current, peak_kv_usage=peak_kv_usage
+                    )
+                    self._out.write(instance_id=self._instance_id, row=row)
                     if completed > 1:
                         logger.warning(
                             "{} requests completed in one tick — "

@@ -21,9 +21,7 @@ ENV_PATH = SERVER_SH.parent / ".env"
 LOG = Path("/tmp/vllm_server.log")
 
 
-# ---------------------------------------------------------------------------
 # HTTP helpers — stdlib urllib (no `requests` dep for a couple one-shot calls).
-# ---------------------------------------------------------------------------
 
 
 def check_server_initialized(url: str, timeout: float) -> bool:
@@ -46,9 +44,7 @@ def get_model_name(url: str) -> str:
         return json.loads(r.read())["data"][0]["id"]
 
 
-# ---------------------------------------------------------------------------
 # GPU / NVML helpers.
-# ---------------------------------------------------------------------------
 
 
 @contextmanager
@@ -92,9 +88,7 @@ def gpu_info() -> dict:
         return {}
 
 
-# ---------------------------------------------------------------------------
 # Version / log / .env readers.
-# ---------------------------------------------------------------------------
 
 
 def vllm_version() -> str:
