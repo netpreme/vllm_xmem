@@ -6,6 +6,6 @@ detail.
 from __future__ import annotations
 
 from pipeline.datasets.sandbox import Sandbox
-from pipeline.datasets.swebench import get_dataset
+from pipeline.datasets.swebench import DATASETS, get_dataset
 
-__all__ = ["Sandbox", "get_dataset"]
+__all__ = ["DATASETS", "Sandbox", "get_dataset"]

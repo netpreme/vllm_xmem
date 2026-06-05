@@ -67,6 +67,7 @@ To swap the served model, pass the flags to `main.py` — between problems
 
 | flag | default | meaning |
 |---|---|---|
+| `--dataset NAME`               | `verified` | benchmark dataset: `verified` ([SWE-bench Verified](https://huggingface.co/datasets/princeton-nlp/SWE-bench_Verified)) or `swe-bench-pro` ([SWE-bench Pro public set](https://huggingface.co/datasets/ScaleAI/SWE-bench_Pro)) |
 | `--limit N`                    | 500   | use the first `N` problems |
 | `--random N --seed S`          | —     | random sample of `N` problems (overrides `--limit`) |
 | `--model HF_ID`                | `Qwen/Qwen3-Coder-30B-A3B-Instruct-FP8` | model id; what claude sends AND what vLLM serves |

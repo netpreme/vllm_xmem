@@ -44,7 +44,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from analysis.report import run as run_report
 from pipeline import claude
 from pipeline.agent import coding_agent
-from pipeline.datasets import Sandbox, get_dataset
+from pipeline.datasets import DATASETS, Sandbox, get_dataset
 from pipeline.proxy import Proxy
 from pipeline.utils.metadata import write_meta, write_run_config
 from pipeline.vllm_server import Server
@@ -58,11 +58,16 @@ VLLM_PORT = int(os.environ.get("VLLM_PORT", "8000"))
 PROXY_PORT = int(os.environ.get("PROXY_PORT", "8001"))
 VLLM_URL = f"http://localhost:{VLLM_PORT}"
 WAIT_TIME = 0.3
-DATASET = "princeton-nlp/SWE-bench_Verified"
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--dataset",
+        choices=sorted(DATASETS),
+        default="verified",
+        help="benchmark dataset to run (default: %(default)s)",
+    )
     parser.add_argument("--random", type=int, default=0)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument(
@@ -111,8 +116,9 @@ def main() -> int:
         if meta.get("exit_code") == 0:
             solved_ids.add(meta["instance_id"])
 
+    dataset_name = DATASETS[args.dataset]
     dataset = get_dataset(
-        name=DATASET,
+        name=dataset_name,
         random=args.random,
         seed=args.seed,
         solved_ids=solved_ids,
@@ -168,7 +174,7 @@ def main() -> int:
                 args=args,
                 server=server,
                 dataset=dataset,
-                dataset_name=DATASET,
+                dataset_name=dataset_name,
                 solved_ids=solved_ids,
                 proxy_port=PROXY_PORT,
                 started_at=started_at,
@@ -179,7 +185,7 @@ def main() -> int:
             {
                 "model": model,
                 "vllm_url": VLLM_URL,
-                "dataset": DATASET,
+                "dataset": dataset_name,
                 "capture": args.capture,
                 "started_at": round(started_at, 3),
                 "ended_at": round(time.time(), 3),
