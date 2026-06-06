@@ -51,7 +51,14 @@ class ProxyApp:
     """Reverse-proxy ASGI app for one problem (claude-cli ↔ vLLM)."""
 
     def __init__(
-        self, upstream: str, out_dir: Path, instance_id: str, *, raw: bool = False
+        self,
+        upstream: str,
+        out_dir: Path,
+        instance_id: str,
+        *,
+        raw: bool = False,
+        write_metrics: bool = False,
+        inject_token_ids: bool = True,
     ) -> None:
         self.upstream = upstream.rstrip("/")
         self.instance_id = instance_id
@@ -62,6 +69,11 @@ class ProxyApp:
         self._raw = raw
         self._raw_writer = JsonlWriter(out_dir, "raw.jsonl") if raw else None
         self._prev_units: list[str] = []
+        # Remote (Anthropic) backend: there's no vLLM /metrics, so derive
+        # isl/osl/isl_new from the response's `usage` and write a vllm.jsonl
+        # row ourselves. inject_token_ids is vLLM-only (Anthropic rejects it).
+        self._inject_token_ids = inject_token_ids
+        self._vllm_writer = JsonlWriter(out_dir, "vllm.jsonl") if write_metrics else None
 
     def build(self) -> Starlette:
         return Starlette(
@@ -113,9 +125,10 @@ class ProxyApp:
             # claude-cli injects role:"system" messages that vLLM 400s on; the
             # top-level `system` (cached prefix) is left untouched.
             rerole_system_messages(body)
-            # With raw capture, ask vLLM for exact token ids (returned in a
-            # trailing `vllm_token_ids` event we tee then strip below).
-            if self._raw:
+            # With raw capture on the vLLM backend, ask for exact token ids
+            # (returned in a trailing `vllm_token_ids` event we tee then strip).
+            # Skipped for the Anthropic backend, which rejects the unknown field.
+            if self._raw and self._inject_token_ids:
                 body["return_token_ids"] = True
             forward_body = json.dumps(body).encode()
             parsed_req = parse_request(body)
@@ -164,6 +177,27 @@ class ProxyApp:
                 "claude_stop_reason": parsed_resp.claude_stop_reason,
             },
         )
+
+        # Remote backend: no vLLM /metrics, so derive isl/osl/isl_new from the
+        # Anthropic `usage` and write the vllm.jsonl row ourselves. isl is the
+        # full prompt; isl_new is the non-cache-read part (what got processed).
+        if self._vllm_writer is not None:
+            isl = (
+                parsed_resp.input_tokens
+                + parsed_resp.cache_read_input_tokens
+                + parsed_resp.cache_creation_input_tokens
+            )
+            self._vllm_writer.write(
+                instance_id=self.instance_id,
+                row={
+                    "ts": round(ts, 3),
+                    "isl": isl,
+                    "osl": parsed_resp.output_tokens,
+                    "isl_new": isl - parsed_resp.cache_read_input_tokens,
+                    "prefix_cache_hits": parsed_resp.cache_read_input_tokens,
+                    "stop_reason": parsed_resp.claude_stop_reason,
+                },
+            )
 
         if self._raw_writer is not None and body is not None:
             self._write_raw(ts=ts, body=body, parsed_resp=parsed_resp)

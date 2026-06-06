@@ -77,6 +77,13 @@ def main() -> int:
     itl = t["itl_ms"].astype(float)
     turn = t["turn"].astype(int)
 
+    # The latency model needs vLLM timing fields. Backends without them (e.g.
+    # the Anthropic API, which reports only token usage) have all-NaN timings —
+    # nothing to fit, so skip this figure rather than crash the analysis pass.
+    if not np.isfinite(itl).any() or not np.isfinite(prefill).any():
+        print(f"skip latency model: no timing data in {args.save_dir}")
+        return 0
+
     suffix = f" — {args.title_suffix}" if args.title_suffix else ""
     title = f"ISL/OSL latency model  (pooled {len(t):,} turns){suffix}"
 

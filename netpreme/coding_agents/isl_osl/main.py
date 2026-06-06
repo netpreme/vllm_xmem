@@ -26,6 +26,7 @@ The agent only solves; analysis is a single separate pass at the end
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import os
 import platform
@@ -53,11 +54,20 @@ HERE = Path(__file__).resolve().parent
 SERVER_PORT = int(os.environ.get("SERVER_PORT", "8000"))
 PROXY_PORT = int(os.environ.get("PROXY_PORT", "8001"))
 SERVER_URL = f"http://localhost:{SERVER_PORT}"
+ANTHROPIC_URL = "https://api.anthropic.com"
 WAIT_TIME = 0.3
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--backend",
+        choices=["vllm", "anthropic"],
+        default="vllm",
+        help="vllm = serve --model locally and capture /metrics (default); "
+        "anthropic = send to api.anthropic.com (no vLLM), deriving "
+        "isl/osl/isl_new from Anthropic's usage. Needs ANTHROPIC_API_KEY set.",
+    )
     parser.add_argument(
         "--dataset",
         choices=sorted(DATASETS),
@@ -127,39 +137,62 @@ def main() -> int:
         dataset = dataset[: args.limit]
     logger.info("{} problems pending → {}", len(dataset), save_dir)
 
+    # anthropic backend: claude-cli talks DIRECTLY to Anthropic with its own
+    # subscription OAuth (no proxy, no vLLM); claude.solve parses per-turn
+    # usage from its stream-json stdout into vllm.jsonl.
+    remote = args.backend == "anthropic"
+    model = args.model  # resolved to server.model per-problem on the vllm backend
     sandbox_root = Path(f"/tmp/swe_sandboxes/{save_dir.name}")
     started_at = time.time()
     for task in tqdm(dataset, desc="solving", unit="problem"):
         instance_id = task["instance_id"]
         logger.info("{} ({} @ {})", instance_id, task["repo"], task["base_commit"][:5])
-        with (
-            Server(
-                url=SERVER_URL,
-                model=args.model,
-                tensor_parallel_size=args.tensor_parallel_size,
-                max_model_len=args.max_model_len,
-                gpu_memory_utilization=args.gpu_memory_utilization,
-                tool_call_parser=args.tool_call_parser,
-            ) as server,
-            MetricsScraper(url=SERVER_URL, save_dir=save_dir, instance_id=instance_id),
-            Proxy(
-                save_dir=save_dir,
-                instance_id=instance_id,
-                url=SERVER_URL,
-                proxy_port=PROXY_PORT,
-                capture=args.capture is not None,
-                raw=args.capture is not None,  # capture always implies raw now
-            ) as proxy,
-            Sandbox(root=sandbox_root, prefix=f"{instance_id}.") as sandbox,
-        ):
-            model = server.model
+        server = None
+        with contextlib.ExitStack() as stack:
+            if remote:
+                model = args.model
+                base_url = ANTHROPIC_URL  # unused under oauth (claude-cli's own creds)
+            else:
+                server = stack.enter_context(
+                    Server(
+                        url=SERVER_URL,
+                        model=args.model,
+                        tensor_parallel_size=args.tensor_parallel_size,
+                        max_model_len=args.max_model_len,
+                        gpu_memory_utilization=args.gpu_memory_utilization,
+                        tool_call_parser=args.tool_call_parser,
+                    )
+                )
+                stack.enter_context(
+                    MetricsScraper(
+                        url=SERVER_URL, save_dir=save_dir, instance_id=instance_id
+                    )
+                )
+                proxy = stack.enter_context(
+                    Proxy(
+                        save_dir=save_dir,
+                        instance_id=instance_id,
+                        url=SERVER_URL,
+                        proxy_port=PROXY_PORT,
+                        capture=args.capture is not None,
+                        raw=args.capture is not None,
+                    )
+                )
+                model = server.model
+                base_url = proxy.base_url
+            sandbox = stack.enter_context(
+                Sandbox(root=sandbox_root, prefix=f"{instance_id}.")
+            )
             time.sleep(WAIT_TIME)  # let the proxy/watcher settle on this instance_id
             exit_code = coding_agent(
                 task=task,
                 sandbox_dir=sandbox.dir,
-                model=server.model,
-                base_url=proxy.base_url,
+                model=model,
+                base_url=base_url,
                 timeout_s=args.agent_timeout_s,
+                oauth=remote,
+                telemetry_dir=(save_dir / "telemetry") if remote else None,
+                raw=remote and args.capture is not None,
             )
         write_meta(
             save_dir=save_dir,
@@ -168,8 +201,8 @@ def main() -> int:
             ended_at=sandbox.ended,
             exit_code=exit_code,
         )
-        # Snapshot run inputs once, with the first server's resolved config.
-        if not (save_dir / "run_config.json").exists():
+        # Snapshot run inputs once (vLLM backend only — needs the server config).
+        if server is not None and not (save_dir / "run_config.json").exists():
             write_run_config(
                 save_dir=save_dir,
                 args=args,

@@ -11,8 +11,9 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-# One bare mirror per unique repo: <MIRROR_ROOT>/<owner>__<name>.git
-MIRROR_ROOT = Path("/root/.cache/swe_repo_mirrors")
+# One bare mirror per unique repo: <MIRROR_ROOT>/<owner>__<name>.git.
+# Under $HOME so it works whatever user runs this (not just root).
+MIRROR_ROOT = Path.home() / ".cache/swe_repo_mirrors"
 
 
 def clone(problem: dict, workdir: Path) -> Path:
@@ -36,6 +37,9 @@ def clone(problem: dict, workdir: Path) -> Path:
 def _clone_source(repo: str) -> str:
     """Local mirror path if one exists, else the GitHub URL."""
     mirror = MIRROR_ROOT / f"{repo.replace('/', '__')}.git"
-    if (mirror / "HEAD").exists():
-        return str(mirror)
+    try:
+        if (mirror / "HEAD").exists():
+            return str(mirror)
+    except OSError:  # mirror root missing or not accessible — just use GitHub
+        pass
     return f"https://github.com/{repo}.git"

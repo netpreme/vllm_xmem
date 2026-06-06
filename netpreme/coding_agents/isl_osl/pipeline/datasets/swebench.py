@@ -19,10 +19,10 @@ from datasets import load_dataset
 # CLI alias → HuggingFace dataset id.
 DATASETS = {
     "verified": "princeton-nlp/SWE-bench_Verified",
-    "swe-bench-pro": "ScaleAI/SWE-bench_Pro",
+    "pro": "ScaleAI/SWE-bench_Pro",
 }
 
-_SWE_BENCH_PRO = DATASETS["swe-bench-pro"]
+_SWE_BENCH_PRO = DATASETS["pro"]
 
 # SWE-bench Pro text columns are JSON-string-encoded ('"..."' with \n escaped).
 _PRO_TEXT_FIELDS = ("problem_statement", "requirements", "interface")

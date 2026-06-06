@@ -60,10 +60,13 @@ def main() -> int:
 
 def _plot(script: str, save_dir: Path, args: list[str]) -> None:
     print(f"  -> {script}")
-    subprocess.run(
+    # A figure that can't render on a given dataset (e.g. a latency plot on a
+    # timing-less Anthropic run) shouldn't fail the whole analysis pass.
+    result = subprocess.run(
         [sys.executable, str(HERE / script), "--save-dir", str(save_dir), *args],
-        check=True,
     )
+    if result.returncode != 0:
+        print(f"  !! {script} failed (rc={result.returncode}) — skipping")
 
 
 if __name__ == "__main__":
