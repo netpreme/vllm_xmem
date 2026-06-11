@@ -39,7 +39,6 @@ from pipeline.utils.processes import (
     unique_processes,
 )
 from pipeline.vllm_server.utils import (
-    ENV_PATH,
     LOG,
     SERVER_SH,
     _read_env_file,
@@ -61,7 +60,6 @@ class Server:
     _GPU_RELEASE_TIMEOUT = 60.0
     _READY_TIMEOUT = 600.0
     _TERM_GRACE_S = 5.0  # let vLLM unlink its /dev/shm IPC before we SIGKILL
-    _warned = False  # warn about .env fallback once per process
 
     def __init__(
         self,
@@ -137,8 +135,8 @@ class Server:
         return False
 
     def _env(self) -> dict[str, str]:
-        """server.sh env: set each provided knob; warn (once) about any left
-        to server.sh's .env. PORT always comes from the url."""
+        """server.sh env: set each provided knob; the rest fall back to
+        server.sh's .env/defaults. PORT always comes from the url."""
         env = os.environ.copy()
         knobs = {
             "MODEL_NAME": self.model,
@@ -157,21 +155,6 @@ class Server:
         # hardcodes a venv path. (Our anthropic-serving patches live in that
         # env's editable vLLM.)
         env["VLLM_PYTHON"] = sys.executable
-
-        # Not passed AND not set in the environment → server.sh falls back
-        # to its .env/defaults; worth a one-time heads-up.
-        missing = [
-            env_name
-            for env_name, value in knobs.items()
-            if value is None and env_name not in os.environ
-        ]
-        if missing and not Server._warned:
-            logger.warning(
-                "not provided, reading from .env ({}): {}",
-                ENV_PATH,
-                ", ".join(missing),
-            )
-            Server._warned = True
         return env
 
     def serving_config(self) -> dict[str, str]:

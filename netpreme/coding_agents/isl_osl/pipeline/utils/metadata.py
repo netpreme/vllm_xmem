@@ -87,7 +87,6 @@ def save_session_metadata(
     problem_dir.mkdir(parents=True, exist_ok=True)
     session = {
         "instance_id": iid,
-        "difficulty": task.get("difficulty"),
         "repo": task.get("repo"),
         "base_commit": task.get("base_commit"),
         "model": server.model,

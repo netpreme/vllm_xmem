@@ -68,7 +68,7 @@ def main() -> int:
     parser.add_argument(
         "--dataset",
         choices=sorted(DATASETS),
-        default="verified",
+        default="pro",
         help="benchmark dataset to run (default: %(default)s)",
     )
     parser.add_argument(
@@ -99,7 +99,7 @@ def main() -> int:
         "--tensor-parallel", dest="tensor_parallel_size", type=int, default=None
     )
     parser.add_argument("--max-model-len", type=int, default=None)
-    parser.add_argument("--gpu-memory-utilization", type=float, default=None)
+    parser.add_argument("--gpu-memory-utilization", type=float, default=0.85)
     parser.add_argument("--tool-call", dest="tool_call_parser", default=None)
     parser.add_argument(
         "--agent-timeout",
@@ -115,6 +115,11 @@ def main() -> int:
     remote = args.backend == "anthropic"
     if remote and args.model is None:
         parser.error("--model is required with --backend anthropic")
+    if not remote and args.tool_call_parser is None:
+        parser.error(
+            "--tool-call is required with --backend vllm (must match the model "
+            "family, e.g. qwen3_coder for Qwen, openai for GPT-OSS)"
+        )
 
     if args.resume is not None:
         save_dir = args.resume.expanduser().resolve()

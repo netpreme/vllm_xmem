@@ -1,8 +1,18 @@
-# Coding Agent ISL/OSL distribution
+# Coding Agent Traces Collection 
 
-Our goal is to obtain the ISL, OSL, ISL_new (uncached tokens) using claude code and a real coding task. We use SWE Bench Verified as the dataset.
+Coding agents take turns to carry out tasks. To understand the token distribution and inference metrics, a set up using Claude code with Opus and open source/weight models are constructed to carry out agentic turn inference. 
 
-Simulating a single coding agent run in an isolated environment, coding problems are solved one at a time. Per-turn metrics are collected - inference metrics from GPUs from vLLM and harness metrics from coding agents. The full list is shown below.
+For Opus, only the locally saved files from the harness were used for analysis.
+
+---
+
+Coding agents take multiple turns to carry out a task from the input prompt. To analyze the token distribution two models were selected: Anthropic’s Opus and OpenAI’s gpt-oss-120B. The input sequence length (ISL), output sequence length (OSL) and the uncached, new input sequence length (ISL_new) were extracted from locally saved files or a proxy used as a middleman. The setup consists of using Claude-code as the harness, SWE-Bench Pro as the dataset. For open source models, vLLM is used as the inference server and also uses SWE-Bench Verified dataset. 
+
+Each task is solved sequentially to capture the token distribution. 
+
+Using vLLM, for each turn, the uncached tokens (prefill) and the newly generated tokens (decode) will have their KV cache computed and will be stored in blocks. In the subsequent turn, the matching KV blocks will be used. Non-matching tokens will go through prefill (ISL_new tokens), and decode will generate one token at a time (OSL tokens), repeating the cycle.
+
+The OSL is the cumulative tokens generated in decode. ISL_new is the unique tokens without prefix cache hit (tool call result + partial OSL). ISL is the total input token (previous ISL + partial OSL + tool call results). Prefix cache hit is computed as (ISL - ISL_new) / ISL. Token counts are obtained from vLLM’s prometheus loggers, measured in per turn sensitivity. Opus has these metrics that are accessible in the local computer inside `~/.claude/projects/<sanitized-cwd>/<session_id>.jsonl`.
 
 **Inference metrics — from vLLM's `/metrics` Prometheus endpoint**:
 
@@ -17,79 +27,62 @@ Simulating a single coding agent run in an isolated environment, coding problems
 | `prefill_ms` | ms | scheduler time spent prefilling this request |
 | `decode_ms` | ms | scheduler time spent decoding this request |
 | `itl_ms` | ms/tok | mean inter-token latency during decode |
-| `queue_ms` | ms | scheduler queue wait before prefill (~0 at concurrency=1) |
-| `kv_cache_usage_pct` | % | GPU KV-cache utilization gauge at end of turn |
+| `queue_ms` | ms | scheduler queue wait before prefill  |
+| `kv_cache_usage_pct` | % | peak GPU KV-cache utilization across the turn's in-flight polls |
 | `stop_reason` | enum | `stop` / `length` / `abort` / `error` / `repetition` |
 
-**Harness metrics**:
+**Harness metrics** — derived in the analysis layer from the raw text trace (`vllm_traces.jsonl`):
 
 | field | meaning |
 |---|---|
 | `agent` | `main` (claude's outer loop, ~27 k char system prompt) or `sub` (Task-tool sub-agent, ~3 k char system prompt) |
 | `num_tool_defs` | number of tool schemas claude shipped in the request |
 | `num_messages` | length of the `messages` array |
-| `system_prompt_chars` | raw character count of the system prompt (signal for main/sub classification) |
+| `system_prompt_chars` | raw character count of the system prompt  |
 
 **Orchestration metadata**:
 
 | field | meaning |
 |---|---|
-| `instance_id` | SWE-bench problem id (e.g. `astropy__astropy-12907`) |
-| `difficulty` | `<15 min fix` / `15 min - 1 hour` / `1+ hours` |
-| `turn` | 1-indexed turn number within the problem |
-| `ts` | wall-clock timestamp of the watcher's "before" scrape |
-| `elapsed_ms` | wall-clock between bracketing scrapes (proxy for e2e turn latency) |
+| `instance_id` | SWE-bench Pro/Verified instance_id |
+| `turn` | turn number within the problem |
+| `ts` | wall-clock timestamp of the turn (orders turns) |
+| `e2e_ms` | vLLM's end-to-end latency for the turn |
 | `prefix_kv_tokens` | `isl + osl` of the previous turn (max possible cache reuse this turn) |
 | `usable_prefix_kv_tokens` | `cache_hit_rate × prefix_kv_tokens` |
-| `kv_cache_used_bytes` | `isl_cached × 96 KB/tok` |
+| `kv_cache_used_bytes` | `isl_cached × Bytes/tok` |
 
 
 ## How to run
 
 ```bash
-python main.py --capture          # all pending SWE-bench Verified problems
-# analysis is a separate pass over results/<stamp>/ (out of scope here)
+# GPT-OSS 120B on local vLLM (2 GPUs), capturing raw per-turn text traces
+python main.py --model openai/gpt-oss-120b --tool-call openai --tensor-parallel 2 --capture raw
+
+# Claude Opus via Anthropic (OAuth subscription; no local vLLM)
+python main.py  --model opus --backend anthropic --capture raw
 ```
 
-`main.py` starts a fresh vLLM server per problem. To swap the served model, pass
-the flags to `main.py`; CLI flags win over `.env` defaults:
+`main.py` starts a fresh vLLM server per problem. To swap the served model, pass the flags to `main.py`
 
-```bash
-# Qwen3-Coder
-./main.py --model Qwen/Qwen3-Coder-30B-A3B-Instruct-FP8 --tool-call-parser qwen3_coder
-
-# GPT-OSS 120B
-./main.py --model openai/gpt-oss-120b --tool-call-parser gpt_oss
-```
-
-`main.py` flags:
+Flags:
 
 | flag | default | meaning |
 |---|---|---|
 | `--backend NAME`               | `vllm` | `vllm` serves locally and scrapes Prometheus; `anthropic` uses Claude OAuth and saves transcripts for later analysis |
-| `--dataset NAME`               | `verified` | benchmark dataset: `verified` ([SWE-bench Verified](https://huggingface.co/datasets/princeton-nlp/SWE-bench_Verified)) or `pro` ([SWE-bench Pro public set](https://huggingface.co/datasets/ScaleAI/SWE-bench_Pro)) |
-| `--capture [raw]`              | —     | enable proxy capture of per-turn request/response metadata and raw text/token ids |
+| `--dataset NAME`               | `pro` | benchmark dataset: `pro` ([SWE-bench Pro public set](https://huggingface.co/datasets/ScaleAI/SWE-bench_Pro)) or `verified` ([SWE-bench Verified](https://huggingface.co/datasets/princeton-nlp/SWE-bench_Verified)) |
+| `--capture [raw]`              | —     | run the proxy and tee per-turn raw text traces to `vllm_traces.jsonl` (vLLM backend only) |
 | `--limit N`                    | all pending problems | run at most `N` pending problems |
 | `--resume SAVE_DIR`            | —     | reuse an existing run directory and skip problems with `exit_code == 0` |
 | `--model HF_ID`                | `server.sh` / `.env` | model id; required for `--backend anthropic` |
-| `--tool-call-parser NAME`      | `qwen3_coder` | vLLM's tool-call parser. Must match the model family (`qwen3_coder` for Qwen, `gpt_oss` for GPT-OSS, `hermes` / `mistral` / `llama3_json` for others) |
-| `--tensor-parallel-size N`     | `1`   | vLLM `--tensor-parallel-size` (bump for multi-GPU) |
-| `--max-model-len N`            | `262144` | vLLM `--max-model-len`; cap is the model's `max_position_embeddings` |
-| `--gpu-memory-utilization F`   | `0.90` | vLLM `--gpu-memory-utilization` (0-1) |
+| `--tool-call NAME`             | — (required for `--backend vllm`) | vLLM's tool-call parser. Must match the model family (`qwen3_coder` for Qwen, `openai` for GPT-OSS, `hermes` / `mistral` / `llama3_json` for others) |
+| `--tensor-parallel N`          | `1`   | vLLM `--tensor-parallel-size` (bump for multi-GPU) |
+| `--max-model-len N`            | `131072` | vLLM `--max-model-len`; cap is the model's `max_position_embeddings` |
+| `--gpu-memory-utilization F`   | `0.85` | vLLM `--gpu-memory-utilization` (0-1) |
 
 For Anthropic/OAuth runs, `main.py` copies `claude_transcript.jsonl` files; a
 separate analysis pass derives `vllm_metrics.jsonl` and `vllm_traces.jsonl` from
 those transcripts.
-
-
-## Setup
-
-| | |
-|---|---|
-| Harness | Claude Code |
-| Server  | vLLM |
-| Model   | [Qwen/Qwen3-Coder-30B-A3B-Instruct-FP8](https://huggingface.co/Qwen/Qwen3-Coder-30B-A3B-Instruct-FP8) |
-| Dataset | [SWE Bench Verified](https://huggingface.co/datasets/princeton-nlp/SWE-bench_Verified) |
 
 
 ## System design
@@ -113,7 +106,7 @@ those transcripts.
               │ forwards unmodified
               ▼
    ┌──────────────────────┐
-   │  vLLM (Qwen3-Coder)  │ ────────► /metrics  (Prometheus endpoint)
+   │  vLLM                │ ────────► /metrics  (Prometheus endpoint)
    └──────────────────────┘               ▲
               │ response streamed         │ scraped every 100 ms
               ▼                           │
@@ -139,105 +132,5 @@ those transcripts.
 - `telemetry/<id>/claude_transcript.jsonl` — Anthropic/OAuth transcript source, when using that backend
 - `telemetry/<id>/session_config.json` — per-problem config (instance_id, repo/commit, server, model, started_at, ended_at, exit_code, ...)
 
-Joining, deriving `data.npz`, and plotting figures from these files is a
-separate analysis pass, out of scope for the runner.
 
 
-## Results
-
-Setup: **Qwen-3-Coder-30B-Instruct-FP8 × SWE-bench Verified × 500 problems**.
-
-### Sequence-length distributions
-
-| field | p50 | p90 | p99 | max |
-|---|---:|---:|---:|---:|
-| `isl`, tokens                 | 52,504 | 115,753 | 161,617 | 166,988 |
-| `isl_new`, uncached prefill   |     99 |   1,563 |  27,316 | 143,421 |
-| `isl_cached`                  | 51,616 | 115,353 | 161,579 | 166,960 |
-| `osl`                         |    126 |     484 |   1,298 |  32,000 |
-| turns / problem               |     29 |      63 |       — |     471 |
-
-Cache hit rate: **mean = 0.959, p50 = 0.998**.
-
-![Aggregate OSL / ISL / ISL_uncached distributions](results/analysis_dist_agg.png)
-
-`analysis_dist_agg.png` — OSL / ISL / ISL_uncached histograms across all 500 problems. OSL is bucketed into `tool calls / plan / code edits`; ISL_uncached into `small tool result / file read / large read / system prompt or compaction`. ISL panel marks the claude-code baseline (~27k tokens) as a red reference line.
-
-![Cache hit rate per turn](results/analysis_cache.png)
-
-`analysis_cache.png` — Cache-hit-rate trajectory per turn, by difficulty. Turn 1 (cold-start) and auto-compaction turns (`cache_hit < 50%` AND `isl_new > 50k`) excluded. From turn 2 onward, cache hit is already 75–85% and climbs to 95–98% steady-state by turn ~5. Harder problems just run for more turns at that steady state.
-
-![Turns per problem](results/analysis_turns.png)
-
-`analysis_turns.png` — distribution of turns-per-problem. Median 29 overall, monotone shift by difficulty (`<15min` median 26 → `15min–1h` median 30 → `1+h` median 34). Long tail reaches 471 turns.
-
-### Latency
-
-| field | p50 | p90 | p99 | max |
-|---|---:|---:|---:|---:|
-| `ttft_ms`    |    140 |    493 |   4,139 |  52,333 |
-| `prefill_ms` |    140 |    493 |   4,139 |  52,333 |
-| `decode_ms`  |  1,226 |  5,348 |  14,099 | 434,180 |
-| `itl_ms`     |   10.1 |   14.0 |    16.6 |    16.9 |
-| `queue_ms`   |      0 |      0 |       0 |       0 |
-
-Decode dominates: **59,670 s decode vs 8,192 s prefill** over the full run. The prefix cache removes most prefill cost, but every output token still pays ITL.
-
-### Prefill vs. ISL
-
-![TTFT / prefill vs ISL](results/analysis_ttft_prefill.png)
-
-Median prefill rises mildly with total ISL because of cached-prefix attention overhead, not because uncached-token cost grows.
-
-| ISL bucket    |    n  | `isl_new` p50 | prefill p50 |
-|---|---:|---:|---:|
-| 10k–25k       |   333 | 124           |  56 ms      |
-| 25k–50k       | 9,327 | 162           |  95 ms      |
-| 50k–75k       | 6,340 | 152           | 128 ms      |
-| 75k–100k      | 2,221 |  64           | 153 ms      |
-| 100k–125k     | 1,213 |  32           | 183 ms      |
-| 125k–200k     | 1,709 |  30           | 228 ms      |
-
-Per-uncached-token prefill cost drops with larger `isl_new`: about 2.8 ms/token below 100 new tokens and 0.12 ms/token above 20k new tokens. Residual cached-prefix overhead is roughly 50 ms per 25k cached ISL.
-
-### ITL vs. ISL
-
-![ITL and decode_ms vs ISL](results/analysis_itl_vs_isl.png)
-
-This is the main scaling result.
-
-| ISL bucket  |    n  | ITL p50, ms/token |
-|---|---:|---:|
-| 10k–25k     |   333 |  8.0 |
-| 25k–50k     | 9,327 |  9.3 |
-| 50k–75k     | 6,340 | 10.6 |
-| 75k–100k    | 2,221 | 12.0 |
-| 100k–125k   | 1,213 | 13.7 |
-| 125k–200k   | 1,709 | 15.6 |
-
-Decode is memory-bandwidth-bound because each decode step reads the KV cache.
-
-### Decode factorization
-
-`decode_ms ≈ ITL(ISL) × OSL`. Evidence:
-
-- `corr(decode_ms, osl) = 0.992`
-- `corr(decode_ms, isl) = 0.10`
-- median `|decode − itl × osl| = 10 ms`
-
-ISL affects decode mainly through ITL; OSL determines how many times that ITL cost is paid.
-
-### Per-problem KV / time breakdown
-
-![Per-turn KV cache + time breakdown — matplotlib-23412 (142 turns)](results/samples/kv_matplotlib__matplotlib-23412.png)
-
-`samples/kv_matplotlib__matplotlib-23412.png` — example per-turn breakdown for one representative problem. **Top**: KV cache (GB) — blue cached, red recompute, green decode. **Bottom**: per-turn wall time, decomposed the same way.
-
-### Takeaways
-
-- **ISL is large but mostly cached**: median `isl_new` is only 99 tokens.
-- **Prefill is no longer the main bottleneck** under high prefix-cache hit rate.
-- **Decode is the bottleneck** because every generated token pays ITL.
-- **Longer ISL still hurts** even with perfect caching, because ITL grows with KV-cache size.
-- **Context compaction is the strongest lever**: it reduces both ITL and often OSL.
-- **Runaway OSL dominates tail cost**: max `osl` is 32k and max `decode_ms` is 434 s.
