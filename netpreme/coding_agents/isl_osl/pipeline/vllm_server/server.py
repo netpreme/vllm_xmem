@@ -19,6 +19,7 @@ queries, .env parsing) live in ``utils.py``.
 
 from __future__ import annotations
 
+import contextlib
 import os
 import socket
 import subprocess
@@ -30,7 +31,13 @@ from urllib.parse import urlparse
 import psutil
 from loguru import logger
 
-from pipeline.utils.processes import process_family, terminate_processes
+from pipeline.utils.processes import (
+    process_family,
+    process_listening_on_port,
+    processes_with_env,
+    terminate_processes,
+    unique_processes,
+)
 from pipeline.vllm_server.utils import (
     ENV_PATH,
     LOG,
@@ -210,52 +217,22 @@ class Server:
         return len(killed_pids)
 
     def _server_processes(self) -> list[psutil.Process]:
-        """Processes owned by this harness on this configured server port."""
-        root_processes: list[psutil.Process] = []
+        """Processes owned by this harness on this configured server port.
+
+        Three discovery strategies (unioned): the launched pid, processes
+        env-tagged with this port, and whoever holds the LISTEN socket — then
+        each expanded to its full family and deduplicated."""
+        roots: list[psutil.Process] = []
         if self._proc is not None and self._proc.poll() is None:
-            try:
-                root_processes.append(psutil.Process(self._proc.pid))
-            except (psutil.NoSuchProcess, psutil.AccessDenied):
-                pass
-
-        root_processes.extend(self._processes_with_port_tag())
-        port_owner = self._process_listening_on_port()
+            with contextlib.suppress(psutil.NoSuchProcess, psutil.AccessDenied):
+                roots.append(psutil.Process(self._proc.pid))
+        roots.extend(processes_with_env(self._ENV_PORT, str(self.port)))
+        port_owner = process_listening_on_port(self.port)
         if port_owner is not None:
-            root_processes.append(port_owner)
-
-        seen: set[int] = set()
-        processes: list[psutil.Process] = []
-        for root_process in root_processes:
-            for process in process_family(root_process):
-                if process.pid not in seen:
-                    seen.add(process.pid)
-                    processes.append(process)
-        return processes
-
-    def _processes_with_port_tag(self) -> list[psutil.Process]:
-        tagged_processes = []
-        for process in psutil.process_iter(["pid"]):
-            try:
-                if process.environ().get(self._ENV_PORT) == str(self.port):
-                    tagged_processes.append(process)
-            except (psutil.NoSuchProcess, psutil.AccessDenied):
-                continue
-        return tagged_processes
-
-    def _process_listening_on_port(self) -> psutil.Process | None:
-        try:
-            connections = psutil.net_connections(kind="inet")
-        except (psutil.AccessDenied, psutil.Error):
-            return None
-        for connection in connections:
-            if connection.pid is None or connection.status != psutil.CONN_LISTEN:
-                continue
-            if connection.laddr and connection.laddr.port == self.port:
-                try:
-                    return psutil.Process(connection.pid)
-                except (psutil.NoSuchProcess, psutil.AccessDenied):
-                    return None
-        return None
+            roots.append(port_owner)
+        return unique_processes(
+            process for root in roots for process in process_family(root)
+        )
 
     def _clean_shm(self) -> None:
         """Remove orphaned vLLM IPC segments from /dev/shm.

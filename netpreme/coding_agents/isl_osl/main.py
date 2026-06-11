@@ -7,8 +7,8 @@ problem is wrapped in four context managers, each driving one thing:
     MetricsScraper polls vLLM's Prometheus /metrics once per turn
                    → results/<stamp>/telemetry/<iid>/vllm_metrics.jsonl
     Proxy          sits between claude-cli and vLLM (with --capture); normalizes
-                   requests and tees per-turn rows
-                   → results/<stamp>/telemetry/<iid>/proxy.jsonl
+                   requests and tees the per-turn raw text trace
+                   → results/<stamp>/telemetry/<iid>/vllm_traces.jsonl
     Sandbox        throwaway repo checkout + wall-clock timer for this problem
 
 The agent only solves; analysis is a separate pass run on demand (it derives
@@ -77,11 +77,9 @@ def main() -> int:
         const="raw",
         default=None,
         choices=["raw"],
-        help="run the proxy and capture per-turn data: agentic metadata "
-        "(system_prompt_chars, tool calls, stop reason) → proxy.jsonl, AND the "
-        "raw text + exact token-id traces (isl/isl_new/osl) → vllm_traces.jsonl. "
-        "Omit the flag to skip the proxy entirely. `--capture` and "
-        "`--capture raw` are equivalent.",
+        help="run the proxy and tee the per-turn raw text trace "
+        "(isl/isl_new/osl as text) → vllm_traces.jsonl. Omit the flag to skip "
+        "the proxy entirely. `--capture` and `--capture raw` are equivalent.",
     )
     parser.add_argument(
         "--limit",
@@ -137,25 +135,39 @@ def main() -> int:
         dataset = dataset[: args.limit]
     logger.info("{} problems pending → {}", len(dataset), save_dir)
 
-
     backend_url = ANTHROPIC_URL if remote else SERVER_URL
     capture = not remote and args.capture is not None
     sandbox_root = Path(f"/tmp/swe_sandboxes/{save_dir.name}")
     started_at = time.time()
 
+    server_kwargs = dict(
+        url=backend_url,
+        remote=remote,
+        model=args.model,
+        tensor_parallel_size=args.tensor_parallel_size,
+        max_model_len=args.max_model_len,
+        gpu_memory_utilization=args.gpu_memory_utilization,
+        tool_call_parser=args.tool_call_parser,
+    )
+
+    # Snapshot the overall config once, up front (serving knobs resolve from
+    # args/env/.env without a running server).
+    write_config(
+        save_dir=save_dir,
+        args=args,
+        server=Server(**server_kwargs),
+        dataset=dataset,
+        dataset_name=dataset_name,
+        solved_ids=solved_ids,
+        proxy_port=PROXY_PORT,
+        started_at=started_at,
+    )
+
     for task in tqdm(dataset, desc="solving", unit="problem"):
         instance_id = task["instance_id"]
         logger.info("{} ({} @ {})", instance_id, task["repo"], task["base_commit"][:5])
         with (
-            Server(
-                url=backend_url,
-                remote=remote,
-                model=args.model,
-                tensor_parallel_size=args.tensor_parallel_size,
-                max_model_len=args.max_model_len,
-                gpu_memory_utilization=args.gpu_memory_utilization,
-                tool_call_parser=args.tool_call_parser,
-            ) as server,
+            Server(**server_kwargs) as server,
             MetricsScraper(
                 url=backend_url,
                 save_dir=save_dir,
@@ -190,18 +202,6 @@ def main() -> int:
             ended_at=sandbox.ended,
             exit_code=exit_code,
         )
-        # Snapshot the overall config once, after the first server is up.
-        if not (save_dir / "config.json").exists():
-            write_config(
-                save_dir=save_dir,
-                args=args,
-                server=server,
-                dataset=dataset,
-                dataset_name=dataset_name,
-                solved_ids=solved_ids,
-                proxy_port=PROXY_PORT,
-                started_at=started_at,
-            )
 
     # Analysis is a separate pass run on demand.
     return 0

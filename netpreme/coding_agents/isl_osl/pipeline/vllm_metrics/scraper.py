@@ -26,7 +26,8 @@ class MetricsScraper:
     ``vllm:request_prompt_tokens_count`` and, each time it increments, records
     the delta of every other counter as that turn's row. Relies on
     **concurrency = 1** so each increment maps to exactly one turn. Rows are
-    RAW measurements appended to ``save_dir/telemetry/<instance_id>/vllm_metrics.jsonl``."""
+    RAW measurements appended to ``save_dir/telemetry/<instance_id>/vllm_metrics.jsonl``.
+    """
 
     def __init__(
         self,

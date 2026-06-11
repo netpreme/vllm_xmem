@@ -1,9 +1,10 @@
 """The reverse-proxy ASGI app: forward claude-cli ↔ vLLM, tee per-turn rows.
 
-``ProxyApp(upstream, out_dir, instance_id).build()`` returns a Starlette app
-that, for each `POST /v1/messages`, parses the JSON request + SSE response and
-appends one RAW row to `<out_dir>/<instance_id>/proxy.jsonl`; other paths
-stream through unchanged (e.g. /v1/models).
+``ProxyApp(upstream, out_dir, instance_id, raw=True).build()`` returns a
+Starlette app that, for each `POST /v1/messages`, sanitizes the request and
+(with raw capture) tees the per-turn text trace to
+`<out_dir>/<instance_id>/vllm_traces.jsonl`; other paths stream through
+unchanged (e.g. /v1/models).
 """
 
 from __future__ import annotations
@@ -18,11 +19,8 @@ from typing import Iterable
 import httpx
 from loguru import logger
 from pipeline.proxy.parse import (
-    ParsedRequest,
-    ParsedResponse,
     common_prefix_len,
-    parse_request,
-    parse_sse_response,
+    parse_response_text,
     request_units,
     rerole_system_messages,
 )
@@ -51,11 +49,10 @@ _HOP_BY_HOP_HEADERS: frozenset[str] = frozenset(
 
 @dataclass(frozen=True)
 class MessageRequest:
-    """Parsed and sanitized request state for one /v1/messages call."""
+    """Sanitized request state for one /v1/messages call."""
 
     body: dict | None
     forward_body: bytes
-    parsed: ParsedRequest
 
 
 class ProxyApp:
@@ -71,8 +68,7 @@ class ProxyApp:
     ) -> None:
         self.upstream = upstream.rstrip("/")
         self.instance_id = instance_id
-        self._writer = JsonlWriter(out_dir, "proxy.jsonl")
-        # With raw capture: also tee the raw text traces (isl_new + osl) to
+        # With raw capture: tee the raw text traces (isl_new + osl) to
         # vllm_traces.jsonl. `_prev_units` is the previous turn's request units, so each
         # turn's new suffix (isl_new as text) is a pure cross-turn string diff.
         self._raw_writer = JsonlWriter(out_dir, "vllm_traces.jsonl") if raw else None
@@ -130,22 +126,16 @@ class ProxyApp:
             request=request,
             body=message_request.forward_body,
         )
-        parsed_response = parse_sse_response(upstream_response.content)
 
-        if _should_skip_telemetry(message_request.body):
-            return _buffered_response(upstream_response)
-
-        self._write_proxy_row(
-            timestamp=timestamp,
-            parsed_request=message_request.parsed,
-            parsed_response=parsed_response,
-        )
-
-        if self._raw_writer is not None and message_request.body is not None:
+        if (
+            self._raw_writer is not None
+            and message_request.body is not None
+            and not _should_skip_telemetry(message_request.body)
+        ):
             self._write_raw(
                 timestamp=timestamp,
                 body=message_request.body,
-                parsed_response=parsed_response,
+                osl_text=parse_response_text(upstream_response.content),
             )
 
         return _buffered_response(upstream_response)
@@ -161,15 +151,10 @@ class ProxyApp:
             return MessageRequest(
                 body=body,
                 forward_body=json.dumps(body).encode(),
-                parsed=parse_request(body),
             )
         except (json.JSONDecodeError, ValueError) as exc:
             logger.warning("request parse error: {!r}", exc)
-            return MessageRequest(
-                body=None,
-                forward_body=raw_body,
-                parsed=_empty_parsed_request(),
-            )
+            return MessageRequest(body=None, forward_body=raw_body)
 
     async def _forward_buffered(
         self,
@@ -184,40 +169,12 @@ class ProxyApp:
             headers=_strip_hop_by_hop(request.headers.items()),
         )
 
-    def _write_proxy_row(
-        self,
-        timestamp: float,
-        parsed_request: ParsedRequest,
-        parsed_response: ParsedResponse,
-    ) -> None:
-        self._writer.write(
-            instance_id=self.instance_id,
-            row={
-                "ts": round(timestamp, 3),
-                "system_prompt_chars": parsed_request.system_prompt_chars,
-                "tools_chars": parsed_request.tools_chars,
-                "messages_chars": parsed_request.messages_chars,
-                "num_tool_defs": parsed_request.num_tool_defs,
-                "num_messages": parsed_request.num_messages,
-                "num_tool_calls": parsed_response.num_tool_calls,
-                "tool_names": parsed_response.tool_names,
-                "has_thinking": parsed_response.has_thinking,
-                "response_text_chars": parsed_response.response_text_chars,
-                "claude_stop_reason": parsed_response.claude_stop_reason,
-            },
-        )
-
-    def _write_raw(
-        self,
-        timestamp: float,
-        body: dict,
-        parsed_response: ParsedResponse,
-    ) -> None:
+    def _write_raw(self, timestamp: float, body: dict, osl_text: str) -> None:
         """Tee the raw text for this turn:
-          isl_text     — the full input (system + tools + messages),
-          isl_new_text — the input appended since the previous turn (cached
-                         prefix stripped off; == isl_text on the first turn),
-          osl_text     — the generated assistant text (incl. tool calls).
+        isl_text     — the full input (system + tools + messages),
+        isl_new_text — the input appended since the previous turn (cached
+                       prefix stripped off; == isl_text on the first turn),
+        osl_text     — the generated assistant text (incl. tool calls).
         """
         units = request_units(body)
         prefix_length = common_prefix_len(
@@ -233,7 +190,7 @@ class ProxyApp:
                 "ts": round(timestamp, 3),
                 "isl_text": "\n".join(units),
                 "isl_new_text": "\n".join(units[prefix_length:]),
-                "osl_text": parsed_response.response_text,
+                "osl_text": osl_text,
             },
         )
 
@@ -281,16 +238,6 @@ def _is_title_request(body: dict) -> bool:
             for block in system
         )
     return False
-
-
-def _empty_parsed_request() -> ParsedRequest:
-    return ParsedRequest(
-        system_prompt_chars=0,
-        tools_chars=0,
-        messages_chars=0,
-        num_tool_defs=0,
-        num_messages=0,
-    )
 
 
 def _buffered_response(

@@ -87,9 +87,18 @@ def solve(
     is returned, so a hung session can never block the benchmark."""
     prompt = PROMPT.format(**problem)
     capture = telemetry_dir is not None
-    command = _claude_command(prompt=prompt, model=model)
     proc = subprocess.Popen(
-        command,
+        [
+            "claude",
+            "-p",
+            prompt,
+            "--output-format",
+            "stream-json",
+            "--verbose",
+            "--dangerously-skip-permissions",
+            "--model",
+            model,
+        ],
         cwd=str(repo_dir),
         env=create_claude_env(model=model, url=url, oauth=oauth),
         stdin=subprocess.DEVNULL,
@@ -105,7 +114,7 @@ def solve(
         # transcript afterwards — stdout's usage.output_tokens is only a partial
         # mid-generation snapshot, which under-counts osl.
         reader = threading.Thread(
-            target=_drain_stdout_for_session_id,
+            target=get_session_id_from_logs,
             args=(proc.stdout, session_sink),
             daemon=True,
         )
@@ -137,21 +146,7 @@ def solve(
             )
 
 
-def _claude_command(prompt: str, model: str) -> list[str]:
-    return [
-        "claude",
-        "-p",
-        prompt,
-        "--output-format",
-        "stream-json",
-        "--verbose",
-        "--dangerously-skip-permissions",
-        "--model",
-        model,
-    ]
-
-
-def _drain_stdout_for_session_id(stdout, sink: dict) -> None:
+def get_session_id_from_logs(stdout, sink: dict) -> None:
     """Consume claude-cli's stream-json stdout (so the pipe never blocks) and
     grab the session id from the init event — used to find the on-disk
     transcript, which is the real telemetry source."""

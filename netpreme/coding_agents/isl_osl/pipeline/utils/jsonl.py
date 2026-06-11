@@ -1,7 +1,8 @@
 """Append-only per-problem JSONL writer (shared by the scraper + proxy).
 
 Each problem gets its own folder ``<telemetry_dir>/<instance_id>/`` holding
-``vllm_metrics.jsonl`` (scraper), ``proxy.jsonl`` (proxy) and ``session_config.json`` (runner).
+``vllm_metrics.jsonl`` (scraper), ``vllm_traces.jsonl`` (proxy raw capture) and
+``session_config.json`` (runner).
 """
 
 from __future__ import annotations
@@ -13,19 +14,16 @@ from pathlib import Path
 _SAFE_FILE_RE = re.compile(r"[^A-Za-z0-9_\-.]")
 
 
-def safe_instance_id(instance_id: str) -> str:
-    """Filesystem-safe form of an instance id (used as the folder name)."""
-    return _SAFE_FILE_RE.sub("_", instance_id)[:200]
-
-
 def instance_dir(telemetry_dir: Path, instance_id: str) -> Path:
-    """The per-problem folder ``<telemetry_dir>/<instance_id>/``."""
-    return telemetry_dir / safe_instance_id(instance_id)
+    """The per-problem folder ``<telemetry_dir>/<instance_id>/``, with the id
+    made filesystem-safe (used as the folder name)."""
+    return telemetry_dir / _SAFE_FILE_RE.sub("_", instance_id)[:200]
 
 
 class JsonlWriter:
     """Append-only writer: one ``<telemetry_dir>/<instance_id>/<filename>`` per
-    id. `filename` is e.g. ``vllm_metrics.jsonl`` (scraper) or ``proxy.jsonl`` (proxy)."""
+    id. `filename` is e.g. ``vllm_metrics.jsonl`` (scraper) or ``vllm_traces.jsonl`` (proxy).
+    """
 
     def __init__(self, telemetry_dir: Path, filename: str) -> None:
         self._dir = telemetry_dir

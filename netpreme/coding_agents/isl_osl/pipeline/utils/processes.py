@@ -16,6 +16,35 @@ def process_family(root: psutil.Process) -> list[psutil.Process]:
     return [*descendants, root]
 
 
+def processes_with_env(var: str, value: str) -> list[psutil.Process]:
+    """Processes whose environment has ``var == value`` (e.g. a port tag)."""
+    matched: list[psutil.Process] = []
+    for process in psutil.process_iter(["pid"]):
+        try:
+            if process.environ().get(var) == value:
+                matched.append(process)
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            continue
+    return matched
+
+
+def process_listening_on_port(port: int) -> psutil.Process | None:
+    """The process holding a LISTEN socket on ``port``; None if none/unreadable."""
+    try:
+        connections = psutil.net_connections(kind="inet")
+    except (psutil.AccessDenied, psutil.Error):
+        return None
+    for connection in connections:
+        if connection.pid is None or connection.status != psutil.CONN_LISTEN:
+            continue
+        if connection.laddr and connection.laddr.port == port:
+            try:
+                return psutil.Process(connection.pid)
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                return None
+    return None
+
+
 def terminate_process_tree(pid: int, grace_seconds: float) -> list[int]:
     """Terminate one process tree; kill survivors after ``grace_seconds``."""
     try:
@@ -30,7 +59,7 @@ def terminate_processes(
     grace_seconds: float,
 ) -> list[int]:
     """Terminate a deduplicated process list; kill survivors after grace."""
-    targets = _unique_processes(processes)
+    targets = unique_processes(processes)
     if not targets:
         return []
 
@@ -49,7 +78,7 @@ def terminate_processes(
     return [process.pid for process in targets]
 
 
-def _unique_processes(processes: Iterable[psutil.Process]) -> list[psutil.Process]:
+def unique_processes(processes: Iterable[psutil.Process]) -> list[psutil.Process]:
     seen_pids: set[int] = set()
     unique_processes: list[psutil.Process] = []
     for process in processes:

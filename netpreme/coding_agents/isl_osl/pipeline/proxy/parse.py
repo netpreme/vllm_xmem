@@ -8,28 +8,6 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass, field
-
-
-@dataclass(frozen=True)
-class ParsedRequest:
-    system_prompt_chars: int  # text of the top-level `system` field
-    tools_chars: int  # serialized `tools` array
-    messages_chars: int  # serialized `messages` array (problem + history)
-    num_tool_defs: int
-    num_messages: int
-
-
-def parse_request(body: dict) -> ParsedRequest:
-    tools = body.get("tools") or []
-    messages = body.get("messages") or []
-    return ParsedRequest(
-        system_prompt_chars=len(_system_prompt_text(body)),
-        tools_chars=len(json.dumps(tools)) if tools else 0,
-        messages_chars=len(json.dumps(messages)) if messages else 0,
-        num_tool_defs=len(tools),
-        num_messages=len(messages),
-    )
 
 
 def rerole_system_messages(body: dict) -> int:
@@ -54,17 +32,6 @@ def rerole_system_messages(body: dict) -> int:
 # Anthropic SSE stream:
 #   content_block_start  {content_block: {type, ...}}
 #   content_block_delta  {delta: {type, text | partial_json | thinking}}
-#   message_delta        {delta: {stop_reason}}
-
-
-@dataclass
-class ParsedResponse:
-    num_tool_calls: int = 0
-    tool_names: list[str] = field(default_factory=list)
-    has_thinking: bool = False
-    response_text_chars: int = 0
-    claude_stop_reason: str = ""
-    response_text: str = ""  # the raw generated assistant text (osl as text)
 
 
 # claude-cli prepends a per-request billing header to the system prompt, e.g.
@@ -109,8 +76,11 @@ def common_prefix_len(previous_units: list[str], current_units: list[str]) -> in
     return prefix_length
 
 
-def parse_sse_response(body: bytes) -> ParsedResponse:
-    parsed = ParsedResponse()
+def parse_response_text(body: bytes) -> str:
+    """The generated assistant text for one turn (osl as text): visible text,
+    streamed tool-call args, reasoning, and a marker per tool call — tool calls
+    ARE output tokens, so they're included."""
+    parts: list[str] = []
     text = body.decode("utf-8", errors="replace")
     for record in text.split("\n\n"):
         data = ""
@@ -127,36 +97,18 @@ def parse_sse_response(body: bytes) -> ParsedResponse:
         event_type = event.get("type")
         if event_type == "content_block_start":
             block = event.get("content_block") or {}
-            block_type = block.get("type")
-            if block_type == "tool_use":
-                parsed.num_tool_calls += 1
-                name = block.get("name") or ""
-                if name:
-                    parsed.tool_names.append(name)
-                # osl text: tool calls ARE output tokens, so include them.
-                parsed.response_text += f"\n[tool_use:{name}] "
-            elif block_type == "thinking":
-                parsed.has_thinking = True
+            if block.get("type") == "tool_use":
+                parts.append(f"\n[tool_use:{block.get('name') or ''}] ")
         elif event_type == "content_block_delta":
             delta = event.get("delta") or {}
             delta_type = delta.get("type")
-            # response_text (osl as text) accumulates every generated token:
-            # visible text, streamed tool-call args, and reasoning. Only
-            # text_delta counts toward response_text_chars (the metadata's
-            # visible-text length stays as-is).
             if delta_type == "text_delta":
-                chunk = delta.get("text") or ""
-                parsed.response_text_chars += len(chunk)
-                parsed.response_text += chunk
+                parts.append(delta.get("text") or "")
             elif delta_type == "input_json_delta":
-                parsed.response_text += delta.get("partial_json") or ""
+                parts.append(delta.get("partial_json") or "")
             elif delta_type == "thinking_delta":
-                parsed.response_text += delta.get("thinking") or ""
-        elif event_type == "message_delta":
-            stop_reason = (event.get("delta") or {}).get("stop_reason")
-            if stop_reason:
-                parsed.claude_stop_reason = stop_reason
-    return parsed
+                parts.append(delta.get("thinking") or "")
+    return "".join(parts)
 
 
 def _system_prompt_text(body: dict) -> str:

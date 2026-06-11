@@ -60,9 +60,8 @@ class Proxy:
             return self  # no proxy; claude talks to vLLM directly
 
         # Truncate any prior file for this id (retry-on-resume safety).
-        idir = instance_dir(self.out_dir, self.instance_id)
-        (idir / "proxy.jsonl").unlink(missing_ok=True)
         if self.raw:
+            idir = instance_dir(self.out_dir, self.instance_id)
             (idir / "vllm_traces.jsonl").unlink(missing_ok=True)
         app = ProxyApp(
             self.url,

@@ -48,7 +48,7 @@ def get_model_name(url: str) -> str:
 
 
 @contextmanager
-def _nvml():
+def nvml_context():
     """NVML init/shutdown guard; yields the pynvml module. Raises NVMLError if
     the driver/library is unavailable — callers decide the fallback."""
     pynvml.nvmlInit()
@@ -64,7 +64,7 @@ def _nvml():
 def gpu_used_mib() -> int:
     """GPU 0 memory in use (MiB), via NVML; 0 if it can't be read."""
     try:
-        with _nvml() as nv:
+        with nvml_context() as nv:
             handle = nv.nvmlDeviceGetHandleByIndex(0)
             return nv.nvmlDeviceGetMemoryInfo(handle).used // (1024 * 1024)
     except pynvml.NVMLError:
@@ -75,7 +75,7 @@ def gpu_info() -> dict:
     """GPU name / count / total-memory (MiB) of device 0, via NVML; {} if
     unavailable."""
     try:
-        with _nvml() as nv:
+        with nvml_context() as nv:
             count = nv.nvmlDeviceGetCount()
             if not count:
                 return {}
@@ -91,11 +91,11 @@ def gpu_info() -> dict:
 # Version / log / .env readers.
 
 
-def vllm_version() -> str:
-    """Installed vLLM distribution version (cheap — no package import); '' if
+def get_package_version(package: str) -> str:
+    """Installed distribution version of `package` (cheap — no import); '' if
     not installed."""
     try:
-        return version("vllm")
+        return version(package)
     except PackageNotFoundError:
         return ""
 

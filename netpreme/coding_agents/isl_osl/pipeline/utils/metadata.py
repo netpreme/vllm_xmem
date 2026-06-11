@@ -24,7 +24,7 @@ from loguru import logger
 
 from pipeline.claude import claude_version
 from pipeline.utils.jsonl import instance_dir
-from pipeline.vllm_server import Server, _read_env_file, gpu_info, vllm_version
+from pipeline.vllm_server import Server, _read_env_file, get_package_version, gpu_info
 
 
 def write_config(
@@ -39,15 +39,18 @@ def write_config(
     started_at: float,
 ) -> None:
     """Snapshot the overall config for this run to ``config.json``."""
+    serving_config = server.serving_config()
     config = {
         "stamp": save_dir.name,
         "started_at": round(started_at, 3),
         "command": " ".join(sys.argv),
         "backend": args.backend,
-        "model": server.model,  # resolved served name; the analysis model label
+        # served model resolved from args/env/.env (no running server needed);
+        # the analysis model label.
+        "model": serving_config["model"],
         "capture": args.capture,
         "args": vars(args),
-        "serving_config": server.serving_config(),
+        "serving_config": serving_config,
         "dotenv": _read_env_file(),
         "dataset": {
             "name": dataset_name,
@@ -57,7 +60,7 @@ def write_config(
         "ports": {"vllm": server.port, "proxy": proxy_port, "vllm_url": server.url},
         "versions": {
             "claude": claude_version(),
-            "vllm": vllm_version(),
+            "vllm": get_package_version("vllm"),
             "python": platform.python_version(),
             "platform": platform.platform(),
         },

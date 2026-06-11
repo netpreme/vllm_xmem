@@ -107,8 +107,8 @@ those transcripts.
               │ POSTs /v1/messages, one per turn
               ▼
    ┌──────────────────────┐
-   │   agent_labeler      │   parse request body + SSE response →
-   │   (reverse proxy)    │   append row to telemetry/<iid>/proxy.jsonl
+   │   reverse proxy      │   (with --capture) tee per-turn raw text →
+   │                      │   telemetry/<iid>/vllm_traces.jsonl
    └──────────┬───────────┘
               │ forwards unmodified
               ▼
@@ -126,8 +126,8 @@ those transcripts.
                                     │     .vllm_metrics.jsonl  │
                                     └──────────────────────────┘
 
-   Per-turn telemetry lands in telemetry/<iid>/ (.vllm_metrics.jsonl +
-   .proxy.jsonl). Joining and plotting it is a separate analysis pass.
+   Per-turn telemetry lands in telemetry/<iid>/ (.vllm_metrics.jsonl, plus
+   .vllm_traces.jsonl with --capture). Joining/plotting is a separate analysis pass.
 ```
 
 
@@ -135,8 +135,7 @@ those transcripts.
 
 - `config.json` — overall run config (CLI args, serving config, resolved model, dataset name + counts, versions, GPU info)
 - `telemetry/<id>/vllm_metrics.jsonl` — one row per assistant turn (vLLM metrics, or derived Anthropic usage)
-- `telemetry/<id>/proxy.jsonl` — one row per `/v1/messages` (proxy-side raw metrics; only with `--capture`)
-- `telemetry/<id>/vllm_traces.jsonl` — raw text/token-id trace when available
+- `telemetry/<id>/vllm_traces.jsonl` — per-turn raw text trace (isl/isl_new/osl as text); only with `--capture`
 - `telemetry/<id>/claude_transcript.jsonl` — Anthropic/OAuth transcript source, when using that backend
 - `telemetry/<id>/session_config.json` — per-problem config (instance_id, repo/commit, server, model, started_at, ended_at, exit_code, ...)
 
