@@ -30,6 +30,7 @@ from urllib.parse import urlparse
 import psutil
 from loguru import logger
 
+from pipeline.utils.processes import process_family, terminate_processes
 from pipeline.vllm_server.utils import (
     ENV_PATH,
     LOG,
@@ -49,14 +50,7 @@ class Server:
     back to server.sh's .env/defaults (warned once). ``server_args`` forward
     straight to `vllm serve`."""
 
-    # vLLM forks an EngineCore worker that escapes a plain process-group
-    # kill, so (like `pkill -f`) we match the whole tree by cmdline substring.
-    _KILL_PATTERNS = (
-        "vllm serve",
-        "VLLM::EngineCore",
-        "vllm.v1.engine",
-        "multiprocessing.resource_tracker",
-    )
+    _ENV_PORT = "CODING_AGENTS_VLLM_PORT"
     _GPU_RELEASE_TIMEOUT = 60.0
     _READY_TIMEOUT = 600.0
     _TERM_GRACE_S = 5.0  # let vLLM unlink its /dev/shm IPC before we SIGKILL
@@ -66,6 +60,7 @@ class Server:
         self,
         url: str,
         *,
+        remote: bool = False,
         model: str | None = None,
         tensor_parallel_size: int | None = None,
         max_model_len: int | None = None,
@@ -73,6 +68,11 @@ class Server:
         tool_call_parser: str | None = None,
         server_args: tuple[str, ...] = (),
     ) -> None:
+        # remote=True (Anthropic backend): no local vLLM. claude-cli talks
+        # directly to Anthropic via its own OAuth; we only carry `url` (the
+        # Anthropic API URL) and `model` through so the uniform with-block
+        # works for both backends.
+        self.remote = remote
         self.url = url
         self.port = urlparse(url).port or 8000
         self.model = model
@@ -85,6 +85,13 @@ class Server:
 
     # -- lifecycle ---------------------------------------------------------
     def __enter__(self) -> Server:
+        if self.remote:
+            logger.info(
+                "anthropic backend at {} — model={} (no local vllm)",
+                self.url,
+                self.model,
+            )
+            return self
         logger.info("starting vllm at {}", self.url)
         self._stop()  # clear any stale server first
         self._proc = subprocess.Popen(
@@ -111,11 +118,13 @@ class Server:
         logger.info(
             "vllm ready at {} — {}",
             self.url,
-            " ".join(f"{k}={v}" for k, v in self.serving_config().items()),
+            " ".join(f"{key}={value}" for key, value in self.serving_config().items()),
         )
         return self
 
     def __exit__(self, *exc) -> bool:
+        if self.remote:
+            return False
         logger.info("stopping vllm at {}", self.url)
         self._stop()
         return False
@@ -131,10 +140,11 @@ class Server:
             "GPU_MEMORY_UTILIZATION": self.gpu_memory_utilization,
             "TOOL_CALL_PARSER": self.tool_call_parser,
         }
-        for var, val in knobs.items():
-            if val is not None:
-                env[var] = str(val)
+        for env_name, value in knobs.items():
+            if value is not None:
+                env[env_name] = str(value)
         env["PORT"] = str(self.port)
+        env[self._ENV_PORT] = str(self.port)
         # Launch vLLM with the SAME interpreter that's running this process —
         # i.e. whatever env the user invoked main.py with — so server.sh never
         # hardcodes a venv path. (Our anthropic-serving patches live in that
@@ -144,7 +154,9 @@ class Server:
         # Not passed AND not set in the environment → server.sh falls back
         # to its .env/defaults; worth a one-time heads-up.
         missing = [
-            var for var, val in knobs.items() if val is None and var not in os.environ
+            env_name
+            for env_name, value in knobs.items()
+            if value is None and env_name not in os.environ
         ]
         if missing and not Server._warned:
             logger.warning(
@@ -160,10 +172,14 @@ class Server:
         and run metadata."""
         dotenv = _read_env_file()
 
-        def pick(var: str, val: object) -> str:
-            if val is not None:
-                return str(val)
-            return os.environ.get(var) or dotenv.get(var) or "(server.sh default)"
+        def pick(env_name: str, value: object) -> str:
+            if value is not None:
+                return str(value)
+            return (
+                os.environ.get(env_name)
+                or dotenv.get(env_name)
+                or "(server.sh default)"
+            )
 
         return {
             "model": pick("MODEL_NAME", self.model),
@@ -176,38 +192,70 @@ class Server:
 
     # -- process control ---------------------------------------------------
     def _stop(self) -> None:
-        self._kill_vllm()
+        killed = self._kill_vllm()
         self._wait_port_free()
         self._wait_gpu_free()
-        self._clean_shm()
+        if killed:
+            self._clean_shm()
 
-    def _kill_vllm(self) -> None:
-        procs = []
-        for proc in psutil.process_iter(["cmdline"]):
-            try:
-                cmdline = " ".join(proc.info["cmdline"] or [])
-            except (psutil.NoSuchProcess, psutil.AccessDenied):
-                continue
-            if any(pattern in cmdline for pattern in self._KILL_PATTERNS):
-                procs.append(proc)
-        if not procs:
-            return
+    def _kill_vllm(self) -> int:
+        processes = self._server_processes()
+        if not processes:
+            return 0
 
         # SIGTERM first so vLLM can unlink its own /dev/shm/psm_* IPC segments;
-        # SIGKILL whatever ignores it within the grace window (the forked
-        # EngineCore often does — _clean_shm then mops up its leaked segment).
-        for proc in procs:
+        # SIGKILL whatever ignores it within the grace window.
+        killed_pids = terminate_processes(processes, self._TERM_GRACE_S)
+        logger.info("killed vllm pids {}", killed_pids)
+        return len(killed_pids)
+
+    def _server_processes(self) -> list[psutil.Process]:
+        """Processes owned by this harness on this configured server port."""
+        root_processes: list[psutil.Process] = []
+        if self._proc is not None and self._proc.poll() is None:
             try:
-                proc.terminate()
+                root_processes.append(psutil.Process(self._proc.pid))
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 pass
-        _, alive = psutil.wait_procs(procs, timeout=self._TERM_GRACE_S)
-        for proc in alive:
+
+        root_processes.extend(self._processes_with_port_tag())
+        port_owner = self._process_listening_on_port()
+        if port_owner is not None:
+            root_processes.append(port_owner)
+
+        seen: set[int] = set()
+        processes: list[psutil.Process] = []
+        for root_process in root_processes:
+            for process in process_family(root_process):
+                if process.pid not in seen:
+                    seen.add(process.pid)
+                    processes.append(process)
+        return processes
+
+    def _processes_with_port_tag(self) -> list[psutil.Process]:
+        tagged_processes = []
+        for process in psutil.process_iter(["pid"]):
             try:
-                proc.kill()
+                if process.environ().get(self._ENV_PORT) == str(self.port):
+                    tagged_processes.append(process)
             except (psutil.NoSuchProcess, psutil.AccessDenied):
-                pass
-        logger.info("killed vllm pids {}", [proc.pid for proc in procs])
+                continue
+        return tagged_processes
+
+    def _process_listening_on_port(self) -> psutil.Process | None:
+        try:
+            connections = psutil.net_connections(kind="inet")
+        except (psutil.AccessDenied, psutil.Error):
+            return None
+        for connection in connections:
+            if connection.pid is None or connection.status != psutil.CONN_LISTEN:
+                continue
+            if connection.laddr and connection.laddr.port == self.port:
+                try:
+                    return psutil.Process(connection.pid)
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    return None
+        return None
 
     def _clean_shm(self) -> None:
         """Remove orphaned vLLM IPC segments from /dev/shm.
@@ -216,11 +264,11 @@ class Server:
         IPC and leaks it when SIGKILLed. Left to pile up they fill /dev/shm (a
         64 MiB container default is common), and the NEXT vLLM dies on its
         first request — the engine inits on the GPU fine, then can't allocate
-        IPC shm. We've just killed every vLLM, so any psm_* are orphaned."""
+        IPC shm. We run this only after killing a server owned by this harness."""
         removed = 0
-        for seg in Path("/dev/shm").glob("psm_*"):
+        for shared_memory_segment in Path("/dev/shm").glob("psm_*"):
             try:
-                seg.unlink()
+                shared_memory_segment.unlink()
                 removed += 1
             except OSError:
                 pass

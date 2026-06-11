@@ -26,7 +26,7 @@ class MetricsScraper:
     ``vllm:request_prompt_tokens_count`` and, each time it increments, records
     the delta of every other counter as that turn's row. Relies on
     **concurrency = 1** so each increment maps to exactly one turn. Rows are
-    RAW measurements appended to ``save_dir/telemetry/<instance_id>/vllm.jsonl``."""
+    RAW measurements appended to ``save_dir/telemetry/<instance_id>/vllm_metrics.jsonl``."""
 
     def __init__(
         self,
@@ -34,7 +34,12 @@ class MetricsScraper:
         save_dir: Path,
         instance_id: str,
         poll_interval_s: float = 0.1,
+        *,
+        enabled: bool = True,
     ) -> None:
+        # enabled=False (Anthropic backend): no local vLLM to scrape, so this
+        # is a no-op context manager. Kept in the with-block uniformly.
+        self.enabled = enabled
         self.save_dir = save_dir
         self.instance_id = instance_id
         self.out_dir = save_dir / "telemetry"
@@ -49,8 +54,10 @@ class MetricsScraper:
         self._thread: threading.Thread | None = None
 
     def __enter__(self) -> MetricsScraper:
+        if not self.enabled:
+            return self
         # Truncate any prior file for this id (retry-on-resume safety).
-        (instance_dir(self.out_dir, self.instance_id) / "vllm.jsonl").unlink(
+        (instance_dir(self.out_dir, self.instance_id) / "vllm_metrics.jsonl").unlink(
             missing_ok=True
         )
         self._thread = threading.Thread(
@@ -64,6 +71,8 @@ class MetricsScraper:
         return self
 
     def __exit__(self, *exc) -> bool:
+        if not self.enabled:
+            return False
         self._stop.set()
         if self._thread is not None:
             self._thread.join(timeout=15)
@@ -85,7 +94,7 @@ class Poller:
     ) -> None:
         self._url = url.rstrip("/")
         self._instance_id = instance_id
-        self._out = JsonlWriter(out_dir, "vllm.jsonl")
+        self._out = JsonlWriter(out_dir, "vllm_metrics.jsonl")
         self._poll_interval_s = poll_interval_s
 
     def run_blocking(self, stop_event: threading.Event) -> None:

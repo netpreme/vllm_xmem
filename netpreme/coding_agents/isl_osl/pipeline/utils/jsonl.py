@@ -1,7 +1,7 @@
 """Append-only per-problem JSONL writer (shared by the scraper + proxy).
 
 Each problem gets its own folder ``<telemetry_dir>/<instance_id>/`` holding
-``vllm.jsonl`` (scraper), ``proxy.jsonl`` (proxy) and ``meta.json`` (runner).
+``vllm_metrics.jsonl`` (scraper), ``proxy.jsonl`` (proxy) and ``session_config.json`` (runner).
 """
 
 from __future__ import annotations
@@ -25,7 +25,7 @@ def instance_dir(telemetry_dir: Path, instance_id: str) -> Path:
 
 class JsonlWriter:
     """Append-only writer: one ``<telemetry_dir>/<instance_id>/<filename>`` per
-    id. `filename` is e.g. ``vllm.jsonl`` (scraper) or ``proxy.jsonl`` (proxy)."""
+    id. `filename` is e.g. ``vllm_metrics.jsonl`` (scraper) or ``proxy.jsonl`` (proxy)."""
 
     def __init__(self, telemetry_dir: Path, filename: str) -> None:
         self._dir = telemetry_dir

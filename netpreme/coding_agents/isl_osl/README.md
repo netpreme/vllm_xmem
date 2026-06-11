@@ -47,13 +47,12 @@ Simulating a single coding agent run in an isolated environment, coding problems
 ## How to run
 
 ```bash
-bash ../server.sh > /tmp/vllm.log 2>&1 &      # start vLLM (initial boot)
-./main.py                      # all 500 SWE-bench Verified problems
-./analyze.sh runs/<stamp>                     # (main.py already calls this; only re-run if you tweak plots)
+python main.py --capture          # all pending SWE-bench Verified problems
+# analysis is a separate pass over results/<stamp>/ (out of scope here)
 ```
 
-To swap the served model, pass the flags to `main.py` — between problems
-`reset_vllm.sh` relaunches the server, picking up the overridden env vars:
+`main.py` starts a fresh vLLM server per problem. To swap the served model, pass
+the flags to `main.py`; CLI flags win over `.env` defaults:
 
 ```bash
 # Qwen3-Coder
@@ -67,16 +66,20 @@ To swap the served model, pass the flags to `main.py` — between problems
 
 | flag | default | meaning |
 |---|---|---|
-| `--dataset NAME`               | `verified` | benchmark dataset: `verified` ([SWE-bench Verified](https://huggingface.co/datasets/princeton-nlp/SWE-bench_Verified)) or `swe-bench-pro` ([SWE-bench Pro public set](https://huggingface.co/datasets/ScaleAI/SWE-bench_Pro)) |
-| `--limit N`                    | 500   | use the first `N` problems |
-| `--random N --seed S`          | —     | random sample of `N` problems (overrides `--limit`) |
-| `--model HF_ID`                | `Qwen/Qwen3-Coder-30B-A3B-Instruct-FP8` | model id; what claude sends AND what vLLM serves |
+| `--backend NAME`               | `vllm` | `vllm` serves locally and scrapes Prometheus; `anthropic` uses Claude OAuth and saves transcripts for later analysis |
+| `--dataset NAME`               | `verified` | benchmark dataset: `verified` ([SWE-bench Verified](https://huggingface.co/datasets/princeton-nlp/SWE-bench_Verified)) or `pro` ([SWE-bench Pro public set](https://huggingface.co/datasets/ScaleAI/SWE-bench_Pro)) |
+| `--capture [raw]`              | —     | enable proxy capture of per-turn request/response metadata and raw text/token ids |
+| `--limit N`                    | all pending problems | run at most `N` pending problems |
+| `--resume SAVE_DIR`            | —     | reuse an existing run directory and skip problems with `exit_code == 0` |
+| `--model HF_ID`                | `server.sh` / `.env` | model id; required for `--backend anthropic` |
 | `--tool-call-parser NAME`      | `qwen3_coder` | vLLM's tool-call parser. Must match the model family (`qwen3_coder` for Qwen, `gpt_oss` for GPT-OSS, `hermes` / `mistral` / `llama3_json` for others) |
 | `--tensor-parallel-size N`     | `1`   | vLLM `--tensor-parallel-size` (bump for multi-GPU) |
 | `--max-model-len N`            | `262144` | vLLM `--max-model-len`; cap is the model's `max_position_embeddings` |
 | `--gpu-memory-utilization F`   | `0.90` | vLLM `--gpu-memory-utilization` (0-1) |
 
-All vLLM-side flags are exported as env vars before `reset_vllm.sh` runs, so the cold-restarted server picks them up. The same vars can also be set in `../.env`; CLI flags win over `.env` defaults.
+For Anthropic/OAuth runs, `main.py` copies `claude_transcript.jsonl` files; a
+separate analysis pass derives `vllm_metrics.jsonl` and `vllm_traces.jsonl` from
+those transcripts.
 
 
 ## Setup
@@ -105,7 +108,7 @@ All vLLM-side flags are exported as env vars before `reset_vllm.sh` runs, so the
               ▼
    ┌──────────────────────┐
    │   agent_labeler      │   parse request body + SSE response →
-   │   (reverse proxy)    │   append row to per_problem/<iid>.proxy.jsonl
+   │   (reverse proxy)    │   append row to telemetry/<iid>/proxy.jsonl
    └──────────┬───────────┘
               │ forwards unmodified
               ▼
@@ -119,26 +122,26 @@ All vLLM-side flags are exported as env vars before `reset_vllm.sh` runs, so the
    │  (next turn, repeat) │         │   on each completion:    │
    └──────────────────────┘         │     · diff counters      │
                                     │     · append row to      │
-                                    │       per_problem/<iid>  │
-                                    │       .vllm.jsonl        │
+                                    │       telemetry/<iid>    │
+                                    │     .vllm_metrics.jsonl  │
                                     └──────────────────────────┘
-                                                  │
-                                                  ▼
-                                     analyze.sh ─► data.npz + figures
-                                     (joins .vllm.jsonl + .proxy.jsonl on turn index)
+
+   Per-turn telemetry lands in telemetry/<iid>/ (.vllm_metrics.jsonl +
+   .proxy.jsonl). Joining and plotting it is a separate analysis pass.
 ```
 
 
-## Per-run output (`runs/<stamp>/`)
+## Per-run output (`results/<stamp>/`)
 
-- `run_meta.json`, `problems.jsonl`, `solved.txt`
-- `per_problem/<id>.vllm.jsonl` — one row per assistant turn (vLLM-side raw metrics)
-- `per_problem/<id>.proxy.jsonl` — one row per `/v1/messages` (proxy-side raw metrics; only with `--capture`)
-- `per_problem/<id>.meta.json` — per-problem metadata (difficulty, started_at, ended_at, exit_code, …)
-- `.active_instance` — control file used by both sidecars to attribute turns
-- `.agent_labeler.log`, `.metrics_watcher.log` — sidecar stderr
-- `data.npz` — canonical per-turn array (built by `analyze.sh` — joins the two JSONL streams on turn index)
-- `analysis/*.png` — figures
+- `config.json` — overall run config (CLI args, serving config, resolved model, dataset name + counts, versions, GPU info)
+- `telemetry/<id>/vllm_metrics.jsonl` — one row per assistant turn (vLLM metrics, or derived Anthropic usage)
+- `telemetry/<id>/proxy.jsonl` — one row per `/v1/messages` (proxy-side raw metrics; only with `--capture`)
+- `telemetry/<id>/vllm_traces.jsonl` — raw text/token-id trace when available
+- `telemetry/<id>/claude_transcript.jsonl` — Anthropic/OAuth transcript source, when using that backend
+- `telemetry/<id>/session_config.json` — per-problem config (instance_id, repo/commit, server, model, started_at, ended_at, exit_code, ...)
+
+Joining, deriving `data.npz`, and plotting figures from these files is a
+separate analysis pass, out of scope for the runner.
 
 
 ## Results

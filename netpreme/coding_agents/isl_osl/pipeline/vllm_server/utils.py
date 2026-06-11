@@ -29,8 +29,8 @@ def check_server_initialized(url: str, timeout: float) -> bool:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         try:
-            with urllib.request.urlopen(url, timeout=1.0) as r:
-                if 200 <= r.status < 300:
+            with urllib.request.urlopen(url, timeout=1.0) as response:
+                if 200 <= response.status < 300:
                     return True
         except (urllib.error.URLError, ConnectionError, OSError):
             pass
@@ -40,8 +40,8 @@ def check_server_initialized(url: str, timeout: float) -> bool:
 
 def get_model_name(url: str) -> str:
     """Ask vLLM which model it's serving — that's what claude-cli sends."""
-    with urllib.request.urlopen(f"{url}/v1/models", timeout=2.0) as r:
-        return json.loads(r.read())["data"][0]["id"]
+    with urllib.request.urlopen(f"{url}/v1/models", timeout=2.0) as response:
+        return json.loads(response.read())["data"][0]["id"]
 
 
 # GPU / NVML helpers.
@@ -100,24 +100,24 @@ def vllm_version() -> str:
         return ""
 
 
-def read_tail(n: int = 40) -> str:
-    """Last `n` lines of the vLLM server log."""
+def read_tail(line_count: int = 40) -> str:
+    """Last `line_count` lines of the vLLM server log."""
     try:
-        return "\n".join(LOG.read_text().splitlines()[-n:])
+        return "\n".join(LOG.read_text().splitlines()[-line_count:])
     except OSError:
         return ""
 
 
 def _read_env_file() -> dict[str, str]:
     """Parse server.sh's .env (KEY=VALUE, ignoring comments) — for display."""
-    out: dict[str, str] = {}
+    env_values: dict[str, str] = {}
     try:
         for line in ENV_PATH.read_text().splitlines():
             line = line.strip()
             if not line or line.startswith("#") or "=" not in line:
                 continue
-            key, val = line.split("=", 1)
-            out[key.strip()] = val.split("#", 1)[0].strip()
+            key, value = line.split("=", 1)
+            env_values[key.strip()] = value.split("#", 1)[0].strip()
     except OSError:
         pass
-    return out
+    return env_values

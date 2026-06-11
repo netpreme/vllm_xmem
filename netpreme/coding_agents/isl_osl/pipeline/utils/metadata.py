@@ -2,11 +2,13 @@
 
 Two JSON snapshots of a run:
 
-- ``write_run_config`` — once per run, ``run_config.json``: the full CLI args,
-  the running server's resolved serving knobs (arg → os env → .env, incl. the
-  actually-served model), the raw .env, the dataset selection, ports, versions.
-- ``write_meta`` — once per problem, ``telemetry/<iid>/meta.json``: the
-  problem's repo/commit, timing and exit code. Doubles as the resume ledger
+- ``write_config`` — once per run, ``config.json``: the overall config — full
+  CLI args, the running server's resolved serving knobs (arg → os env → .env,
+  incl. the actually-served model) and that model as a top-level label, the raw
+  .env, the dataset selection (name + counts), ports, versions, gpu.
+- ``save_session_metadata`` — once per problem,
+  ``telemetry/<iid>/session_config.json``: the problem's id/repo/commit, the
+  server + resolved model, timing and exit code. Doubles as the resume ledger
   (main.py reads ``exit_code == 0`` to skip solved problems).
 """
 
@@ -25,7 +27,7 @@ from pipeline.utils.jsonl import instance_dir
 from pipeline.vllm_server import Server, _read_env_file, gpu_info, vllm_version
 
 
-def write_run_config(
+def write_config(
     *,
     save_dir: Path,
     args: argparse.Namespace,
@@ -36,11 +38,14 @@ def write_run_config(
     proxy_port: int,
     started_at: float,
 ) -> None:
-    """Snapshot every input/knob for this run to ``run_config.json``."""
+    """Snapshot the overall config for this run to ``config.json``."""
     config = {
         "stamp": save_dir.name,
         "started_at": round(started_at, 3),
         "command": " ".join(sys.argv),
+        "backend": args.backend,
+        "model": server.model,  # resolved served name; the analysis model label
+        "capture": args.capture,
         "args": vars(args),
         "serving_config": server.serving_config(),
         "dotenv": _read_env_file(),
@@ -48,7 +53,6 @@ def write_run_config(
             "name": dataset_name,
             "pending": len(dataset),
             "skipped_solved": len(solved_ids),
-            "instance_ids": [task["instance_id"] for task in dataset],
         },
         "ports": {"vllm": server.port, "proxy": proxy_port, "vllm_url": server.url},
         "versions": {
@@ -60,26 +64,35 @@ def write_run_config(
         "gpu": gpu_info(),
     }
     # default=str so Path args (e.g. --resume) serialize cleanly.
-    (save_dir / "run_config.json").write_text(
+    (save_dir / "config.json").write_text(
         json.dumps(config, indent=2, default=str) + "\n"
     )
-    logger.info("wrote run config → {}", save_dir / "run_config.json")
+    logger.info("wrote config → {}", save_dir / "config.json")
 
 
-def write_meta(
-    save_dir: Path, task: dict, started_at: float, ended_at: float, exit_code: int
+def save_session_metadata(
+    save_dir: Path,
+    task: dict,
+    server: Server,
+    started_at: float,
+    ended_at: float,
+    exit_code: int,
 ) -> None:
-    """Record one problem's run metadata under telemetry/<iid>/meta.json."""
+    """Record one problem's session config under telemetry/<iid>/session_config.json."""
     iid = task["instance_id"]
     problem_dir = instance_dir(save_dir / "telemetry", iid)
     problem_dir.mkdir(parents=True, exist_ok=True)
-    meta = {
+    session = {
         "instance_id": iid,
         "difficulty": task.get("difficulty"),
         "repo": task.get("repo"),
         "base_commit": task.get("base_commit"),
+        "model": server.model,
+        "serving_config": server.serving_config(),
         "started_at": round(started_at, 3),
         "ended_at": round(ended_at, 3),
         "exit_code": exit_code,
     }
-    (problem_dir / "meta.json").write_text(json.dumps(meta, indent=2) + "\n")
+    (problem_dir / "session_config.json").write_text(
+        json.dumps(session, indent=2) + "\n"
+    )

@@ -37,8 +37,6 @@ class Proxy:
         proxy_port: int = 8001,
         capture: bool = False,
         raw: bool = False,
-        write_metrics: bool = False,
-        inject_token_ids: bool = True,
         upstream_health: bool = True,
     ) -> None:
         self.save_dir = save_dir
@@ -47,11 +45,8 @@ class Proxy:
         self.proxy_port = proxy_port
         self.capture = capture
         self.raw = raw
-        # Remote (Anthropic) backend: proxy derives vllm.jsonl from usage, must
-        # not inject return_token_ids, and its upstream /v1/models needs auth we
-        # don't carry — so skip the upstream health probe.
-        self.write_metrics = write_metrics
-        self.inject_token_ids = inject_token_ids
+        # Remote backends do not use this proxy; upstream_health is kept for
+        # tests or controlled callers that want to skip the forwarded probe.
         self.upstream_health = upstream_health
         self.out_dir = save_dir / "telemetry"
         self.out_dir.mkdir(parents=True, exist_ok=True)
@@ -68,16 +63,12 @@ class Proxy:
         idir = instance_dir(self.out_dir, self.instance_id)
         (idir / "proxy.jsonl").unlink(missing_ok=True)
         if self.raw:
-            (idir / "raw.jsonl").unlink(missing_ok=True)
-        if self.write_metrics:
-            (idir / "vllm.jsonl").unlink(missing_ok=True)
+            (idir / "vllm_traces.jsonl").unlink(missing_ok=True)
         app = ProxyApp(
             self.url,
             self.out_dir,
             self.instance_id,
             raw=self.raw,
-            write_metrics=self.write_metrics,
-            inject_token_ids=self.inject_token_ids,
         ).build()
         self._server = uvicorn.Server(
             uvicorn.Config(
@@ -96,8 +87,8 @@ class Proxy:
         self._thread.start()
 
         proxy_url = f"http://{PROXY_HOST}:{self.proxy_port}"
-        # The /v1/models probe forwards to upstream; skip it for a remote
-        # backend whose /v1/models needs auth we don't carry here.
+        # This readiness probe exercises the proxy and the forwarded upstream.
+        # Tests can disable it when they provide their own upstream stub.
         if self.upstream_health and not check_server_initialized(
             f"{proxy_url}/v1/models", PROXY_READY_TIMEOUT_S
         ):

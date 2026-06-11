@@ -25,15 +25,14 @@ def coding_agent(
     *,
     oauth: bool = False,
     telemetry_dir: Path | None = None,
-    raw: bool = False,
 ) -> int:
     """Clone the task's repo into `sandbox_dir` and drive claude-cli over it.
 
     Returns the exit code; subprocess failures (clone or claude) map to a
     non-zero code. `timeout_s` bounds the claude session (see claude.solve).
-    `oauth`/`telemetry_dir`/`raw` select the Anthropic-subscription backend,
-    where claude.solve parses per-turn usage (and, with raw, the conversation
-    text) from its own stdout (no proxy)."""
+    `oauth`/`telemetry_dir` select the Anthropic-subscription backend, where
+    claude.solve copies the session transcript (no proxy); counts and per-turn
+    texts are derived from it later by the analysis pass."""
     try:
         repo = git.clone(task, sandbox_dir)
         return claude.solve(
@@ -44,8 +43,7 @@ def coding_agent(
             timeout_s=timeout_s,
             oauth=oauth,
             telemetry_dir=telemetry_dir,
-            raw=raw,
         )
-    except subprocess.SubprocessError as exc:
+    except (subprocess.SubprocessError, OSError) as exc:
         logger.error("{}: clone/solve failed: {!r}", task["instance_id"], exc)
         return 1

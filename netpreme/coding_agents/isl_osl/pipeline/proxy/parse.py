@@ -69,13 +69,6 @@ class ParsedResponse:
     # when the request was sent with return_token_ids=True). Empty otherwise.
     prompt_token_ids: list[int] = field(default_factory=list)
     output_token_ids: list[int] = field(default_factory=list)
-    # Anthropic-reported token usage (for the remote backend, where there's no
-    # vLLM /metrics): input_tokens arrives in message_start, output_tokens in
-    # message_delta; cache_* split the input into cached vs newly-processed.
-    input_tokens: int = 0
-    output_tokens: int = 0
-    cache_read_input_tokens: int = 0
-    cache_creation_input_tokens: int = 0
 
 
 # claude-cli prepends a per-request billing header to the system prompt, e.g.
@@ -110,14 +103,14 @@ def request_units(body: dict) -> list[str]:
     return units
 
 
-def common_prefix_len(a: list[str], b: list[str]) -> int:
+def common_prefix_len(previous_units: list[str], current_units: list[str]) -> int:
     """Length of the shared leading run of two unit lists."""
-    n = 0
-    for x, y in zip(a, b):
-        if x != y:
+    prefix_length = 0
+    for previous_unit, current_unit in zip(previous_units, current_units):
+        if previous_unit != current_unit:
             break
-        n += 1
-    return n
+        prefix_length += 1
+    return prefix_length
 
 
 def parse_sse_response(body: bytes) -> ParsedResponse:
@@ -141,13 +134,6 @@ def parse_sse_response(body: bytes) -> ParsedResponse:
             parsed.output_token_ids = event.get("output_token_ids") or []
             continue
         event_type = event.get("type")
-        if event_type == "message_start":
-            usage = (event.get("message") or {}).get("usage") or {}
-            parsed.input_tokens = usage.get("input_tokens") or 0
-            parsed.cache_read_input_tokens = usage.get("cache_read_input_tokens") or 0
-            parsed.cache_creation_input_tokens = (
-                usage.get("cache_creation_input_tokens") or 0
-            )
         if event_type == "content_block_start":
             block = event.get("content_block") or {}
             block_type = block.get("type")
@@ -179,9 +165,6 @@ def parse_sse_response(body: bytes) -> ParsedResponse:
             stop_reason = (event.get("delta") or {}).get("stop_reason")
             if stop_reason:
                 parsed.claude_stop_reason = stop_reason
-            out = (event.get("usage") or {}).get("output_tokens")
-            if out:
-                parsed.output_tokens = out
     return parsed
 
 

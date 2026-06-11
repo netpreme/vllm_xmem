@@ -68,9 +68,7 @@ class Snapshot:
             prompt_tokens=int(
                 extract_metric(metrics=metrics, name_prefix=PROMPT_TOKENS_SUM)
             ),
-            gen_tokens=int(
-                extract_metric(metrics=metrics, name_prefix=GEN_TOKENS_SUM)
-            ),
+            gen_tokens=int(extract_metric(metrics=metrics, name_prefix=GEN_TOKENS_SUM)),
             prefill_kv_computed=int(
                 extract_metric(metrics=metrics, name_prefix=PREFILL_KV_COMPUTED_SUM)
             ),

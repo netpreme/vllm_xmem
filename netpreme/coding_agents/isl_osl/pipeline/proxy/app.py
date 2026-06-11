@@ -11,20 +11,22 @@ from __future__ import annotations
 import json
 import time
 from contextlib import asynccontextmanager
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
 
 import httpx
 from loguru import logger
-from pipeline.utils.jsonl import JsonlWriter
 from pipeline.proxy.parse import (
     ParsedRequest,
+    ParsedResponse,
     common_prefix_len,
     parse_request,
     parse_sse_response,
     request_units,
     rerole_system_messages,
 )
+from pipeline.utils.jsonl import JsonlWriter
 from starlette.applications import Starlette
 from starlette.background import BackgroundTask
 from starlette.requests import Request
@@ -47,6 +49,15 @@ _HOP_BY_HOP_HEADERS: frozenset[str] = frozenset(
 )
 
 
+@dataclass(frozen=True)
+class MessageRequest:
+    """Parsed and sanitized request state for one /v1/messages call."""
+
+    body: dict | None
+    forward_body: bytes
+    parsed: ParsedRequest
+
+
 class ProxyApp:
     """Reverse-proxy ASGI app for one problem (claude-cli ↔ vLLM)."""
 
@@ -57,23 +68,16 @@ class ProxyApp:
         instance_id: str,
         *,
         raw: bool = False,
-        write_metrics: bool = False,
-        inject_token_ids: bool = True,
     ) -> None:
         self.upstream = upstream.rstrip("/")
         self.instance_id = instance_id
         self._writer = JsonlWriter(out_dir, "proxy.jsonl")
         # With raw capture: also tee the raw text traces (isl_new + osl) to
-        # raw.jsonl. `_prev_units` is the previous turn's request units, so each
+        # vllm_traces.jsonl. `_prev_units` is the previous turn's request units, so each
         # turn's new suffix (isl_new as text) is a pure cross-turn string diff.
         self._raw = raw
-        self._raw_writer = JsonlWriter(out_dir, "raw.jsonl") if raw else None
+        self._raw_writer = JsonlWriter(out_dir, "vllm_traces.jsonl") if raw else None
         self._prev_units: list[str] = []
-        # Remote (Anthropic) backend: there's no vLLM /metrics, so derive
-        # isl/osl/isl_new from the response's `usage` and write a vllm.jsonl
-        # row ourselves. inject_token_ids is vLLM-only (Anthropic rejects it).
-        self._inject_token_ids = inject_token_ids
-        self._vllm_writer = JsonlWriter(out_dir, "vllm.jsonl") if write_metrics else None
 
     def build(self) -> Starlette:
         return Starlette(
@@ -103,7 +107,9 @@ class ProxyApp:
         raw_body = await request.body()
         client = request.app.state.client
         if request.method == "POST" and request.url.path == "/v1/messages":
-            return await self._messages(client=client, request=request, raw_body=raw_body)
+            return await self._messages(
+                client=client, request=request, raw_body=raw_body
+            )
         return await self._passthrough(
             client=client, request=request, raw_body=raw_body
         )
@@ -117,104 +123,107 @@ class ProxyApp:
 
         Buffering breaks "live" streaming to claude-cli, but at concurrency=1
         that's invisible — claude still parses the SSE chunks the same way."""
-        ts = time.time()
-        forward_body = raw_body
-        body: dict | None = None
+        timestamp = time.time()
+        message_request = self._prepare_message_request(raw_body)
+
+        upstream_response = await self._forward_buffered(
+            client=client,
+            request=request,
+            body=message_request.forward_body,
+        )
+        parsed_response = parse_sse_response(upstream_response.content)
+
+        if _should_skip_telemetry(message_request.body):
+            return _buffered_response(upstream_response)
+
+        self._write_proxy_row(
+            timestamp=timestamp,
+            parsed_request=message_request.parsed,
+            parsed_response=parsed_response,
+        )
+
+        if self._raw_writer is not None and message_request.body is not None:
+            self._write_raw(
+                timestamp=timestamp,
+                body=message_request.body,
+                parsed_response=parsed_response,
+            )
+
+        # Strip our non-standard token-ids event before returning, so claude-cli
+        # only ever sees a standard Anthropic stream.
+        content = upstream_response.content
+        if self._raw:
+            content = _strip_token_ids_event(content)
+
+        return _buffered_response(upstream_response, content=content)
+
+    def _prepare_message_request(self, raw_body: bytes) -> MessageRequest:
         try:
             body = json.loads(raw_body)
+            if not isinstance(body, dict):
+                raise ValueError("/v1/messages body must be a JSON object")
             # claude-cli injects role:"system" messages that vLLM 400s on; the
             # top-level `system` (cached prefix) is left untouched.
             rerole_system_messages(body)
             # With raw capture on the vLLM backend, ask for exact token ids
             # (returned in a trailing `vllm_token_ids` event we tee then strip).
-            # Skipped for the Anthropic backend, which rejects the unknown field.
-            if self._raw and self._inject_token_ids:
+            if self._raw:
                 body["return_token_ids"] = True
-            forward_body = json.dumps(body).encode()
-            parsed_req = parse_request(body)
+            return MessageRequest(
+                body=body,
+                forward_body=json.dumps(body).encode(),
+                parsed=parse_request(body),
+            )
         except (json.JSONDecodeError, ValueError) as exc:
             logger.warning("request parse error: {!r}", exc)
-            parsed_req = ParsedRequest(
-                system_prompt_chars=0,
-                tools_chars=0,
-                messages_chars=0,
-                num_tool_defs=0,
-                num_messages=0,
+            return MessageRequest(
+                body=None,
+                forward_body=raw_body,
+                parsed=_empty_parsed_request(),
             )
 
-        upstream_resp = await client.request(
+    async def _forward_buffered(
+        self,
+        client: httpx.AsyncClient,
+        request: Request,
+        body: bytes,
+    ) -> httpx.Response:
+        return await client.request(
             request.method,
             self._target(request),
-            content=forward_body,
+            content=body,
             headers=_strip_hop_by_hop(request.headers.items()),
         )
 
-        parsed_resp = parse_sse_response(upstream_resp.content)
-
-        # Skip Claude Code's session-title request: vLLM short-circuits it
-        # before the engine, so recording it would leave a phantom leading row
-        # that shifts the positional vllm<->proxy join. Still forwarded.
-        if body is not None and _is_title_request(body):
-            return Response(
-                content=upstream_resp.content,
-                status_code=upstream_resp.status_code,
-                headers=_strip_hop_by_hop(upstream_resp.headers.items()),
-            )
-
+    def _write_proxy_row(
+        self,
+        timestamp: float,
+        parsed_request: ParsedRequest,
+        parsed_response: ParsedResponse,
+    ) -> None:
         self._writer.write(
             instance_id=self.instance_id,
             row={
-                "ts": round(ts, 3),
-                "system_prompt_chars": parsed_req.system_prompt_chars,
-                "tools_chars": parsed_req.tools_chars,
-                "messages_chars": parsed_req.messages_chars,
-                "num_tool_defs": parsed_req.num_tool_defs,
-                "num_messages": parsed_req.num_messages,
-                "num_tool_calls": parsed_resp.num_tool_calls,
-                "tool_names": parsed_resp.tool_names,
-                "has_thinking": parsed_resp.has_thinking,
-                "response_text_chars": parsed_resp.response_text_chars,
-                "claude_stop_reason": parsed_resp.claude_stop_reason,
+                "ts": round(timestamp, 3),
+                "system_prompt_chars": parsed_request.system_prompt_chars,
+                "tools_chars": parsed_request.tools_chars,
+                "messages_chars": parsed_request.messages_chars,
+                "num_tool_defs": parsed_request.num_tool_defs,
+                "num_messages": parsed_request.num_messages,
+                "num_tool_calls": parsed_response.num_tool_calls,
+                "tool_names": parsed_response.tool_names,
+                "has_thinking": parsed_response.has_thinking,
+                "response_text_chars": parsed_response.response_text_chars,
+                "claude_stop_reason": parsed_response.claude_stop_reason,
             },
         )
 
-        # Remote backend: no vLLM /metrics, so derive isl/osl/isl_new from the
-        # Anthropic `usage` and write the vllm.jsonl row ourselves. isl is the
-        # full prompt; isl_new is the non-cache-read part (what got processed).
-        if self._vllm_writer is not None:
-            isl = (
-                parsed_resp.input_tokens
-                + parsed_resp.cache_read_input_tokens
-                + parsed_resp.cache_creation_input_tokens
-            )
-            self._vllm_writer.write(
-                instance_id=self.instance_id,
-                row={
-                    "ts": round(ts, 3),
-                    "isl": isl,
-                    "osl": parsed_resp.output_tokens,
-                    "isl_new": isl - parsed_resp.cache_read_input_tokens,
-                    "prefix_cache_hits": parsed_resp.cache_read_input_tokens,
-                    "stop_reason": parsed_resp.claude_stop_reason,
-                },
-            )
-
-        if self._raw_writer is not None and body is not None:
-            self._write_raw(ts=ts, body=body, parsed_resp=parsed_resp)
-
-        # Strip our non-standard token-ids event before returning, so claude-cli
-        # only ever sees a standard Anthropic stream.
-        content = upstream_resp.content
-        if self._raw:
-            content = _strip_token_ids_event(content)
-
-        return Response(
-            content=content,
-            status_code=upstream_resp.status_code,
-            headers=_strip_hop_by_hop(upstream_resp.headers.items()),
-        )
-
-    def _write_raw(self, ts: float, body: dict, parsed_resp) -> None:
+    def _write_raw(
+        self,
+        timestamp: float,
+        body: dict,
+        parsed_response: ParsedResponse,
+    ) -> None:
         """Tee the raw text + token-id trace for this turn:
           isl_text     — the full input (system + tools + messages),
           isl_new_text — the input appended since the previous turn (cached
@@ -225,22 +234,25 @@ class ProxyApp:
         The *_ids fields are present only when vLLM returned them (the trailing
         `vllm_token_ids` event); they are exact, not a re-tokenization. There is
         no isl_new_ids: it is just the tail of isl_ids, derived at analysis time
-        as isl_ids[-isl_new:] using the isl_new count from vllm.jsonl.
+        as isl_ids[-isl_new:] using the isl_new count from vllm_metrics.jsonl.
         """
         units = request_units(body)
-        k = common_prefix_len(a=self._prev_units, b=units)
+        prefix_length = common_prefix_len(
+            previous_units=self._prev_units,
+            current_units=units,
+        )
         self._prev_units = units
 
         assert self._raw_writer is not None
         self._raw_writer.write(
             instance_id=self.instance_id,
             row={
-                "ts": round(ts, 3),
+                "ts": round(timestamp, 3),
                 "isl_text": "\n".join(units),
-                "isl_new_text": "\n".join(units[k:]),
-                "osl_text": parsed_resp.response_text,
-                "isl_ids": parsed_resp.prompt_token_ids,
-                "osl_ids": parsed_resp.output_token_ids,
+                "isl_new_text": "\n".join(units[prefix_length:]),
+                "osl_text": parsed_response.response_text,
+                "isl_ids": parsed_response.prompt_token_ids,
+                "osl_ids": parsed_response.output_token_ids,
             },
         )
 
@@ -270,8 +282,17 @@ def _strip_token_ids_event(content: bytes) -> bytes:
     if b"vllm_token_ids" not in content:
         return content
     text = content.decode("utf-8", errors="replace")
-    kept = [r for r in text.split("\n\n") if "event: vllm_token_ids" not in r]
-    return "\n\n".join(kept).encode()
+    kept_records = [
+        record for record in text.split("\n\n") if "event: vllm_token_ids" not in record
+    ]
+    return "\n\n".join(kept_records).encode()
+
+
+def _should_skip_telemetry(body: dict | None) -> bool:
+    """Skip requests that vLLM handles outside the normal engine path."""
+    if body is None:
+        return False
+    return _is_title_request(body)
 
 
 def _is_title_request(body: dict) -> bool:
@@ -287,10 +308,34 @@ def _is_title_request(body: dict) -> bool:
         return "sentence-case title" in system
     if isinstance(system, list):
         return any(
-            isinstance(b, dict) and "sentence-case title" in (b.get("text") or "")
-            for b in system
+            isinstance(block, dict)
+            and "sentence-case title" in (block.get("text") or "")
+            for block in system
         )
     return False
+
+
+def _empty_parsed_request() -> ParsedRequest:
+    return ParsedRequest(
+        system_prompt_chars=0,
+        tools_chars=0,
+        messages_chars=0,
+        num_tool_defs=0,
+        num_messages=0,
+    )
+
+
+def _buffered_response(
+    upstream_response: httpx.Response,
+    content: bytes | None = None,
+) -> Response:
+    if content is None:
+        content = upstream_response.content
+    return Response(
+        content=content,
+        status_code=upstream_response.status_code,
+        headers=_strip_hop_by_hop(upstream_response.headers.items()),
+    )
 
 
 def _strip_hop_by_hop(headers: Iterable[tuple[str, str]]) -> dict[str, str]:

@@ -5,31 +5,29 @@ problem is wrapped in four context managers, each driving one thing:
 
     Server         fresh vLLM for this problem (empty cache; killed on exit)
     MetricsScraper polls vLLM's Prometheus /metrics once per turn
-                   → results/<stamp>/telemetry/<iid>/vllm.jsonl
+                   → results/<stamp>/telemetry/<iid>/vllm_metrics.jsonl
     Proxy          sits between claude-cli and vLLM (with --capture); normalizes
                    requests and tees per-turn rows
                    → results/<stamp>/telemetry/<iid>/proxy.jsonl
     Sandbox        throwaway repo checkout + wall-clock timer for this problem
 
-The agent only solves; analysis is a single separate pass at the end
-(analysis/report.py builds data.npz + figures). Per-problem metadata
-(results/<stamp>/telemetry/<iid>/meta.json) doubles as the resume ledger.
+The agent only solves; analysis is a separate pass run on demand (it derives
+Anthropic transcript telemetry when needed, then builds its arrays and figures).
+Per-problem metadata (results/<stamp>/telemetry/<iid>/session_config.json)
+doubles as the resume ledger.
 
     for task in dataset:
         with Server(...) as server, MetricsScraper(...), \\
              Proxy(...) as proxy, Sandbox(...) as sandbox:
             exit_code = coding_agent(task, sandbox.dir, server.model, proxy.base_url)
-        write_meta(...)
-    report.run(save_dir)  # once, at the end
+        save_session_metadata(...)
 """
 
 from __future__ import annotations
 
 import argparse
-import contextlib
 import json
 import os
-import platform
 import sys
 import time
 from datetime import datetime
@@ -40,13 +38,12 @@ from tqdm import tqdm
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from analysis.report import run as run_report
 from pipeline import claude
 from pipeline.agent import coding_agent
 from pipeline.datasets import DATASETS, Sandbox, get_dataset
 from pipeline.proxy import Proxy
-from pipeline.utils.metadata import write_meta, write_run_config
-from pipeline.vllm_server import Server, vllm_version
+from pipeline.utils.metadata import save_session_metadata, write_config
+from pipeline.vllm_server import Server
 from pipeline.vllm_metrics import MetricsScraper
 
 HERE = Path(__file__).resolve().parent
@@ -65,8 +62,8 @@ def main() -> int:
         choices=["vllm", "anthropic"],
         default="vllm",
         help="vllm = serve --model locally and capture /metrics (default); "
-        "anthropic = send to api.anthropic.com (no vLLM), deriving "
-        "isl/osl/isl_new from Anthropic's usage. Needs ANTHROPIC_API_KEY set.",
+        "anthropic = send to api.anthropic.com (no vLLM) and copy Claude "
+        "transcripts for analysis. Requires --model.",
     )
     parser.add_argument(
         "--dataset",
@@ -74,7 +71,6 @@ def main() -> int:
         default="verified",
         help="benchmark dataset to run (default: %(default)s)",
     )
-    parser.add_argument("--seed", type=int, default=0)
     parser.add_argument(
         "--capture",
         nargs="?",
@@ -83,7 +79,7 @@ def main() -> int:
         choices=["raw"],
         help="run the proxy and capture per-turn data: agentic metadata "
         "(system_prompt_chars, tool calls, stop reason) → proxy.jsonl, AND the "
-        "raw text + exact token-id traces (isl/isl_new/osl) → raw.jsonl. "
+        "raw text + exact token-id traces (isl/isl_new/osl) → vllm_traces.jsonl. "
         "Omit the flag to skip the proxy entirely. `--capture` and "
         "`--capture raw` are equivalent.",
     )
@@ -118,18 +114,22 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    stamp = (
-        args.resume.name if args.resume else datetime.now().strftime("%Y%m%d_%H%M%S")
-    )
-    save_dir = HERE / "results" / stamp
+    remote = args.backend == "anthropic"
+    if remote and args.model is None:
+        parser.error("--model is required with --backend anthropic")
+
+    if args.resume is not None:
+        save_dir = args.resume.expanduser().resolve()
+    else:
+        save_dir = HERE / "results" / datetime.now().strftime("%Y%m%d_%H%M%S")
     save_dir.mkdir(parents=True, exist_ok=True)
 
-    # Resume skips problems already solved here (meta.json exit_code == 0).
+    # Resume skips problems already solved here (session_config exit_code == 0).
     solved_ids = set()
-    for meta_path in (save_dir / "telemetry").glob("*/meta.json"):
-        meta = json.loads(meta_path.read_text())
-        if meta.get("exit_code") == 0:
-            solved_ids.add(meta["instance_id"])
+    for session_path in (save_dir / "telemetry").glob("*/session_config.json"):
+        session = json.loads(session_path.read_text())
+        if session.get("exit_code") == 0:
+            solved_ids.add(session["instance_id"])
 
     dataset_name = DATASETS[args.dataset]
     dataset = get_dataset(name=dataset_name, solved_ids=solved_ids)
@@ -137,73 +137,62 @@ def main() -> int:
         dataset = dataset[: args.limit]
     logger.info("{} problems pending → {}", len(dataset), save_dir)
 
-    # anthropic backend: claude-cli talks DIRECTLY to Anthropic with its own
-    # subscription OAuth (no proxy, no vLLM); claude.solve parses per-turn
-    # usage from its stream-json stdout into vllm.jsonl.
-    remote = args.backend == "anthropic"
-    model = args.model  # resolved to server.model per-problem on the vllm backend
+
+    backend_url = ANTHROPIC_URL if remote else SERVER_URL
+    capture = not remote and args.capture is not None
     sandbox_root = Path(f"/tmp/swe_sandboxes/{save_dir.name}")
     started_at = time.time()
+
     for task in tqdm(dataset, desc="solving", unit="problem"):
         instance_id = task["instance_id"]
         logger.info("{} ({} @ {})", instance_id, task["repo"], task["base_commit"][:5])
-        server = None
-        with contextlib.ExitStack() as stack:
-            if remote:
-                model = args.model
-                base_url = ANTHROPIC_URL  # unused under oauth (claude-cli's own creds)
-            else:
-                server = stack.enter_context(
-                    Server(
-                        url=SERVER_URL,
-                        model=args.model,
-                        tensor_parallel_size=args.tensor_parallel_size,
-                        max_model_len=args.max_model_len,
-                        gpu_memory_utilization=args.gpu_memory_utilization,
-                        tool_call_parser=args.tool_call_parser,
-                    )
-                )
-                stack.enter_context(
-                    MetricsScraper(
-                        url=SERVER_URL, save_dir=save_dir, instance_id=instance_id
-                    )
-                )
-                proxy = stack.enter_context(
-                    Proxy(
-                        save_dir=save_dir,
-                        instance_id=instance_id,
-                        url=SERVER_URL,
-                        proxy_port=PROXY_PORT,
-                        capture=args.capture is not None,
-                        raw=args.capture is not None,
-                    )
-                )
-                model = server.model
-                base_url = proxy.base_url
-            sandbox = stack.enter_context(
-                Sandbox(root=sandbox_root, prefix=f"{instance_id}.")
-            )
+        with (
+            Server(
+                url=backend_url,
+                remote=remote,
+                model=args.model,
+                tensor_parallel_size=args.tensor_parallel_size,
+                max_model_len=args.max_model_len,
+                gpu_memory_utilization=args.gpu_memory_utilization,
+                tool_call_parser=args.tool_call_parser,
+            ) as server,
+            MetricsScraper(
+                url=backend_url,
+                save_dir=save_dir,
+                instance_id=instance_id,
+                enabled=not remote,
+            ),
+            Proxy(
+                save_dir=save_dir,
+                instance_id=instance_id,
+                url=server.url,
+                proxy_port=PROXY_PORT,
+                capture=capture,
+                raw=capture,
+            ) as proxy,
+            Sandbox(root=sandbox_root, prefix=f"{instance_id}.") as sandbox,
+        ):
             time.sleep(WAIT_TIME)  # let the proxy/watcher settle on this instance_id
             exit_code = coding_agent(
                 task=task,
                 sandbox_dir=sandbox.dir,
-                model=model,
-                base_url=base_url,
+                model=server.model,
+                base_url=proxy.base_url,  # anthropic url, ignored under oauth
                 timeout_s=args.agent_timeout_s,
                 oauth=remote,
                 telemetry_dir=(save_dir / "telemetry") if remote else None,
-                raw=remote and args.capture is not None,
             )
-        write_meta(
+        save_session_metadata(
             save_dir=save_dir,
             task=task,
+            server=server,
             started_at=sandbox.started,
             ended_at=sandbox.ended,
             exit_code=exit_code,
         )
-        # Snapshot run inputs once (vLLM backend only — needs the server config).
-        if server is not None and not (save_dir / "run_config.json").exists():
-            write_run_config(
+        # Snapshot the overall config once, after the first server is up.
+        if not (save_dir / "config.json").exists():
+            write_config(
                 save_dir=save_dir,
                 args=args,
                 server=server,
@@ -214,28 +203,7 @@ def main() -> int:
                 started_at=started_at,
             )
 
-    (save_dir / "run_meta.json").write_text(
-        json.dumps(
-            {
-                "model": model,
-                "vllm_url": SERVER_URL,
-                "dataset": dataset_name,
-                "capture": args.capture,
-                "versions": {
-                    "claude": claude.claude_version(),
-                    "vllm": vllm_version(),
-                    "python": platform.python_version(),
-                    "platform": platform.platform(),
-                },
-                "started_at": round(started_at, 3),
-                "ended_at": round(time.time(), 3),
-            },
-            indent=2,
-        )
-        + "\n"
-    )
-
-    run_report(save_dir=save_dir)
+    # Analysis is a separate pass run on demand.
     return 0
 
 
