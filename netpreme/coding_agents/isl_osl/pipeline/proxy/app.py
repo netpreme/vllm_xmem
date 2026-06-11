@@ -75,7 +75,6 @@ class ProxyApp:
         # With raw capture: also tee the raw text traces (isl_new + osl) to
         # vllm_traces.jsonl. `_prev_units` is the previous turn's request units, so each
         # turn's new suffix (isl_new as text) is a pure cross-turn string diff.
-        self._raw = raw
         self._raw_writer = JsonlWriter(out_dir, "vllm_traces.jsonl") if raw else None
         self._prev_units: list[str] = []
 
@@ -149,13 +148,7 @@ class ProxyApp:
                 parsed_response=parsed_response,
             )
 
-        # Strip our non-standard token-ids event before returning, so claude-cli
-        # only ever sees a standard Anthropic stream.
-        content = upstream_response.content
-        if self._raw:
-            content = _strip_token_ids_event(content)
-
-        return _buffered_response(upstream_response, content=content)
+        return _buffered_response(upstream_response)
 
     def _prepare_message_request(self, raw_body: bytes) -> MessageRequest:
         try:
@@ -165,10 +158,6 @@ class ProxyApp:
             # claude-cli injects role:"system" messages that vLLM 400s on; the
             # top-level `system` (cached prefix) is left untouched.
             rerole_system_messages(body)
-            # With raw capture on the vLLM backend, ask for exact token ids
-            # (returned in a trailing `vllm_token_ids` event we tee then strip).
-            if self._raw:
-                body["return_token_ids"] = True
             return MessageRequest(
                 body=body,
                 forward_body=json.dumps(body).encode(),
@@ -224,17 +213,11 @@ class ProxyApp:
         body: dict,
         parsed_response: ParsedResponse,
     ) -> None:
-        """Tee the raw text + token-id trace for this turn:
+        """Tee the raw text for this turn:
           isl_text     — the full input (system + tools + messages),
           isl_new_text — the input appended since the previous turn (cached
                          prefix stripped off; == isl_text on the first turn),
-          osl_text     — the generated assistant text (incl. tool calls),
-          isl_ids      — exact full prompt token ids for this turn (input_ids),
-          osl_ids      — exact generated output token ids.
-        The *_ids fields are present only when vLLM returned them (the trailing
-        `vllm_token_ids` event); they are exact, not a re-tokenization. There is
-        no isl_new_ids: it is just the tail of isl_ids, derived at analysis time
-        as isl_ids[-isl_new:] using the isl_new count from vllm_metrics.jsonl.
+          osl_text     — the generated assistant text (incl. tool calls).
         """
         units = request_units(body)
         prefix_length = common_prefix_len(
@@ -251,8 +234,6 @@ class ProxyApp:
                 "isl_text": "\n".join(units),
                 "isl_new_text": "\n".join(units[prefix_length:]),
                 "osl_text": parsed_response.response_text,
-                "isl_ids": parsed_response.prompt_token_ids,
-                "osl_ids": parsed_response.output_token_ids,
             },
         )
 
@@ -273,19 +254,6 @@ class ProxyApp:
             headers=_strip_hop_by_hop(upstream_resp.headers.items()),
             background=BackgroundTask(upstream_resp.aclose),
         )
-
-
-def _strip_token_ids_event(content: bytes) -> bytes:
-    """Remove vLLM's non-standard `vllm_token_ids` SSE record from a buffered
-    response so claude-cli only sees a standard Anthropic stream. SSE records
-    are separated by blank lines; we drop the one carrying that event."""
-    if b"vllm_token_ids" not in content:
-        return content
-    text = content.decode("utf-8", errors="replace")
-    kept_records = [
-        record for record in text.split("\n\n") if "event: vllm_token_ids" not in record
-    ]
-    return "\n\n".join(kept_records).encode()
 
 
 def _should_skip_telemetry(body: dict | None) -> bool:

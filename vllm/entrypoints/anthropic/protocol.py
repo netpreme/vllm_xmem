@@ -117,13 +117,6 @@ class AnthropicMessagesRequest(BaseModel):
         default=None,
         description="KVTransfer parameters used for disaggregated serving.",
     )
-    return_token_ids: bool = Field(
-        default=False,
-        description="If true, stream a trailing `vllm_token_ids` SSE event "
-        "carrying the exact prompt_token_ids and generated output token_ids "
-        "for this turn. Used for offline token-level capture; standard "
-        "Anthropic clients ignore the extra event.",
-    )
 
     @field_validator("model")
     @classmethod

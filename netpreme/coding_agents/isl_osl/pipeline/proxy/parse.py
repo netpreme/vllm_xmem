@@ -65,10 +65,6 @@ class ParsedResponse:
     response_text_chars: int = 0
     claude_stop_reason: str = ""
     response_text: str = ""  # the raw generated assistant text (osl as text)
-    # Exact token ids from the trailing `vllm_token_ids` event (present only
-    # when the request was sent with return_token_ids=True). Empty otherwise.
-    prompt_token_ids: list[int] = field(default_factory=list)
-    output_token_ids: list[int] = field(default_factory=list)
 
 
 # claude-cli prepends a per-request billing header to the system prompt, e.g.
@@ -127,11 +123,6 @@ def parse_sse_response(body: bytes) -> ParsedResponse:
         try:
             event = json.loads(data)
         except json.JSONDecodeError:
-            continue
-        # vLLM's non-standard trailing event (no "type") carrying exact ids.
-        if "prompt_token_ids" in event or "output_token_ids" in event:
-            parsed.prompt_token_ids = event.get("prompt_token_ids") or []
-            parsed.output_token_ids = event.get("output_token_ids") or []
             continue
         event_type = event.get("type")
         if event_type == "content_block_start":
